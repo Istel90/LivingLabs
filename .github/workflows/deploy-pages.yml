@@ -39,6 +39,9 @@ jobs:
             Survey platform for collaboration/package-lock.json
             riskmap-core-main/package-lock.json
 
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
       - name: Install dependencies
         run: |
           npm ci
