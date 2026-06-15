@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
-import { Badge, statusLabels } from '../ui/Badge';
+import { Card } from '../ui/card';
+import { Button } from '../ui/button';
+import { Badge, statusLabels } from '../ui/badge';
 // Risk and response data is loaded through the local data API.
 import { Calendar, FileText } from 'lucide-react';
 import * as api from '../../lib/api';

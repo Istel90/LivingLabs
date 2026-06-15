@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
 import { Type, FileText, Table as TableIcon, BarChart3, MapPin, FileBox, Plus } from 'lucide-react';
 import * as api from '../../lib/api';
 import { sectors } from '../../data/sectorMapping';

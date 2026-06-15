@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Button } from '../ui/Button';
-import { Badge, statusLabels } from '../ui/Badge';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/Table';
+import { Button } from '../ui/button';
+import { Badge, statusLabels } from '../ui/badge';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
 import { mockDepartments } from '../../data/mockData';
 import { Plus, Edit, Map, FileText, Trash2, Users, Type } from 'lucide-react';
 import * as api from '../../lib/api';

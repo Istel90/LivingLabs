@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
+import { Card } from '../ui/card';
+import { Button } from '../ui/button';
 // Survey data is loaded through the local data API.
 import { ChevronLeft, ChevronRight, Save, Send, Layers, ArrowLeft, BarChart3, MapPin, Table as TableIcon } from 'lucide-react';
 import * as api from '../../lib/api';

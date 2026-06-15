@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/Table';
+import { Card } from '../ui/card';
+import { Button } from '../ui/button';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
 import { mockDepartments } from '../../data/mockData';
 import { Calendar } from 'lucide-react';
 import * as api from '../../lib/api';

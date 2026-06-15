@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
-import { Button } from '../ui/Button';
-import { Badge, statusLabels } from '../ui/Badge';
+import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
+import { Button } from '../ui/button';
+import { Badge, statusLabels } from '../ui/badge';
 // Dashboard data is loaded through the local data API.
 import { FileDown, FolderKanban, Users, CheckCircle2, FileText } from 'lucide-react';
 import * as api from '../../lib/api';
