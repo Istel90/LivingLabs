@@ -4,7 +4,12 @@ import { Footer } from '../components/Footer';
 import { CircularProcess } from '../components/CircularProcess';
 import { RightSidebar } from '../components/RightSidebar';
 import { PlatformContent } from '../components/PlatformContent';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronRight, Compass, Sparkles } from 'lucide-react';
+
+const leadDepartmentToolUrl =
+  import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL || 'http://128.134.187.146:6080/living-lab/';
+const responsibleDepartmentToolUrl =
+  import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:4175/responsible-department';
 
 interface TreeNode {
   id: string;
@@ -15,7 +20,7 @@ interface TreeNode {
 const treeData: TreeNode[] = [
   {
     id: '3',
-    label: '3. 적응대책의 수립 절차',
+    label: '적응대책의 수립 절차',
     children: [
       { id: '3-1', label: '1) 제2차 적응대책 종합평가' },
       {
@@ -36,7 +41,8 @@ const treeData: TreeNode[] = [
           { id: '3-3-2', label: '(2) 지역 영향평가' },
           { id: '3-3-3', label: '(3) 국가 리스크 목록 검토' },
           { id: '3-3-4', label: '(4) 지역 취약성 평가' },
-          { id: '3-3-5', label: '(5) 지역리스크 도출' }
+          { id: '3-3-5', label: '(5) 지역리스크 도출' },
+          { id: '3-3-6', label: '(6) 중점관리구역 선정' }
         ]
       },
       { id: '3-4', label: '4) 제3차 적응대책 추진 방향 설정 및 분문별 세부이행과제 수립' },
@@ -71,10 +77,10 @@ function TreeItem({ node, selectedItem, onSelectItem, level = 0 }: {
   return (
     <div>
       <div
-        className={`flex items-center gap-1 py-2 px-3 cursor-pointer rounded transition-colors ${
+        className={`group flex cursor-pointer items-center gap-1 rounded-xl px-3 py-2.5 transition-all ${
           isSelected 
-            ? 'bg-[#004494] text-white' 
-            : 'hover:bg-gray-100'
+            ? 'bg-gradient-to-r from-[#087f72] to-[#10a37f] text-white shadow-md shadow-emerald-900/10' 
+            : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-800'
         }`}
         style={{ paddingLeft: `${level * 16 + 12}px` }}
         onClick={() => {
@@ -94,7 +100,7 @@ function TreeItem({ node, selectedItem, onSelectItem, level = 0 }: {
           </span>
         )}
         {(!hasChildren || isAlwaysOpen) && <span className="w-4" />}
-        <span className="text-sm flex-1">{node.label}</span>
+        <span className="flex-1 text-sm leading-5">{node.label}</span>
       </div>
       {hasChildren && (isOpen || isAlwaysOpen) && (
         <div>
@@ -115,7 +121,16 @@ function TreeItem({ node, selectedItem, onSelectItem, level = 0 }: {
 
 function AdaptationSidebar({ selectedItem, onSelectItem }: { selectedItem: string; onSelectItem: (id: string) => void }) {
   return (
-    <aside className="bg-white border rounded-lg p-4 h-fit sticky top-8">
+    <aside className="sticky top-6 h-fit rounded-2xl border border-slate-200/80 bg-white/95 p-4 shadow-lg shadow-slate-900/5 backdrop-blur">
+      <div className="mb-4 flex items-center gap-3 border-b border-slate-100 px-2 pb-4">
+        <div className="grid size-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+          <Compass className="size-5" />
+        </div>
+        <div>
+          <p className="font-extrabold text-slate-900">수립 절차 탐색</p>
+          <p className="text-xs text-slate-500">단계를 선택해 내용을 확인하세요</p>
+        </div>
+      </div>
       <nav>
         {treeData.map((node) => (
           <TreeItem
@@ -133,7 +148,7 @@ function AdaptationSidebar({ selectedItem, onSelectItem }: { selectedItem: strin
 function AdaptationContent({ selectedItem, onSelectItem }: { selectedItem: string; onSelectItem: (id: string) => void }) {
   const contentMap: Record<string, { title: string; content: JSX.Element }> = {
     '3': {
-      title: '3. 적응대책의 수립 절차',
+      title: '적응대책의 수립 절차',
       content: (
         <div className="space-y-6">
           <p className="text-gray-700 leading-relaxed">
@@ -535,6 +550,22 @@ function AdaptationContent({ selectedItem, onSelectItem }: { selectedItem: strin
               </div>
             </div>
           </div>
+          <div className="grid md:grid-cols-2 gap-4 pt-2">
+            <div className="bg-white border rounded-lg p-5 min-h-32">
+              <h4 className="font-semibold text-lg text-gray-900">사례</h4>
+            </div>
+            <div className="bg-white border rounded-lg p-5 min-h-32">
+              <h4 className="font-semibold text-lg text-gray-900">지원도구 예시</h4>
+              <a
+                href={leadDepartmentToolUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-4 text-[#004494] font-medium hover:underline"
+              >
+                주관부서의사결정 지원도구
+              </a>
+            </div>
+          </div>
         </div>
       )
     },
@@ -570,6 +601,65 @@ function AdaptationContent({ selectedItem, onSelectItem }: { selectedItem: strin
               </li>
             </ul>
           </div>
+          <div className="grid md:grid-cols-2 gap-4 pt-2">
+            <div className="bg-white border rounded-lg p-5 min-h-32">
+              <h4 className="font-semibold text-lg text-gray-900">사례</h4>
+            </div>
+            <div className="bg-white border rounded-lg p-5 min-h-32">
+              <h4 className="font-semibold text-lg text-gray-900">지원도구 예시</h4>
+              <a
+                href={leadDepartmentToolUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-4 text-[#004494] font-medium hover:underline"
+              >
+                주관부서의사결정 지원도구
+              </a>
+            </div>
+          </div>
+        </div>
+      )
+    },
+    '3-3-6': {
+      title: '(6) 중점관리구역 선정',
+      content: (
+        <div className="space-y-4">
+          <p className="text-gray-700 leading-relaxed">
+            지역리스크와 취약성 평가 결과를 종합하여 우선적으로 관리하고 지원할 중점관리구역을 선정합니다.
+          </p>
+          <div className="bg-white border rounded-lg p-5">
+            <h4 className="font-semibold mb-3">중점관리구역 선정 기준</h4>
+            <ul className="space-y-2 text-sm text-gray-700">
+              <li className="flex gap-2">
+                <span className="text-[#004494]">•</span>
+                <span>기후 리스크의 발생 가능성과 피해 규모</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-[#004494]">•</span>
+                <span>지역 및 취약계층의 노출도와 취약성</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-[#004494]">•</span>
+                <span>대응 시급성과 관리 필요성</span>
+              </li>
+            </ul>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4 pt-2">
+            <div className="bg-white border rounded-lg p-5 min-h-32">
+              <h4 className="font-semibold text-lg text-gray-900">사례</h4>
+            </div>
+            <div className="bg-white border rounded-lg p-5 min-h-32">
+              <h4 className="font-semibold text-lg text-gray-900">지원도구 예시</h4>
+              <a
+                href={leadDepartmentToolUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-4 text-[#004494] font-medium hover:underline"
+              >
+                주관부서의사결정 지원도구
+              </a>
+            </div>
+          </div>
         </div>
       )
     },
@@ -599,6 +689,22 @@ function AdaptationContent({ selectedItem, onSelectItem }: { selectedItem: strin
                 <span>우선순위 리스크별 대응 전략 마련</span>
               </li>
             </ul>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4 pt-2">
+            <div className="bg-white border rounded-lg p-5 min-h-32">
+              <h4 className="font-semibold text-lg text-gray-900">사례</h4>
+            </div>
+            <div className="bg-white border rounded-lg p-5 min-h-32">
+              <h4 className="font-semibold text-lg text-gray-900">지원도구 예시</h4>
+              <a
+                href={responsibleDepartmentToolUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-4 text-[#004494] font-medium hover:underline"
+              >
+                소관부서의사결정 지원도구
+              </a>
+            </div>
           </div>
         </div>
       )
@@ -671,6 +777,22 @@ function AdaptationContent({ selectedItem, onSelectItem }: { selectedItem: strin
                 <span>타 지역 우수 사례 벤치마킹</span>
               </li>
             </ul>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4 pt-2">
+            <div className="bg-white border rounded-lg p-5 min-h-32">
+              <h4 className="font-semibold text-lg text-gray-900">사례</h4>
+            </div>
+            <div className="bg-white border rounded-lg p-5 min-h-32">
+              <h4 className="font-semibold text-lg text-gray-900">지원도구 예시</h4>
+              <a
+                href={responsibleDepartmentToolUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-4 text-[#004494] font-medium hover:underline"
+              >
+                소관부서의사결정 지원도구
+              </a>
+            </div>
           </div>
         </div>
       )
@@ -774,9 +896,15 @@ function AdaptationContent({ selectedItem, onSelectItem }: { selectedItem: strin
   const content = contentMap[selectedItem] || contentMap['3'];
 
   return (
-    <div className="bg-white border rounded-lg p-8">
-      <h1 className="text-3xl font-bold mb-6 text-gray-900">{content.title}</h1>
-      <div className="prose max-w-none">
+    <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xl shadow-slate-900/5">
+      <div className="border-b border-slate-100 bg-gradient-to-r from-[#073b52] to-[#0b6574] px-7 py-7 text-white md:px-9">
+        <div className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-200">
+          <BookOpen className="size-4" />
+          ADAPTATION GUIDE
+        </div>
+        <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl">{content.title}</h1>
+      </div>
+      <div className="guide-content prose max-w-none p-7 md:p-9 [&_.bg-white.border]:rounded-2xl [&_.bg-white.border]:border-slate-200 [&_.bg-white.border]:bg-slate-50/70 [&_.bg-white.border]:shadow-sm [&_.bg-gray-50]:bg-emerald-50/60 [&_h4]:text-slate-900 [&_h5]:text-slate-800 [&_a]:text-emerald-700">
         {content.content}
       </div>
     </div>
@@ -788,12 +916,31 @@ export function AdaptationGuidePage() {
   const [platformSelectedItem, setPlatformSelectedItem] = useState('');
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-[#f3f7f8]">
       <Header />
       
       <main className="flex-1">
+        <section className="relative overflow-hidden bg-[#073b52] text-white">
+          <div className="absolute -left-20 top-0 size-72 rounded-full bg-emerald-500/20 blur-3xl" />
+          <div className="absolute right-0 top-0 size-80 rounded-full bg-sky-500/20 blur-3xl" />
+          <div className="container relative mx-auto px-4 py-10 md:py-12">
+            <div className="flex max-w-3xl items-start gap-4">
+              <div className="mt-1 grid size-12 shrink-0 place-items-center rounded-2xl border border-white/20 bg-white/10">
+                <Sparkles className="size-6 text-emerald-300" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-emerald-300">LOCAL CLIMATE ADAPTATION</p>
+                <h1 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">적응대책 수립 가이드</h1>
+                <p className="mt-3 leading-7 text-slate-200">
+                  지역 현황 진단부터 적응사업 확정까지, 단계별 절차와 활용 가능한 지원도구를 확인하세요.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div className="container mx-auto px-4 py-8">
-          <div className="grid lg:grid-cols-[300px_1fr_280px] gap-6">
+          <div className="grid items-start gap-6 xl:grid-cols-[290px_minmax(0,1fr)_250px]">
             <AdaptationSidebar selectedItem={selectedItem} onSelectItem={setSelectedItem} />
             {platformSelectedItem ? (
               <PlatformContent selectedItem={platformSelectedItem} />

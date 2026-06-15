@@ -13,7 +13,6 @@
                 scales: {
                     y: {
                         beginAtZero: true,
-                        min: -2,
                         ticks: {
                             callback: function (value, index, ticks) {
                                 return `${value}℃`;
@@ -54,6 +53,9 @@
     export function update(effects) {
         chart.data.labels = [...Array(effects.length + 1).keys()];
         chart.data.datasets[0].data = [0].concat(effects);
+        const magnitude = Math.max(...effects.map((value) => Math.abs(value)), 0.001);
+        chart.options.scales.y.suggestedMin = Math.min(0, ...effects) - magnitude * 0.1;
+        chart.options.scales.y.suggestedMax = Math.max(0, ...effects) + magnitude * 0.1;
         chart.update();
     }
 </script>

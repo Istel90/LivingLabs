@@ -7,7 +7,6 @@ import { MapsDataPage } from "./pages/tools/MapsDataPage";
 import { GuidelinesPage } from "./pages/tools/GuidelinesPage";
 import { AnalysisToolsPage } from "./pages/tools/AnalysisToolsPage";
 import { ApplicationsPage } from "./pages/tools/ApplicationsPage";
-import { CasesPage } from "./pages/CasesPage";
 import { AboutPage } from "./pages/AboutPage";
 
 export const router = createBrowserRouter([
@@ -44,11 +43,9 @@ export const router = createBrowserRouter([
     Component: ApplicationsPage,
   },
   {
-    path: "/cases",
-    Component: CasesPage,
-  },
-  {
     path: "/about",
     Component: AboutPage,
   },
-]);
+], {
+  basename: import.meta.env.BASE_URL,
+});

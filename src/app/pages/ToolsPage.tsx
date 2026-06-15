@@ -1,194 +1,129 @@
-import { Header } from '../components/Header';
+import { useEffect } from 'react';
+import {
+  ArrowRight,
+  BookOpen,
+  Layers,
+  Laptop,
+  LineChart,
+  Sparkles,
+} from 'lucide-react';
+import { Link, useLocation } from 'react-router';
 import { Footer } from '../components/Footer';
-import { RightSidebar } from '../components/RightSidebar';
+import { Header } from '../components/Header';
 import { PlatformContent } from '../components/PlatformContent';
-import { Layers, BookOpen, LineChart, Laptop } from 'lucide-react';
-import { Link } from 'react-router';
-import { Card, CardContent } from '../components/ui/card';
-import { useState } from 'react';
+import { RightSidebar } from '../components/RightSidebar';
+
+const categories = [
+  {
+    title: 'Maps & DATA',
+    subtitle: '적응대책 수립을 위한 데이터와 지도',
+    description: '지역 현황 분석 및 지역 리스크 도출에 활용되는 공간정보와 통계 데이터를 제공합니다.',
+    href: '/tools/maps-data',
+    icon: Layers,
+    color: 'from-[#176fa0] to-[#239bc1]',
+  },
+  {
+    title: '가이드라인',
+    subtitle: '적응대책 수립을 위한 지침과 사례',
+    description: '리빙랩 운영부터 적응대책 반영까지 단계별 방법과 참고자료를 제공합니다.',
+    href: '/tools/guidelines',
+    icon: BookOpen,
+    color: 'from-[#6855a5] to-[#9273c9]',
+  },
+  {
+    title: '분석도구',
+    subtitle: '데이터 기반 의사결정 분석',
+    description: '적응사업 평가와 공간 데이터 생성을 위한 분석 기능을 제공합니다.',
+    href: '/tools/analysis',
+    icon: LineChart,
+    color: 'from-[#087f72] to-[#11a98a]',
+  },
+  {
+    title: 'App or 프로그램',
+    subtitle: '업무별 실행 지원도구',
+    description: '주관부서와 사업소관부서가 활용하는 맞춤형 실행 도구를 제공합니다.',
+    href: '/tools/applications',
+    icon: Laptop,
+    color: 'from-[#34784d] to-[#62a45d]',
+  },
+];
 
 export function ToolsPage() {
-  const [platformSelectedItem, setPlatformSelectedItem] = useState('');
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!location.hash) return;
+    requestAnimationFrame(() => {
+      document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [location.hash]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-[#f3f7f8]">
       <Header />
-      
+
       <main className="flex-1">
-        <div className="container mx-auto px-4 py-8">
-          <div className="grid lg:grid-cols-[1fr_280px] gap-6">
-            <div>
-              {platformSelectedItem ? (
-                <PlatformContent selectedItem={platformSelectedItem} />
-              ) : (
-                <>
-                  {/* Title Section */}
-                  <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                      기후위기 적응대책 수립을 위한 의사결정 지원도구란?
-                    </h1>
-                    <p className="text-lg text-gray-600">개요설명 (작성필요)</p>
-                  </div>
-
-                  {/* Tools Grid */}
-                  <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* Maps & DATA */}
-                    <Link to="/tools/maps-data">
-                      <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-                        <CardContent className="pt-6">
-                          <div className="flex flex-col items-center text-center">
-                            <div className="relative mb-6">
-                              <div className="w-32 h-32 bg-gradient-to-br from-blue-400 via-purple-400 to-blue-600 rounded-lg flex items-center justify-center shadow-xl transform hover:scale-105 transition-transform">
-                                <Layers className="size-16 text-white" strokeWidth={1.5} />
-                              </div>
-                            </div>
-                            
-                            <h3 className="text-xl font-bold text-gray-900 mb-3">Maps & DATA</h3>
-                            <p className="text-sm text-gray-700 font-medium mb-3">
-                              적응대책 수립을 위한 데이터(지도)
-                            </p>
-                            
-                            <ul className="text-sm text-gray-600 space-y-2 text-left w-full">
-                              <li className="flex items-start gap-2">
-                                <span className="text-blue-600 mt-1">−</span>
-                                <span>지역의 현황 분석 및 지역 리스크 도출에 활용되는 데이터 및 지도</span>
-                              </li>
-                            </ul>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-
-                    {/* 가이드라인 */}
-                    <Link to="/tools/guidelines">
-                      <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-                        <CardContent className="pt-6">
-                          <div className="flex flex-col items-center text-center">
-                            <div className="relative mb-6">
-                              <div className="w-32 h-32 bg-gradient-to-br from-purple-400 via-pink-400 to-purple-600 rounded-lg flex items-center justify-center shadow-xl transform hover:scale-105 transition-transform">
-                                <BookOpen className="size-16 text-white" strokeWidth={1.5} />
-                              </div>
-                            </div>
-                            
-                            <h3 className="text-xl font-bold text-gray-900 mb-3">가이드라인</h3>
-                            <p className="text-sm text-gray-700 font-medium mb-3">
-                              적응대책 수립을 위한 시민미디어터
-                            </p>
-                            
-                            <ul className="text-sm text-gray-600 space-y-2 text-left w-full">
-                              <li className="flex items-start gap-2">
-                                <span className="text-purple-600 mt-1">−</span>
-                                <span>적응대책 수립을 위한 리빙랩 가이드라인(리빙랩 결과를 적응대책에 반영하기 위한 방법 및 최소 기준)</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-purple-600 mt-1">−</span>
-                                <span>개별 리빙랩을 위한 가이드라인(리빙랩 운영 및 계획을 위한 정보 제공 및 사례 설명)</span>
-                              </li>
-                            </ul>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-
-                    {/* 분석도구 */}
-                    <Link to="/tools/analysis">
-                      <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-                        <CardContent className="pt-6">
-                          <div className="flex flex-col items-center text-center">
-                            <div className="relative mb-6">
-                              <div className="w-32 h-32 bg-gradient-to-br from-cyan-400 via-blue-400 to-cyan-600 rounded-lg flex items-center justify-center shadow-xl transform hover:scale-105 transition-transform">
-                                <LineChart className="size-16 text-white" strokeWidth={1.5} />
-                              </div>
-                            </div>
-                            
-                            <h3 className="text-xl font-bold text-gray-900 mb-3">분석도구</h3>
-                            <p className="text-sm text-gray-700 font-medium mb-3">
-                              적응사업의 평가를 위한 간단한 분석 도구(엑셀 및 파이썬)
-                            </p>
-                            
-                            <ul className="text-sm text-gray-600 space-y-2 text-left w-full">
-                              <li className="flex items-start gap-2">
-                                <span className="text-cyan-600 mt-1">−</span>
-                                <span>별도 정보 및 지도를 생산 하기 위한 분석 도구</span>
-                              </li>
-                            </ul>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-
-                    {/* App or 프로그램 */}
-                    <Link to="/tools/applications">
-                      <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-                        <CardContent className="pt-6">
-                          <div className="flex flex-col items-center text-center">
-                            <div className="relative mb-6">
-                              <div className="w-32 h-32 bg-gradient-to-br from-emerald-400 via-teal-400 to-emerald-600 rounded-lg flex items-center justify-center shadow-xl transform hover:scale-105 transition-transform">
-                                <Laptop className="size-16 text-white" strokeWidth={1.5} />
-                              </div>
-                            </div>
-                            
-                            <h3 className="text-xl font-bold text-gray-900 mb-3">App or 프로그램</h3>
-                            <p className="text-sm text-gray-700 font-medium mb-3">
-                              지자체 사용자 대상의 개별 프로그램
-                            </p>
-                            
-                            <ul className="text-sm text-gray-600 space-y-2 text-left w-full">
-                              <li className="flex items-start gap-2">
-                                <span className="text-emerald-600 mt-1">−</span>
-                                <span>계획수립부서용</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-emerald-600 mt-1">−</span>
-                                <span>사업소관부서용</span>
-                              </li>
-                            </ul>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  </div>
-
-                  {/* Additional Information */}
-                  <div className="mt-12 bg-white rounded-lg border p-8">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">지원도구 활용 안내</h2>
-                    <div className="space-y-4 text-gray-700">
-                      <p>
-                        의사결정 지원도구는 지방자치단체가 기후위기 적응대책을 효과적으로 수립하고 이행할 수 있도록 
-                        다양한 형태의 도구와 자료를 제공합니다.
-                      </p>
-                      <div className="grid md:grid-cols-2 gap-6 mt-6">
-                        <div className="space-y-2">
-                          <h3 className="font-bold text-lg">데이터 및 지도</h3>
-                          <p className="text-sm text-gray-600">
-                            지역 현황 분석과 리스크 평가에 필요한 공간정보와 통계 데이터를 제공합니다.
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <h3 className="font-bold text-lg">가이드라인</h3>
-                          <p className="text-sm text-gray-600">
-                            리빙랩 운영과 적응대책 수립 과정에서 참고할 수 있는 지침과 사례를 제공합니다.
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <h3 className="font-bold text-lg">분석도구</h3>
-                          <p className="text-sm text-gray-600">
-                            엑셀 및 파이썬 기반의 간단한 분석 도구로 사업 평가와 데이터 분석을 지원합니다.
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <h3 className="font-bold text-lg">전용 프로그램</h3>
-                          <p className="text-sm text-gray-600">
-                            계획수립부서와 사업소관부서를 위한 맞춤형 애플리케이션을 제공합니다.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
+        <section className="relative overflow-hidden bg-[#073b52] text-white">
+          <div className="absolute -left-20 top-10 size-72 rounded-full bg-emerald-500/20 blur-3xl" />
+          <div className="absolute right-0 top-0 size-96 rounded-full bg-sky-500/20 blur-3xl" />
+          <div className="container relative mx-auto px-4 py-9 md:py-11">
+            <div className="max-w-4xl">
+              <div className="flex w-fit items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-emerald-200">
+                <Sparkles className="size-4" />
+                DECISION SUPPORT TOOLS
+              </div>
+              <h1 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight md:text-4xl">
+                기후위기 적응대책을 실행으로 연결하는 지원도구
+              </h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200 md:text-base">
+                지역 진단과 계획 수립부터 사업 디자인, 이행 및 효과평가까지 필요한 데이터와 도구를 한곳에서 확인하세요.
+              </p>
             </div>
-            <RightSidebar selectedItem={platformSelectedItem} onSelectItem={setPlatformSelectedItem} />
+          </div>
+        </section>
+
+        <div className="container mx-auto px-4 py-10">
+          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_250px]">
+            <div>
+              <section>
+                <div className="mb-7">
+                  <p className="text-sm font-extrabold text-emerald-700">TOOL CATEGORIES</p>
+                  <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">필요한 지원도구를 찾아보세요</h2>
+                  <p className="mt-3 leading-7 text-slate-600">목적과 업무 단계에 맞는 데이터, 지침, 분석도구와 프로그램을 제공합니다.</p>
+                </div>
+
+                <div className="grid gap-5 md:grid-cols-2">
+                  {categories.map((category) => (
+                    <Link
+                      key={category.title}
+                      to={category.href}
+                      className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
+                    >
+                      <div className={`bg-gradient-to-br ${category.color} p-6 text-white`}>
+                        <div className="flex items-start justify-between">
+                          <div className="grid size-12 place-items-center rounded-xl bg-white/15">
+                            <category.icon className="size-6" />
+                          </div>
+                          <ArrowRight className="size-5 opacity-70 transition group-hover:translate-x-1 group-hover:opacity-100" />
+                        </div>
+                        <h3 className="mt-7 text-2xl font-extrabold">{category.title}</h3>
+                        <p className="mt-1 text-sm font-bold text-white/75">{category.subtitle}</p>
+                      </div>
+                      <div className="p-6">
+                        <p className="leading-7 text-slate-600">{category.description}</p>
+                        <p className="mt-5 text-sm font-extrabold text-slate-900">자세히 보기</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+
+              <section id="adaptation-support-tools" className="mt-12 scroll-mt-8">
+                <PlatformContent selectedItem="adaptation-support-tools" />
+              </section>
+            </div>
+
+            <RightSidebar selectedItem="" onSelectItem={() => undefined} />
           </div>
         </div>
       </main>

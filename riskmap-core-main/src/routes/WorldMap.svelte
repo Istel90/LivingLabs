@@ -20,8 +20,12 @@
     import DONG_CSV from '$lib/dong_4326.csv?raw';
     import IN_CSV from '$lib/in3_4326.csv?raw';
     import SUWON_CSV from '$lib/suwon_4326.csv?raw';
-    import SIDO_SGG_CSV from '$lib/sido_sgg_Table.csv?raw';
-    import SIG_XY_CSV from '$lib/SIG_XY_CD.csv?raw';
+    import SIDO_SGG_CSV from '../../../shared/data/administrative-regions/sido_sgg_codes.csv?raw';
+    import SIG_XY_CSV from '../../../shared/data/administrative-regions/sigungu_centers.csv?raw';
+    import SOLAR_CSV from '../../../shared/data/climate/solar_admin_centroid_mean.csv?raw';
+    import SOLAR_ALTITUDE_CSV from '../../../shared/data/climate/solar_altitude_by_sigungu.csv?raw';
+    import REGION_DEFAULTS_CSV from '../../../shared/data/administrative-regions/region_assessment_defaults.csv?raw';
+    import { calculateTemperatureEffect } from '$lib/effects/temperatureEffect.js';
 
     const ICON_SIZE = 40;
     const REGION_ROWS = parseCsv(SIDO_SGG_CSV)
@@ -36,6 +40,34 @@
             .filter(([, region]) => Number.isFinite(region.lat) && Number.isFinite(region.lng))
     );
     const SIDOS = Array.from(new Set(REGION_ROWS.map((region) => region.sido)));
+    const SOLAR_BY_REGION = new Map(
+        parseCsv(SOLAR_CSV).map((row) => [
+            row[0],
+            {
+                solar_09_kst: Number(row[6]),
+                solar_12_kst: Number(row[7]),
+                solar_15_kst: Number(row[8])
+            }
+        ])
+    );
+    const SOLAR_ALTITUDE_BY_REGION = new Map(
+        parseCsv(SOLAR_ALTITUDE_CSV).map((row) => [
+            row[0],
+            {
+                regionName: row[1],
+                meridianDeg: Number(row[2]),
+                altitude09Deg: Number(row[3]),
+                altitude12Deg: Number(row[4]),
+                altitude15Deg: Number(row[5])
+            }
+        ])
+    );
+    const REGION_DEFAULTS = new Map(
+        parseCsv(REGION_DEFAULTS_CSV).map((row) => [
+            row[0],
+            { regionName: row[1], assessmentAreaM2: Number(row[2]), areaSource: row[3] }
+        ])
+    );
     const PARTS = [
         ['물관리', ['하수관로', '빗물펌프장']],
         ['농수산', []],
@@ -94,10 +126,23 @@
     let selectedPart = $state('');
     let availableItems = $derived(PARTS.find((part) => part[0] === selectedPart)?.[1] || []);
     let zoomLevel = $state(0);
-    let ssim = $state(0);
+    let selectedSido = $state('서울특별시');
+    let selectedSggCode = $state('11230');
+    let availableSggs = $derived(REGION_ROWS.filter((region) => region.sido === selectedSido));
+    let selectedRegionCode = $derived(selectedSggCode || getSidoCode(selectedSido));
+    let selectedAssessmentDefaults = $derived(REGION_DEFAULTS.get(selectedRegionCode));
+    let selectedSolarAltitude = $derived(SOLAR_ALTITUDE_BY_REGION.get(selectedRegionCode));
+    let assessmentAreaM2 = $derived(selectedAssessmentDefaults?.assessmentAreaM2 || 0);
+    let solarAltitudeDeg = $derived(selectedSolarAltitude?.meridianDeg || 45);
+    let appliedCounts = $state({ 가로수: 0, 그늘막: 0 });
+    let effectResult = $state(null);
+    let effectStatus = $state('지도에 사업 위치를 추가한 뒤 적용 버튼을 누르세요.');
+    let interventionSettings = $state({
+        가로수: { widthM: 4, heightM: 6, transmission: 0.15, shape: 'circle' },
+        그늘막: { widthM: 5, heightM: 3, transmission: 0.05, shape: 'square' }
+    });
 
     let tempGraph;
-    let feelGraph;
     let canvas = $state();
     let ctx;
     let selection;
@@ -105,10 +150,6 @@
     let selectionTool = $state();
 
     let gridCheckbox;
-    let selectedSido = $state('서울특별시');
-    let selectedSggCode = $state('11230');
-    let availableSggs = $derived(REGION_ROWS.filter((region) => region.sido === selectedSido));
-    let selectedRegionCode = $derived(selectedSggCode || getSidoCode(selectedSido));
 
     onMount(() => {
         // (async () => {
@@ -297,8 +338,6 @@
                 });
             }
         }
-        updateGraph();
-        calcSsim();
     });
 
     function componentToHex(c) {
@@ -308,27 +347,6 @@
 
     function rgbToHex(r, g, b) {
         return '#' + componentToHex(r) + componentToHex(g) + componentToHex(b);
-    }
-
-    function calcSsim() {
-        let ssims = [];
-        for (const [tag, data] of Object.entries(db)) {
-            for (const [i, coord] of data.coords.entries()) {
-                let y = (coord[0] - 37.59) * 10000;
-                let x = (coord[1] - 127.05) * 10000;
-                y = Math.floor(y / 4);
-                x = Math.floor(x / 4);
-                y = ((y % 11) + 11) % 11;
-                x = ((x % 11) + 11) % 11;
-                let ssimIdx = (y + x) / 20;
-                ssims.push(ssimIdx);
-            }
-        }
-        if (ssims.length == 0) {
-            ssim = 0;
-        } else {
-            ssim = ssims.reduce((a, b) => a + b) / ssims.length;
-        }
     }
 
     function onMapClick(e) {
@@ -381,65 +399,29 @@
     }
 
     function onMove(e) {
-        updateGraph();
+        // 향후 현재 지도 범위를 평가면적으로 자동 계산하는 공간 API 연결 지점
     }
 
-    function updateGraph() {
-        let selectedCount = 0;
-        for (const [tag, info] of Object.entries(pointInfos)) {
-            const markers = info.group.getLayers();
-            const selectedMarkers = markers.filter((marker) => marker.isSelected);
-            selectedCount += selectedMarkers.length;
+    function applyPlan() {
+        if (!selectedAssessmentDefaults) {
+            effectStatus = '선택 지역의 행정구역 면적 자료를 먼저 등록해야 효과를 계산할 수 있습니다.';
+            return;
         }
-        const selectedOnly = selectedCount > 0;
-
-        const treeCoords = getCoords(pointInfos['가로수'].group, selectedOnly);
-        const treeTempWeights = coordsToWeights(treeCoords, 0.2, 0.3);
-        const treefeelWeights = coordsToWeights(treeCoords, 0.15, 0.2);
-
-        const canopyCoords = getCoords(pointInfos['그늘막'].group, selectedOnly);
-        const canopyTempWeights = coordsToWeights(canopyCoords, 0.02, 0.15);
-        const canopyfeelWeights = coordsToWeights(canopyCoords, 0.01, 0.13);
-
-        tempGraph.update(weightsToEffects(treeTempWeights.concat(canopyTempWeights)));
-        feelGraph.update(weightsToEffects(treefeelWeights.concat(canopyfeelWeights)));
-    }
-
-    function getCoords(group, selectedOnly) {
-        const markers = group.getLayers();
-        const selectedMarkers = markers.filter((marker) => marker.isSelected);
-        const targetMarkers = selectedOnly ? selectedMarkers : markers;
-
-        return targetMarkers
-            .map((marker) => {
-                const latlng = marker.getLatLng();
-                return [latlng.lat, latlng.lng];
-            })
-            .filter((latlng) => map.getBounds().contains(latlng));
-    }
-
-    function coordsToWeights(coords, minWeight, maxWeight) {
-        return coords.map((coord) => {
-            let hash = ((coord[0] * coord[1] * 100000) % 100000) / 100000;
-            return (maxWeight - minWeight) * hash + minWeight;
+        const solar = SOLAR_BY_REGION.get(selectedRegionCode);
+        const interventions = Object.entries(db).map(([id, item]) => ({
+            id,
+            count: item.coords.length,
+            ...interventionSettings[id]
+        }));
+        effectResult = calculateTemperatureEffect({
+            interventions,
+            solar,
+            solarAltitudeDeg,
+            assessmentAreaM2
         });
-    }
-
-    function weightsToEffects(weights) {
-        return Array.from(weightsToEffectsGenerator(weights));
-
-        function* weightsToEffectsGenerator() {
-            let total = 0;
-            for (const weight of weights) {
-                total += weight;
-                yield filter(total);
-            }
-        }
-    }
-
-    // 2e^(-x)-2
-    function filter(x) {
-        return 2 * (Math.exp(-x) - 1);
+        appliedCounts = Object.fromEntries(Object.entries(db).map(([id, item]) => [id, item.coords.length]));
+        effectStatus = `${selectedRegionCode} 지역 일사량과 ${Number(assessmentAreaM2).toLocaleString()}㎡ 평가면적을 적용했습니다.`;
+        tempGraph?.update(effectResult.times.map((row) => -row.deltaTC));
     }
 
     function parseCsv(csv) {
@@ -448,7 +430,9 @@
             .trim()
             .split(/\r?\n/)
             .slice(1)
-            .map((line) => line.split(',').map((value) => value.trim()));
+            .map((line) =>
+                line.split(',').map((value) => value.trim().replace(/^"(.*)"$/, '$1'))
+            );
     }
 
     function getSidoCode(sido) {
@@ -688,6 +672,47 @@
                     <option value={item}>{item}</option>
                 {/each}
             </select>
+            {#if currentItem && interventionSettings[currentItem]}
+                <div class="mt-1 space-y-1 rounded-md bg-slate-100 p-2 text-xs">
+                    <div class="font-bold">{currentItem} 효과 계산 조건</div>
+                    <label class="flex items-center justify-between gap-1">
+                        폭·수관폭(m)
+                        <input class="w-16 rounded border px-1" type="number" min="0.1" step="0.1" bind:value={interventionSettings[currentItem].widthM} />
+                    </label>
+                    <label class="flex items-center justify-between gap-1">
+                        높이(m)
+                        <input class="w-16 rounded border px-1" type="number" min="0.1" step="0.1" bind:value={interventionSettings[currentItem].heightM} />
+                    </label>
+                    <label class="flex items-center justify-between gap-1">
+                        일사 투과율
+                        <input class="w-16 rounded border px-1" type="number" min="0" max="1" step="0.05" bind:value={interventionSettings[currentItem].transmission} />
+                    </label>
+                </div>
+            {/if}
+            <div class="mt-1 space-y-1 rounded-md border border-slate-200 p-2 text-xs">
+                <div class="font-bold">지역 자동 평가 조건</div>
+                <dl class="space-y-1">
+                    <div class="flex items-center justify-between gap-1">
+                        <dt>대상지역</dt><dd class="font-semibold">{REGION_ROWS.find((region) => region.code === selectedRegionCode)?.name || '-'}</dd>
+                    </div>
+                    <div class="flex items-center justify-between gap-1">
+                        <dt>평가면적</dt><dd class="font-semibold">{selectedAssessmentDefaults ? `${Number(assessmentAreaM2).toLocaleString()}㎡` : '면적 자료 등록 필요'}</dd>
+                    </div>
+                    <div class="flex items-center justify-between gap-1">
+                        <dt>대표 태양고도</dt><dd class="font-semibold">{Number(solarAltitudeDeg).toFixed(2)}°</dd>
+                    </div>
+                </dl>
+                <p class="text-[10px] leading-tight text-slate-500">
+                    {selectedAssessmentDefaults?.areaSource || '면적 자료 미등록: 임시 평가면적 적용'} · 제공 태양고도 자료의 시군구별 남중고도 평균
+                </p>
+            </div>
+            <button
+                class="mt-1 rounded-md bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"
+                onclick={applyPlan}
+                disabled={!selectedAssessmentDefaults}
+            >
+                사업 적용·효과 계산
+            </button>
         </div>
 
         <div class="relative flex-auto">
@@ -767,7 +792,7 @@
                     <div class="flex flex-row">
                         <div class="flex-2 text-center font-bold">◾ 가로수:</div>
                         <div class="flex flex-3 justify-center">
-                            <div class="font-bold">{counts['가로수']}</div>
+                            <div class="font-bold">{appliedCounts['가로수']}</div>
                             <div class="px-1.5 font-bold">/</div>
                             <input
                                 type="number"
@@ -777,13 +802,13 @@
                             />
                         </div>
                         <div class="flex-1 text-center">
-                            {#if counts['가로수'] >= db['가로수'].goal}✔️{:else}❌{/if}
+                            {#if appliedCounts['가로수'] >= db['가로수'].goal}완료{:else}진행{/if}
                         </div>
                     </div>
                     <div class="flex flex-row">
                         <div class="flex-2 text-center font-bold">◾ 그늘막:</div>
                         <div class="flex flex-3 justify-center">
-                            <div class="font-bold">{counts['그늘막']}</div>
+                            <div class="font-bold">{appliedCounts['그늘막']}</div>
                             <div class="px-1.5 font-bold">/</div>
                             <input
                                 type="number"
@@ -793,24 +818,35 @@
                             />
                         </div>
                         <div class="flex-1 text-center">
-                            {#if counts['그늘막'] >= db['그늘막'].goal}✔️{:else}❌{/if}
+                            {#if appliedCounts['그늘막'] >= db['그늘막'].goal}완료{:else}진행{/if}
                         </div>
+                    </div>
+                    <div class="border-t pt-1 text-xs text-slate-600">
+                        계획 수량: 가로수 {counts['가로수']}주 · 그늘막 {counts['그늘막']}개
                     </div>
                 </div>
             </div>
             <div class="bg-my-navy space-y-1 rounded-md p-0.5">
                 <div class="text-w text-center">적응효과평가</div>
                 <div class="space-y-1 rounded-md bg-white p-2">
-                    <div class={`${zoomLevel >= 18 ? 'visible' : 'hidden'}`}>
-                        <div class="font-bold">◾ 온도저감효과</div>
+                    <div class="rounded bg-slate-50 p-2 text-xs text-slate-600">{effectStatus}</div>
+                    <div>
+                        <div class="font-bold">◾ 시간대별 예측 기온 저감</div>
                         <Graph bind:this={tempGraph}></Graph>
                     </div>
-                    <div class={`${zoomLevel >= 18 ? 'visible' : 'hidden'}`}>
-                        <div class="font-bold">◾ 시민체감효과</div>
-                        <Graph bind:this={feelGraph}></Graph>
-                    </div>
-                    <div class={`${zoomLevel < 18 ? 'visible' : 'hidden'}`}>
-                        <div class="font-bold">◾ SSIM: {ssim}</div>
+                    {#if effectResult}
+                        <div class="grid grid-cols-2 gap-1 text-xs">
+                            <div class="rounded bg-orange-50 p-2"><span class="block text-slate-500">평균 기온 저감</span><strong class="text-base">{effectResult.meanDeltaTC.toFixed(2)}℃</strong></div>
+                            <div class="rounded bg-orange-50 p-2"><span class="block text-slate-500">최대 기온 저감</span><strong class="text-base">{effectResult.maxDeltaTC.toFixed(2)}℃</strong></div>
+                            <div class="rounded bg-amber-50 p-2"><span class="block text-slate-500">유효 그늘 면적</span><strong class="text-base">{effectResult.shadeAreaM2.toFixed(1)}㎡</strong></div>
+                            <div class="rounded bg-amber-50 p-2"><span class="block text-slate-500">차단 에너지</span><strong class="text-base">{effectResult.blockedEnergyMJ.toFixed(1)}MJ</strong></div>
+                        </div>
+                        <div class="text-xs text-slate-500">
+                            평가면적 대비 유효 그늘 {(effectResult.shadeFraction * 100).toFixed(1)}%
+                        </div>
+                    {/if}
+                    <div class="rounded border border-dashed p-2 text-xs text-slate-500">
+                        향후 탄소흡수·미세먼지 저감·유출저감 효과 모듈을 같은 대시보드에 추가할 수 있습니다.
                     </div>
                 </div>
             </div>

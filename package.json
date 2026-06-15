@@ -5,7 +5,17 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "build:all": "npm run build && npm --prefix \"Survey platform for collaboration\" run build && npm --prefix riskmap-core-main run build",
+    "dev": "vite",
+    "dev:portal": "vite",
+    "dev:survey": "npm --prefix \"Survey platform for collaboration\" run dev",
+    "dev:riskmap": "npm --prefix riskmap-core-main run dev",
+    "dev:internal-tools": "npm --prefix riskmap-core-main run dev",
+    "install:all": "npm install && npm --prefix \"Survey platform for collaboration\" install && npm --prefix riskmap-core-main install"
+  },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

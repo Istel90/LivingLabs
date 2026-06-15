@@ -1,0 +1,85 @@
+name: Deploy LivingLabs to GitHub Pages
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      PAGES_BASE_PATH: /LivingLabs/
+      VITE_SURVEY_PLATFORM_URL: /LivingLabs/survey/
+      VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL: /LivingLabs/internal-tools/responsible-department
+      VITE_PRIORITY_MANAGEMENT_AREA_TOOL_URL: /LivingLabs/internal-tools/priority-management-area
+      VITE_ADAPTATION_PATHWAY_TOOL_URL: /LivingLabs/internal-tools/adaptation-pathway
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            Survey platform for collaboration/package-lock.json
+            riskmap-core-main/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix "Survey platform for collaboration"
+          npm ci --prefix riskmap-core-main
+
+      - name: Build portal
+        run: npm run build
+
+      - name: Build survey
+        env:
+          PAGES_BASE_PATH: /LivingLabs/survey/
+        run: npm run build --prefix "Survey platform for collaboration"
+
+      - name: Build internal tools
+        env:
+          PAGES_BASE_PATH: /LivingLabs/internal-tools
+        run: npm run build --prefix riskmap-core-main
+
+      - name: Assemble Pages site
+        run: |
+          mkdir -p pages-dist/survey pages-dist/internal-tools
+          cp -R dist/. pages-dist/
+          cp -R "Survey platform for collaboration/dist/." pages-dist/survey/
+          cp -R riskmap-core-main/build/. pages-dist/internal-tools/
+          cp pages-dist/index.html pages-dist/404.html
+          touch pages-dist/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages-dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

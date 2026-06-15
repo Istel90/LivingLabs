@@ -1,5 +1,10 @@
 node_modules/
 dist/
+.svelte-kit/
+build/
 .env
 .env.local
 *.log
+.runtime-logs/
+pages-dist/
+riskmap-core-main.zip

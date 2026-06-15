@@ -1,0 +1,19 @@
+{
+  "baseMaps": {
+    "openStreetMap": {
+      "type": "xyz",
+      "url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "attribution": "OpenStreetMap contributors"
+    }
+  },
+  "administrativeBoundaries": {
+    "provider": "Local GeoJSON",
+    "sigunguBoundary": "../data/administrative-regions/boundaries/sigungu.geojson",
+    "source": "southkorea/southkorea-maps, KOSTAT 2013 simplified municipalities"
+  },
+  "sharedRegionData": {
+    "codes": "../data/administrative-regions/sido_sgg_codes.csv",
+    "centers": "../data/administrative-regions/sigungu_centers.csv",
+    "hierarchy": "../data/administrative-regions/sido_sgg_hierarchy.csv"
+  }
+}
