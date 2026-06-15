@@ -9,7 +9,7 @@ import { RespondentRiskList } from './components/screens/RespondentRiskList';
 import { SurveyResponse } from './components/screens/SurveyResponse';
 import { ResponseReview } from './components/screens/ResponseReview';
 import { ResultsSummary } from './components/screens/ResultsSummary';
-import { Button } from './components/ui/Button';
+import { Button } from './components/ui/button';
 import { Home, FolderKanban, Users, FileText, ClipboardList, BarChart3, FileCheck, Menu, LogOut } from 'lucide-react';
 import { seedDatabase } from './lib/seedData';
 import { getLocalGovernment } from './data/localGovernments';
