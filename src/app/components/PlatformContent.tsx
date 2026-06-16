@@ -1,4 +1,4 @@
-import { ArrowRight, ClipboardList, ExternalLink, FileText, MapPin, Route, Trees, Users } from 'lucide-react';
+import { ClipboardList, ExternalLink, FileText, MapPin, Route, Trees, Users } from 'lucide-react';
 
 interface PlatformContentProps {
   selectedItem: string;
@@ -71,14 +71,6 @@ export function PlatformContent({ selectedItem }: PlatformContentProps) {
         <p className="mt-4 max-w-3xl leading-7 text-slate-200">
           계획을 총괄하는 주관부서와 개별 사업을 실행하는 사업소관부서의 의사결정을 연결합니다.
         </p>
-        <div className="mt-7 flex flex-wrap gap-3">
-          <a href={leadDepartmentToolUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-extrabold text-[#073b52]">
-            주관부서 핵심도구 <ExternalLink className="size-4" />
-          </a>
-          <a href={responsibleDepartmentToolUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-white/25 bg-white/10 px-5 py-3 text-sm font-extrabold text-white">
-            사업소관부서 핵심도구 <ArrowRight className="size-4" />
-          </a>
-        </div>
       </div>
 
       <div className="grid gap-6 p-7 md:p-9 lg:grid-cols-2">
