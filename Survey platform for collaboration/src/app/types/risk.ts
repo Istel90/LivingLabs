@@ -1,7 +1,7 @@
 export interface ContentBlock {
   id: string;
-  type: 'text' | 'chart' | 'map' | 'image' | 'table';
-  title: string;
+  type: 'title' | 'text' | 'chart' | 'map' | 'image' | 'table' | 'note' | 'source';
+  title?: string;
   content?: string;
   imageUrl?: string;
   description?: string;
@@ -24,6 +24,7 @@ export interface RiskContextInfo {
 export interface RiskMapInfo {
   center: [number, number];
   zoom: number;
+  regionCode?: string;
   baseLayer: string;
   visibleLayers: string[];
   markers?: {

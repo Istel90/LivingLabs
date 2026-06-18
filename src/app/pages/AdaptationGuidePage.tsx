@@ -7,7 +7,7 @@ import { PlatformContent } from '../components/PlatformContent';
 import { BookOpen, ChevronDown, ChevronRight, Compass, Sparkles } from 'lucide-react';
 
 const leadDepartmentToolUrl =
-  import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL || 'http://128.134.187.146:6080/living-lab/';
+  import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL || `${import.meta.env.BASE_URL}lead-department-tool`;
 const responsibleDepartmentToolUrl =
   import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:4175/responsible-department';
 

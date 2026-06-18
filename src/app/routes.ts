@@ -8,6 +8,7 @@ import { GuidelinesPage } from "./pages/tools/GuidelinesPage";
 import { AnalysisToolsPage } from "./pages/tools/AnalysisToolsPage";
 import { ApplicationsPage } from "./pages/tools/ApplicationsPage";
 import { AboutPage } from "./pages/AboutPage";
+import { LeadDepartmentPrototypePage } from "./pages/LeadDepartmentPrototypePage";
 
 export const router = createBrowserRouter([
   {
@@ -41,6 +42,10 @@ export const router = createBrowserRouter([
   {
     path: "/tools/applications",
     Component: ApplicationsPage,
+  },
+  {
+    path: "/lead-department-tool",
+    Component: LeadDepartmentPrototypePage,
   },
   {
     path: "/about",

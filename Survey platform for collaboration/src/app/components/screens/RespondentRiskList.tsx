@@ -6,6 +6,7 @@ import { Badge, statusLabels } from '../ui/badge';
 import { Calendar, FileText } from 'lucide-react';
 import * as api from '../../lib/api';
 import { getLocalGovernment } from '../../data/localGovernments';
+import { getDepartmentResponse, getRiskDepartments } from '../../lib/surveyModel';
 
 interface RespondentRiskListProps {
   onStartSurvey?: (riskId: string) => void;
@@ -25,7 +26,7 @@ export function RespondentRiskList({ onStartSurvey, userDepartment = '건강증�
     if (userDepartment) {
       loadData();
     }
-  }, [userDepartment]);
+  }, [userDepartment, localGovId]);
 
   async function loadData() {
     if (!userDepartment) {
@@ -48,9 +49,11 @@ export function RespondentRiskList({ onStartSurvey, userDepartment = '건강증�
 
       // 해당 부서에 배정된 리스크만 필터링
       const filtered = (risksData || []).filter((r: any) => {
-        const deptList = r.assignedDepartmentIds || r.assignedDepartmentsList || [];
-        const isAssigned = Array.isArray(deptList) && deptList.includes(userDepartment);
-        return isAssigned;
+        const deptList = getRiskDepartments(r);
+        const isAssigned = deptList.includes(userDepartment);
+        const riskRegionCode = r.mapInfo?.regionCode || r.regionCode;
+        const isSameRegion = !localGov?.regionCode || !riskRegionCode || riskRegionCode === localGov.regionCode;
+        return isAssigned && isSameRegion;
       });
 
       console.log('Filtered risks for department:', filtered);
@@ -70,21 +73,13 @@ export function RespondentRiskList({ onStartSurvey, userDepartment = '건강증�
   // 실제 응답 데이터 기반 통계 계산
   const totalAssigned = assignedRisks.length;
   const submitted = assignedRisks.filter(risk => {
-    const response = responses.find(r =>
-      r.riskId === risk.id &&
-      r.department === userDepartment &&
-      r.status === 'submitted'
-    );
-    return !!response;
+    const response = getDepartmentResponse(responses, risk.id, userDepartment);
+    return response?.status === 'submitted';
   }).length;
 
   const inProgress = assignedRisks.filter(risk => {
-    const response = responses.find(r =>
-      r.riskId === risk.id &&
-      r.department === userDepartment &&
-      r.status === 'draft'
-    );
-    return !!response;
+    const response = getDepartmentResponse(responses, risk.id, userDepartment);
+    return response?.status === 'draft';
   }).length;
 
   const notStarted = totalAssigned - submitted - inProgress;
@@ -124,7 +119,10 @@ export function RespondentRiskList({ onStartSurvey, userDepartment = '건강증�
         {/* Risk Cards */}
         {assignedRisks.length > 0 ? (
           <div className="space-y-4">
-            {assignedRisks.map(risk => (
+            {assignedRisks.map(risk => {
+              const response = getDepartmentResponse(responses, risk.id, userDepartment);
+              const responseLabel = response?.status === 'submitted' ? '제출 완료' : response?.status === 'draft' ? '작성중' : '미작성';
+              return (
             <Card key={risk.id} className="p-6 hover:shadow-lg transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex-1">
@@ -135,8 +133,8 @@ export function RespondentRiskList({ onStartSurvey, userDepartment = '건강증�
                   </div>
                   <p className="text-muted-foreground mb-4">{risk.description}</p>
                 </div>
-                <Badge status={risk.status}>
-                  {statusLabels[risk.status]}
+                <Badge status={response?.status === 'submitted' ? 'completed' : response?.status === 'draft' ? 'in-progress' : 'pending'}>
+                  {responseLabel}
                 </Badge>
               </div>
 
@@ -156,7 +154,8 @@ export function RespondentRiskList({ onStartSurvey, userDepartment = '건강증�
                 </Button>
               </div>
             </Card>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <Card className="p-12 text-center">

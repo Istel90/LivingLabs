@@ -10,9 +10,10 @@ import { SurveyResponse } from './components/screens/SurveyResponse';
 import { ResponseReview } from './components/screens/ResponseReview';
 import { ResultsSummary } from './components/screens/ResultsSummary';
 import { Button } from './components/ui/button';
-import { Home, FolderKanban, Users, FileText, ClipboardList, BarChart3, FileCheck, Menu, LogOut } from 'lucide-react';
+import { Home, FolderKanban, Users, FileText, ClipboardList, BarChart3, FileCheck, Menu, LogOut, MapPin } from 'lucide-react';
 import { seedDatabase } from './lib/seedData';
 import { getLocalGovernment } from './data/localGovernments';
+import { DemoDataControls } from './components/DemoDataControls';
 
 type Screen = 'home' | 'dashboard' | 'risks' | 'context' | 'assignment' | 'respondent-list' | 'survey' | 'review' | 'results';
 
@@ -26,6 +27,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [initialized, setInitialized] = useState(false);
   const [selectedRiskId, setSelectedRiskId] = useState<string | null>(null); // 선택된 리스크 ID
+  const [datasetVersion, setDatasetVersion] = useState(0);
 
   const localGov = localGovId ? getLocalGovernment(localGovId) : null;
 
@@ -50,6 +52,10 @@ export default function App() {
     setUserName('');
     setUserDepartment('');
     setCurrentScreen('home');
+  }
+
+  function handleDatasetChanged() {
+    setDatasetVersion((version) => version + 1);
   }
 
   useEffect(() => {
@@ -95,7 +101,14 @@ export default function App() {
 
   // Show login if not logged in
   if (!localGovId || !userRole) {
-    return <LoginPage onLogin={handleLogin} />;
+    return (
+      <>
+        <div className="fixed right-5 top-5 z-20 w-[min(520px,calc(100vw-2.5rem))]">
+          <DemoDataControls onDatasetChanged={handleDatasetChanged} />
+        </div>
+        <LoginPage onLogin={handleLogin} />
+      </>
+    );
   }
 
   // Show homepage if home screen
@@ -104,16 +117,17 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-[#f4f8f9]">
       {/* Sidebar */}
       {sidebarOpen && (
-        <div className="w-64 bg-white border-r border-border flex flex-col">
-          <div className="p-6 border-b border-border">
+        <div className="w-64 bg-[#073f4d] text-white border-r border-white/10 flex flex-col shadow-xl">
+          <div className="p-6 border-b border-white/10">
             <button
               onClick={() => setCurrentScreen(userRole === 'admin' ? 'dashboard' : 'respondent-list')}
-              className="w-full mb-4 text-left hover:text-primary transition-colors"
+              className="w-full mb-4 text-left hover:text-[#86efac] transition-colors"
             >
-              <h2>기후변화 리스크 설문 플랫폼</h2>
+              <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white text-[#064e3b] font-bold mb-3">SV</div>
+              <h2 className="leading-tight">기후변화 리스크 설문 플랫폼</h2>
             </button>
             {loginRole === 'admin' && (
               <div className="flex gap-2">
@@ -124,8 +138,8 @@ export default function App() {
                   }}
                   className={`flex-1 px-3 py-2 rounded transition-colors ${
                     userRole === 'admin'
-                      ? 'bg-primary text-white'
-                      : 'bg-gray-100 hover:bg-gray-200'
+                      ? 'bg-[#00c896] text-[#063b42]'
+                      : 'bg-white/10 text-white/80 hover:bg-white/20'
                   }`}
                 >
                   관리자
@@ -137,8 +151,8 @@ export default function App() {
                   }}
                   className={`flex-1 px-3 py-2 rounded transition-colors ${
                     userRole === 'respondent'
-                      ? 'bg-primary text-white'
-                      : 'bg-gray-100 hover:bg-gray-200'
+                      ? 'bg-[#00c896] text-[#063b42]'
+                      : 'bg-white/10 text-white/80 hover:bg-white/20'
                   }`}
                 >
                   응답자
@@ -157,8 +171,8 @@ export default function App() {
                     onClick={() => setCurrentScreen(item.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                       currentScreen === item.id
-                        ? 'bg-primary text-white'
-                        : 'text-gray-700 hover:bg-gray-100'
+                        ? 'bg-white text-[#073f4d] shadow'
+                        : 'text-white/80 hover:bg-white/10 hover:text-white'
                     }`}
                   >
                     <Icon className="w-5 h-5" />
@@ -169,19 +183,19 @@ export default function App() {
             </div>
           </nav>
 
-          <div className="p-4 border-t border-border">
+          <div className="p-4 border-t border-white/10">
             <div className="mb-3">
               <div className="mb-2">
-                <div className="text-muted-foreground">이름</div>
+                <div className="text-white/55">이름</div>
                 <div className="font-medium">{userName}</div>
               </div>
-              <div className="text-muted-foreground mb-1">{localGov?.displayName}</div>
-              <div className="text-muted-foreground">{userDepartment}</div>
+              <div className="text-white/55 mb-1">{localGov?.displayName}</div>
+              <div className="text-white/70">{userDepartment}</div>
             </div>
             <Button
               variant="outline"
               size="sm"
-              className="w-full"
+              className="w-full bg-white/10 border-white/20 text-white hover:bg-white/20"
               onClick={handleLogout}
             >
               <LogOut className="w-4 h-4 mr-2" />
@@ -200,37 +214,57 @@ export default function App() {
           <Menu className="w-5 h-5" />
         </button>
 
-        {currentScreen === 'dashboard' && (
-          <AdminDashboard onNavigate={(screen) => setCurrentScreen(screen)} />
+        {currentScreen !== 'survey' && localGov && (
+          <div className="sticky top-0 z-[5] border-b border-emerald-100 bg-white/90 px-8 py-3 backdrop-blur">
+            <div className="ml-12 flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-800">
+                  <MapPin className="h-4 w-4" />
+                  현재 지역
+                </span>
+                <strong className="text-slate-950">{localGov.displayName}</strong>
+                <span className="text-slate-400">계정 기준으로 지도와 응답 현황이 연결됩니다.</span>
+              </div>
+              <div className="max-w-xl flex-1 md:min-w-[460px]">
+                <DemoDataControls onDatasetChanged={handleDatasetChanged} />
+              </div>
+            </div>
+          </div>
         )}
-        {currentScreen === 'risks' && <RiskManagement />}
-        {currentScreen === 'context' && (
-          <ContextEditor
-            localGovId={localGovId}
-            localGovName={localGov?.displayName}
-          />
-        )}
-        {currentScreen === 'assignment' && <DepartmentAssignment />}
-        {currentScreen === 'respondent-list' && (
-          <RespondentRiskList
-            onStartSurvey={(riskId) => {
-              setSelectedRiskId(riskId);
-              setCurrentScreen('survey');
-            }}
-            userDepartment={userDepartment}
-            localGovId={localGovId}
-          />
-        )}
-        {currentScreen === 'survey' && (
-          <SurveyResponse
-            onBack={() => setCurrentScreen('respondent-list')}
-            localGovId={localGovId}
-            riskId={selectedRiskId}
-            userDepartment={userDepartment}
-          />
-        )}
-        {currentScreen === 'review' && <ResponseReview />}
-        {currentScreen === 'results' && <ResultsSummary />}
+
+        <div key={datasetVersion}>
+          {currentScreen === 'dashboard' && (
+            <AdminDashboard onNavigate={(screen) => setCurrentScreen(screen)} />
+          )}
+          {currentScreen === 'risks' && <RiskManagement localGovId={localGovId} />}
+          {currentScreen === 'context' && (
+            <ContextEditor
+              localGovId={localGovId}
+              localGovName={localGov?.displayName}
+            />
+          )}
+          {currentScreen === 'assignment' && <DepartmentAssignment />}
+          {currentScreen === 'respondent-list' && (
+            <RespondentRiskList
+              onStartSurvey={(riskId) => {
+                setSelectedRiskId(riskId);
+                setCurrentScreen('survey');
+              }}
+              userDepartment={userDepartment}
+              localGovId={localGovId}
+            />
+          )}
+          {currentScreen === 'survey' && (
+            <SurveyResponse
+              onBack={() => setCurrentScreen('respondent-list')}
+              localGovId={localGovId}
+              riskId={selectedRiskId}
+              userDepartment={userDepartment}
+            />
+          )}
+          {currentScreen === 'review' && <ResponseReview />}
+          {currentScreen === 'results' && <ResultsSummary />}
+        </div>
       </div>
     </div>
   );

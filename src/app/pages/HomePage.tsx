@@ -27,8 +27,9 @@ const priorityManagementAreaToolUrl =
   import.meta.env.VITE_PRIORITY_MANAGEMENT_AREA_TOOL_URL || 'http://127.0.0.1:4175/priority-management-area';
 const adaptationPathwayToolUrl =
   import.meta.env.VITE_ADAPTATION_PATHWAY_TOOL_URL || 'http://127.0.0.1:4175/adaptation-pathway';
+const internalLeadDepartmentToolUrl = `${import.meta.env.BASE_URL}lead-department-tool`;
 const leadDepartmentToolUrl =
-  import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL || 'http://128.134.187.146:6080/living-lab/';
+  import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL || internalLeadDepartmentToolUrl;
 
 const tools = [
   {
@@ -75,8 +76,6 @@ const process = [
 export function HomePage() {
   return (
     <div className="min-h-screen bg-[#f3f7f8] text-slate-900">
-      <Header />
-
       <main>
         <section className="relative overflow-hidden bg-[#073b52] text-white">
           <div className="absolute inset-0 opacity-30">
@@ -84,7 +83,9 @@ export function HomePage() {
             <div className="absolute right-0 top-0 size-96 rounded-full bg-[#287eb5] blur-3xl" />
           </div>
 
-          <div className="container relative mx-auto px-4 py-16 lg:py-24">
+          <Header variant="hero" />
+
+          <div className="container relative mx-auto px-4 py-14 lg:pb-24 lg:pt-16">
             <div className="flex max-w-4xl flex-col justify-center">
               <div className="mb-5 flex w-fit items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-cyan-50 backdrop-blur">
                 <Sparkles className="size-4 text-emerald-300" />

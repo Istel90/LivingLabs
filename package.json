@@ -11,6 +11,11 @@
     "dev:survey": "npm --prefix \"Survey platform for collaboration\" run dev",
     "dev:riskmap": "npm --prefix riskmap-core-main run dev",
     "dev:internal-tools": "npm --prefix riskmap-core-main run dev",
+    "preview:local": "vite preview --host 0.0.0.0 --port 4173 --strictPort",
+    "platform:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-platform.ps1",
+    "platform:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/status-platform.ps1",
+    "platform:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-platform.ps1",
+    "platform:refresh": "npm run build:all && npm run platform:stop && npm run platform:start",
     "install:all": "npm install && npm --prefix \"Survey platform for collaboration\" install && npm --prefix riskmap-core-main install"
   },
   "engines": {

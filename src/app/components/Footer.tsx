@@ -4,104 +4,108 @@ export function Footer() {
       <div className="container mx-auto px-4 py-8">
         <div className="grid md:grid-cols-4 gap-8">
           <div>
-            <h3 className="font-semibold text-white mb-3">About Climate-ADAPT</h3>
+            <h3 className="mb-3 font-semibold leading-6 text-white">
+              서울시립대학교
+              <br />
+              융합환경계획연구실
+            </h3>
             <ul className="space-y-2 text-sm">
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  About Us
+                  연구실 소개
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Partners
+                  협력기관
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Contact
+                  문의
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  News
+                  소식
                 </a>
               </li>
             </ul>
           </div>
 
           <div>
-            <h3 className="font-semibold text-white mb-3">Resources</h3>
+            <h3 className="font-semibold text-white mb-3">자료</h3>
             <ul className="space-y-2 text-sm">
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Knowledge Base
+                  지식 자료
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Tools & Methods
+                  도구와 방법론
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Case Studies
+                  적용 사례
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Publications
+                  발간자료
                 </a>
               </li>
             </ul>
           </div>
 
           <div>
-            <h3 className="font-semibold text-white mb-3">Support</h3>
+            <h3 className="font-semibold text-white mb-3">지원</h3>
             <ul className="space-y-2 text-sm">
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Help Center
+                  도움말
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  FAQ
+                  자주 묻는 질문
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Training
+                  교육 자료
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Technical Support
+                  기술 지원
                 </a>
               </li>
             </ul>
           </div>
 
           <div>
-            <h3 className="font-semibold text-white mb-3">Legal</h3>
+            <h3 className="font-semibold text-white mb-3">정책</h3>
             <ul className="space-y-2 text-sm">
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Privacy Policy
+                  개인정보 처리방침
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Terms of Use
+                  이용약관
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Accessibility
+                  접근성 안내
                 </a>
               </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors">
-                  Sitemap
+                  사이트맵
                 </a>
               </li>
             </ul>
@@ -111,16 +115,16 @@ export function Footer() {
         <div className="border-t border-gray-800 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-[#004494] rounded flex items-center justify-center text-white text-xs font-bold">
-              EU
+              UOS
             </div>
             <p className="text-sm">
-              © 2026 European Environment Agency
+              © 2026 서울시립대학교 융합환경계획연구실
             </p>
           </div>
           <div className="text-sm">
-            <span>Managed by the</span>{' '}
+            <span>운영</span>{' '}
             <a href="#" className="text-[#4da6ff] hover:underline">
-              European Environment Agency
+              서울시립대학교 융합환경계획연구실
             </a>
           </div>
         </div>

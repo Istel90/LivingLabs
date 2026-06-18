@@ -23,6 +23,15 @@ interface ClimateMapProps {
   }>;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export function ClimateMap({
   layers = [],
   center = [37.4563, 126.7052],
@@ -33,6 +42,7 @@ export function ClimateMap({
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const overlayLayerRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
 
   console.log('Rendering ClimateMap with center:', center, 'zoom:', zoom, 'markers:', markers);
@@ -64,6 +74,7 @@ export function ClimateMap({
     console.log('TileLayer added to map');
 
     // Create markers layer group
+    overlayLayerRef.current = L.layerGroup().addTo(map);
     markersLayerRef.current = L.layerGroup().addTo(map);
 
     mapRef.current = map;
@@ -92,6 +103,145 @@ export function ClimateMap({
       console.log('Map view updated to:', center, zoom);
     }
   }, [center, zoom]);
+
+  // Update climate/data overlays when selected layers change
+  useEffect(() => {
+    if (!mapRef.current || !overlayLayerRef.current) return;
+
+    overlayLayerRef.current.clearLayers();
+
+    const addCircle = (
+      layerName: string,
+      offsetLat: number,
+      offsetLng: number,
+      radius: number,
+      color: string,
+      fillOpacity = 0.22,
+    ) => {
+      L.circle([center[0] + offsetLat, center[1] + offsetLng], {
+        radius,
+        color,
+        weight: 2,
+        opacity: 0.85,
+        fillColor: color,
+        fillOpacity,
+      })
+        .bindPopup(layerName)
+        .addTo(overlayLayerRef.current!);
+    };
+
+    const addLabel = (layerName: string, offsetLat: number, offsetLng: number, color: string) => {
+      const safeLayerName = escapeHtml(layerName);
+      L.marker([center[0] + offsetLat, center[1] + offsetLng], {
+        icon: L.divIcon({
+          className: 'climate-layer-label',
+          html: `<span style="display:inline-block;padding:4px 8px;border-radius:999px;background:${color};color:white;font-size:12px;font-weight:700;box-shadow:0 4px 12px rgba(15,23,42,.2);">${safeLayerName}</span>`,
+        }),
+        interactive: false,
+      }).addTo(overlayLayerRef.current!);
+    };
+
+    layers.forEach((layerName) => {
+      switch (layerName) {
+        case '폭염일수':
+          addCircle(layerName, 0.012, -0.01, 1300, '#ef4444', 0.22);
+          addCircle(layerName, -0.018, 0.018, 850, '#f97316', 0.2);
+          addLabel(layerName, 0.024, -0.025, '#ef4444');
+          break;
+        case '고령인구 분포':
+          addCircle(layerName, -0.012, -0.025, 1050, '#8b5cf6', 0.2);
+          addCircle(layerName, 0.024, 0.024, 760, '#7c3aed', 0.18);
+          addLabel(layerName, -0.028, -0.036, '#7c3aed');
+          break;
+        case '감염병 발생 현황':
+          addCircle(layerName, 0.027, -0.002, 700, '#0ea5e9', 0.22);
+          addCircle(layerName, -0.026, 0.006, 650, '#06b6d4', 0.2);
+          addLabel(layerName, 0.038, 0.002, '#0284c7');
+          break;
+        case '침수흔적도':
+          L.polygon(
+            [
+              [center[0] - 0.032, center[1] - 0.035],
+              [center[0] - 0.015, center[1] + 0.035],
+              [center[0] - 0.04, center[1] + 0.045],
+              [center[0] - 0.055, center[1] - 0.012],
+            ],
+            {
+              color: '#2563eb',
+              weight: 3,
+              opacity: 0.85,
+              fillColor: '#60a5fa',
+              fillOpacity: 0.24,
+            },
+          )
+            .bindPopup(layerName)
+            .addTo(overlayLayerRef.current!);
+          addLabel(layerName, -0.053, 0.032, '#2563eb');
+          break;
+        case '취약계층 분포':
+          L.rectangle(
+            [
+              [center[0] + 0.004, center[1] - 0.05],
+              [center[0] + 0.032, center[1] - 0.002],
+            ],
+            {
+              color: '#f59e0b',
+              weight: 2,
+              opacity: 0.85,
+              fillColor: '#fbbf24',
+              fillOpacity: 0.26,
+            },
+          )
+            .bindPopup(layerName)
+            .addTo(overlayLayerRef.current!);
+          addLabel(layerName, 0.037, -0.052, '#d97706');
+          break;
+        case '무더위쉼터':
+          [
+            [0.01, 0.028],
+            [-0.008, -0.008],
+            [-0.029, 0.03],
+          ].forEach(([latOffset, lngOffset], index) => {
+            L.circleMarker([center[0] + latOffset, center[1] + lngOffset], {
+              radius: 7,
+              color: '#ffffff',
+              weight: 2,
+              fillColor: '#10b981',
+              fillOpacity: 0.95,
+            })
+              .bindPopup(`${layerName} ${index + 1}`)
+              .addTo(overlayLayerRef.current!);
+          });
+          addLabel(layerName, 0.018, 0.04, '#059669');
+          break;
+        default:
+          if (layerName.startsWith('TIF:')) {
+            const tifName = layerName.replace(/^TIF:/, '');
+            L.rectangle(
+              [
+                [center[0] - 0.046, center[1] - 0.055],
+                [center[0] + 0.046, center[1] + 0.055],
+              ],
+              {
+                color: '#0f766e',
+                weight: 3,
+                dashArray: '8 6',
+                opacity: 0.9,
+                fillColor: '#14b8a6',
+                fillOpacity: 0.16,
+              },
+            )
+              .bindPopup(`TIF 레이어: ${escapeHtml(tifName)}`)
+              .addTo(overlayLayerRef.current!);
+            addLabel(`TIF ${tifName}`, 0.047, -0.055, '#0f766e');
+          } else {
+            addCircle(layerName, 0, 0, 900, '#0d9488', 0.18);
+            addLabel(layerName, 0.015, 0.015, '#0d9488');
+          }
+          break;
+      }
+    });
+  }, [layers, center]);
 
   // Update markers when props change
   useEffect(() => {

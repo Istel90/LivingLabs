@@ -11,11 +11,13 @@ const priorityManagementAreaToolUrl =
   import.meta.env.VITE_PRIORITY_MANAGEMENT_AREA_TOOL_URL || 'http://127.0.0.1:4175/priority-management-area';
 const adaptationPathwayToolUrl =
   import.meta.env.VITE_ADAPTATION_PATHWAY_TOOL_URL || 'http://127.0.0.1:4175/adaptation-pathway';
+const internalLeadDepartmentToolUrl = `${import.meta.env.BASE_URL}lead-department-tool`;
 const leadDepartmentToolUrl =
-  import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL || 'http://128.134.187.146:6080/living-lab/';
+  import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL || internalLeadDepartmentToolUrl;
+const isLeadDepartmentExternal = Boolean(import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL);
 
 const leadTools = [
-  { title: '주관부서 적응대책 지원도구', href: leadDepartmentToolUrl, icon: FileText, external: true },
+  { title: '주관부서 적응대책 지원도구', href: leadDepartmentToolUrl, icon: FileText, external: isLeadDepartmentExternal },
   { title: '지역 리스크 우선순위 설문조사 도구', href: surveyPlatformUrl, icon: ClipboardList, external: true },
   { title: '중점관리구역 선정 지원도구', href: priorityManagementAreaToolUrl, icon: MapPin, external: true },
 ];
@@ -30,8 +32,8 @@ function ToolLink({ tool }: { tool: (typeof leadTools)[number] & { preparing?: b
   return (
     <a
       href={tool.href}
-      target="_blank"
-      rel="noopener noreferrer"
+      target={tool.external ? '_blank' : undefined}
+      rel={tool.external ? 'noopener noreferrer' : undefined}
       className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
     >
       <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
@@ -40,8 +42,10 @@ function ToolLink({ tool }: { tool: (typeof leadTools)[number] & { preparing?: b
       <span className="flex-1 text-sm font-extrabold text-slate-800">{tool.title}</span>
       {tool.preparing ? (
         <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">준비 중</span>
-      ) : (
+      ) : tool.external ? (
         <ExternalLink className="size-4 text-slate-400 transition group-hover:text-emerald-700" />
+      ) : (
+        <span className="text-xs font-extrabold text-emerald-700">열기</span>
       )}
     </a>
   );

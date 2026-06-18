@@ -9,25 +9,29 @@ interface HomePageProps {
 
 export function HomePage({ onSelectRole }: HomePageProps) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+    <div className="min-h-screen bg-[#f4f8f9]">
       {/* Hero Section */}
+      <div className="bg-[#073f4d] text-white">
       <div className="max-w-7xl mx-auto px-8 pt-20 pb-16">
-        <div className="text-center mb-16">
+        <div className="text-center mb-12">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <CloudRain className="w-12 h-12 text-primary" />
+            <CloudRain className="w-12 h-12 text-[#86efac]" />
             <h1 className="text-4xl">기후변화 리스크 설문 플랫폼</h1>
           </div>
-          <p className="text-xl text-muted-foreground mb-8">
-            지자체 부서 간 협업을 통한 체계적인 기후변화 리스크 평가 시스템
+          <p className="text-xl text-white/75 mb-8">
+            현황정보 배포, 부서별 응답 수집, 결과 검토와 최종 요약까지 연결하는 협업 플랫폼
           </p>
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 rounded-full text-primary">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 rounded-full text-[#bbf7d0] border border-white/15">
             <Shield className="w-4 h-4" />
             <span>공공기관 전용 플랫폼</span>
           </div>
         </div>
+      </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-8 -mt-10 pb-16">
         {/* Current Project Info */}
-        <Card className="mb-12 p-8 bg-white/80 backdrop-blur">
+        <Card className="mb-12 p-8 bg-white/95 backdrop-blur shadow-xl">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-muted-foreground mb-2">현재 진행 중인 프로젝트</div>

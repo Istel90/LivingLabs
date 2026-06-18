@@ -7,6 +7,16 @@ import * as api from '../../lib/api';
 import { ClimateMap } from '../Map/ClimateMap';
 import { getLocalGovernment } from '../../data/localGovernments';
 import type { ContentBlock } from '../../types/risk';
+import {
+  buildAnswers,
+  CHANGE_OPTIONS,
+  getAnswerValue,
+  getDepartmentResponse,
+  LAND_USE_TYPES,
+  RISK_TYPE_OPTIONS,
+  SPACE_SCOPE_OPTIONS,
+  URGENCY_OPTIONS,
+} from '../../lib/surveyModel';
 
 type TabType = 'overview' | 'context' | 'survey';
 
@@ -34,8 +44,10 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
       try {
         setLoading(true);
 
-        // 모든 리스크를 불러옴
-        const allRisks = await api.getRisks();
+        const [allRisks, allResponses] = await Promise.all([
+          api.getRisks(),
+          api.getResponses(),
+        ]);
 
         // riskId가 제공된 경우 해당 리스크 찾기
         if (riskId) {
@@ -45,6 +57,7 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
           if (risk) {
             console.log('Found risk:', risk);
             setSelectedRisk(risk);
+            hydrateExistingResponse(allResponses || [], risk.id);
           } else {
             console.error('Risk not found in local storage:', riskId);
             setSelectedRisk(null);
@@ -61,6 +74,7 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
           if (assignedRisks.length > 0) {
             console.log('Found assigned risks:', assignedRisks.length);
             setSelectedRisk(assignedRisks[0]);
+            hydrateExistingResponse(allResponses || [], assignedRisks[0].id);
           } else {
             console.warn('No assigned risks found for department:', userDepartment);
             setSelectedRisk(null);
@@ -77,6 +91,18 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
     loadRisk();
   }, [riskId, userDepartment]);
 
+  function hydrateExistingResponse(responses: any[], currentRiskId: string) {
+    const existing = getDepartmentResponse(responses, currentRiskId, userDepartment || '건강증진과');
+    if (!existing) return;
+    const q1Type = getAnswerValue(existing, 'q1_type', 'question1Type');
+    const q1Urgency = getAnswerValue(existing, 'q1_urgency', 'question1Urgency');
+    const q2 = getAnswerValue(existing, 'q2', 'question2Answers');
+    setQ1Selected(q1Type && q1Urgency ? `${q1Type}-${q1Urgency}` : null);
+    setQ2Selected(Array.isArray(q2) ? q2 : String(q2 || '').split(',').map((value) => value.trim()).filter(Boolean));
+    setQ3Short(getAnswerValue(existing, 'q3_short', 'question3Short') || null);
+    setQ3Long(getAnswerValue(existing, 'q3_long', 'question3Long') || null);
+  }
+
   const toggleQ2 = (value: string) => {
     setQ2Selected(prev =>
       prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
@@ -84,7 +110,7 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
   };
 
   async function handleSaveResponse(isDraft: boolean) {
-    if (!q1Selected || !q3Short || !q3Long) {
+    if (!isDraft && (!q1Selected || q2Selected.length === 0 || !q3Short || !q3Long)) {
       alert('모든 필수 질문에 응답해주세요.');
       return;
     }
@@ -92,29 +118,34 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
     try {
       setSaving(true);
 
-      const [q1Type, q1Urgency] = q1Selected.split('-');
+      const [q1Type = '', q1Urgency = ''] = (q1Selected || '').split('-');
+      const department = userDepartment || '건강증진과';
 
       await api.createResponse({
         riskId: selectedRisk.id,
-        userId: 'current-user',
-        department: userDepartment || '건강증진과',
-        respondent: '사용자',
+        projectId: selectedRisk.projectId || 'default',
+        userId: `dept-${department}`,
+        departmentId: department,
+        department,
+        respondent: `${department} 담당자`,
         question1Type: q1Type,
         question1Urgency: q1Urgency,
         question2Answers: q2Selected,
-        question3Short: q3Short,
-        question3Long: q3Long,
+        question3Short: q3Short || '',
+        question3Long: q3Long || '',
+        answers: buildAnswers({
+          q1Type,
+          q1Urgency,
+          q2Answers: q2Selected,
+          q3Short: q3Short || '',
+          q3Long: q3Long || '',
+        }),
         isDraft,
       });
 
       alert(isDraft ? '임시저장되었습니다.' : '제출이 완료되었습니다.');
 
-      if (!isDraft) {
-        setQ1Selected(null);
-        setQ2Selected([]);
-        setQ3Short(null);
-        setQ3Long(null);
-      }
+      if (!isDraft) setActiveTab('overview');
     } catch (error) {
       console.error('Failed to save response:', error);
       alert('저장에 실패했습니다.');
@@ -150,6 +181,8 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
     );
   }
 
+  const localGov = localGovId ? getLocalGovernment(localGovId) : undefined;
+
   return (
     <div className="h-screen flex bg-gray-50">
       {/* Back Button */}
@@ -166,19 +199,9 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
       {/* Map Area */}
       <div className="flex-1 relative" style={{ height: '100vh' }}>
         <ClimateMap
-          center={
-            selectedRisk.mapInfo?.center ||
-            (localGovId ? getLocalGovernment(localGovId)?.center : undefined) ||
-            [37.4563, 126.7052]
-          }
-          zoom={
-            selectedRisk.mapInfo?.zoom ||
-            (localGovId ? getLocalGovernment(localGovId)?.zoom : undefined) ||
-            11
-          }
-          regionName={
-            localGovId ? getLocalGovernment(localGovId)?.displayName : '인천광역시'
-          }
+          center={localGov?.center || selectedRisk.mapInfo?.center || [37.4563, 126.7052]}
+          zoom={localGov?.zoom || selectedRisk.mapInfo?.zoom || 11}
+          regionName={localGov?.displayName || selectedRisk.municipality || '선택 지역'}
           markers={selectedRisk.mapInfo?.markers}
           layers={selectedRisk.mapInfo?.visibleLayers}
         />
@@ -358,37 +381,28 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
                     <thead className="bg-muted">
                       <tr>
                         <th className="border border-border p-2 text-left">리스크 유형</th>
-                        <th className="border border-border p-2">시급성 낮음</th>
-                        <th className="border border-border p-2">시급함</th>
-                        <th className="border border-border p-2">매우 시급함</th>
+                        {URGENCY_OPTIONS.map((urgency) => (
+                          <th key={urgency.value} className="border border-border p-2">{urgency.label}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {[
-                        '우선적 추가조치 필요한 리스크 항목',
-                        '장기적 연구 및 모니터링 필요한 리스크 항목',
-                        '잠재적 영향이 존재하는 리스크',
-                      ].map(type =>
-                        ['낮음', '시급', '매우시급'].map(urgency => {
-                          const value = `${type}-${urgency}`;
-                          return (
-                            <tr key={type}>
-                              <td className="border border-border p-2">{type}</td>
-                              {['낮음', '시급', '매우시급'].map(u => (
-                                <td key={u} className="border border-border p-2 text-center">
-                                  <input
-                                    type="radio"
-                                    name="q1"
-                                    value={`${type}-${u}`}
-                                    checked={q1Selected === `${type}-${u}`}
-                                    onChange={(e) => setQ1Selected(e.target.value)}
-                                  />
-                                </td>
-                              ))}
-                            </tr>
-                          );
-                        })[0]
-                      )}
+                      {RISK_TYPE_OPTIONS.map(type => (
+                        <tr key={type}>
+                          <td className="border border-border p-2">{type}</td>
+                          {URGENCY_OPTIONS.map(urgency => (
+                            <td key={urgency.value} className="border border-border p-2 text-center">
+                              <input
+                                type="radio"
+                                name="q1"
+                                value={`${type}-${urgency.value}`}
+                                checked={q1Selected === `${type}-${urgency.value}`}
+                                onChange={(e) => setQ1Selected(e.target.value)}
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -405,17 +419,16 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
                     <thead className="bg-muted">
                       <tr>
                         <th className="border border-border p-2 text-left">토지이용 유형</th>
-                        <th className="border border-border p-2">지자체 전역</th>
-                        <th className="border border-border p-2">특정 권역</th>
-                        <th className="border border-border p-2">특정 시군구</th>
-                        <th className="border border-border p-2">기타</th>
+                        {SPACE_SCOPE_OPTIONS.map((scope) => (
+                          <th key={scope} className="border border-border p-2">{scope}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {['시가화·건조지역', '농업지역', '산림, 초지 및 습지', '나지', '수역 및 인근지역', '복합지역'].map(type => (
+                      {LAND_USE_TYPES.map(type => (
                         <tr key={type}>
                           <td className="border border-border p-2">{type}</td>
-                          {['전역', '권역', '시군구', '기타'].map(scope => (
+                          {SPACE_SCOPE_OPTIONS.map(scope => (
                             <td key={scope} className="border border-border p-2 text-center">
                               <input
                                 type="checkbox"
@@ -449,7 +462,7 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
                   <tbody>
                     <tr>
                       <td className="border border-border p-2">단기간 (5년 이내)</td>
-                      {['감소', '비슷', '증가'].map(opt => (
+                      {CHANGE_OPTIONS.map(opt => (
                         <td key={opt} className="border border-border p-2 text-center">
                           <input
                             type="radio"
@@ -463,7 +476,7 @@ export function SurveyResponse({ onBack, localGovId, riskId, userDepartment }: S
                     </tr>
                     <tr>
                       <td className="border border-border p-2">장기간 (5년 이후)</td>
-                      {['감소', '비슷', '증가'].map(opt => (
+                      {CHANGE_OPTIONS.map(opt => (
                         <td key={opt} className="border border-border p-2 text-center">
                           <input
                             type="radio"
