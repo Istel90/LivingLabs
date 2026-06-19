@@ -17,6 +17,9 @@ import { DemoDataControls } from './components/DemoDataControls';
 
 type Screen = 'home' | 'dashboard' | 'risks' | 'context' | 'assignment' | 'respondent-list' | 'survey' | 'review' | 'results';
 
+const portalToolsUrl =
+  import.meta.env.VITE_PORTAL_TOOLS_URL || 'http://127.0.0.1:4173/tools#adaptation-support-tools';
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('home');
   const [userRole, setUserRole] = useState<'admin' | 'respondent' | null>(null);
@@ -103,6 +106,12 @@ export default function App() {
   if (!localGovId || !userRole) {
     return (
       <>
+        <a
+          href={portalToolsUrl}
+          className="fixed left-5 top-5 z-20 inline-flex items-center rounded-full border border-emerald-200 bg-white/95 px-4 py-2 text-sm font-semibold text-emerald-900 shadow-sm backdrop-blur hover:bg-emerald-50"
+        >
+          지원도구 페이지로 돌아가기
+        </a>
         <div className="fixed right-5 top-5 z-20 w-[min(520px,calc(100vw-2.5rem))]">
           <DemoDataControls onDatasetChanged={handleDatasetChanged} />
         </div>
@@ -129,6 +138,12 @@ export default function App() {
               <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white text-[#064e3b] font-bold mb-3">SV</div>
               <h2 className="leading-tight">기후변화 리스크 설문 플랫폼</h2>
             </button>
+            <a
+              href={portalToolsUrl}
+              className="mb-4 inline-flex w-full items-center justify-center rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white/90 transition-colors hover:bg-white/20"
+            >
+              지원도구 페이지로 돌아가기
+            </a>
             {loginRole === 'admin' && (
               <div className="flex gap-2">
                 <button

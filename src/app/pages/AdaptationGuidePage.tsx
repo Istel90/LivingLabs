@@ -6,8 +6,7 @@ import { RightSidebar } from '../components/RightSidebar';
 import { PlatformContent } from '../components/PlatformContent';
 import { BookOpen, ChevronDown, ChevronRight, Compass, Sparkles } from 'lucide-react';
 
-const leadDepartmentToolUrl =
-  import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL || `${import.meta.env.BASE_URL}lead-department-tool`;
+const leadDepartmentToolUrl = `${import.meta.env.BASE_URL}lead-department-tool`;
 const responsibleDepartmentToolUrl =
   import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:4175/responsible-department';
 
@@ -917,13 +916,12 @@ export function AdaptationGuidePage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f3f7f8]">
-      <Header />
-      
       <main className="flex-1">
         <section className="relative overflow-hidden bg-[#073b52] text-white">
           <div className="absolute -left-20 top-0 size-72 rounded-full bg-emerald-500/20 blur-3xl" />
           <div className="absolute right-0 top-0 size-80 rounded-full bg-sky-500/20 blur-3xl" />
-          <div className="container relative mx-auto px-4 py-10 md:py-12">
+          <Header variant="hero" />
+          <div className="container relative mx-auto px-4 py-10 md:py-14">
             <div className="flex max-w-3xl items-start gap-4">
               <div className="mt-1 grid size-12 shrink-0 place-items-center rounded-2xl border border-white/20 bg-white/10">
                 <Sparkles className="size-6 text-emerald-300" />

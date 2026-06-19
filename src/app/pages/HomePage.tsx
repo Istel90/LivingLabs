@@ -27,9 +27,7 @@ const priorityManagementAreaToolUrl =
   import.meta.env.VITE_PRIORITY_MANAGEMENT_AREA_TOOL_URL || 'http://127.0.0.1:4175/priority-management-area';
 const adaptationPathwayToolUrl =
   import.meta.env.VITE_ADAPTATION_PATHWAY_TOOL_URL || 'http://127.0.0.1:4175/adaptation-pathway';
-const internalLeadDepartmentToolUrl = `${import.meta.env.BASE_URL}lead-department-tool`;
-const leadDepartmentToolUrl =
-  import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL || internalLeadDepartmentToolUrl;
+const leadDepartmentToolUrl = `${import.meta.env.BASE_URL}lead-department-tool`;
 
 const tools = [
   {

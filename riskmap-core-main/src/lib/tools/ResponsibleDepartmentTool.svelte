@@ -1,12 +1,22 @@
 <script>
     import { onMount, tick } from 'svelte';
     import Graph from '../../routes/Graph.svelte';
-    import REGION_CSV from '../../../../shared/data/administrative-regions/sido_sgg_codes.csv?raw';
-    import CENTER_CSV from '../../../../shared/data/administrative-regions/sigungu_centers.csv?raw';
+    import { portalToolsUrl } from '$lib/portalLinks.js';
+    import {
+        getBoundaryFeaturesForRegionCode,
+        regionOptions,
+        regionZoom as adminRegionZoom,
+        sidos as adminSidos
+    } from '$lib/data/administrativeRegions.js';
     import SOLAR_CSV from '../../../../shared/data/climate/solar_admin_centroid_mean.csv?raw';
     import ALTITUDE_CSV from '../../../../shared/data/climate/solar_altitude_by_sigungu.csv?raw';
     import AREA_CSV from '../../../../shared/data/administrative-regions/region_assessment_defaults.csv?raw';
-    import BOUNDARY_GEOJSON from '../../../../shared/data/administrative-regions/boundaries/sigungu.geojson?raw';
+    import {
+        createVWorldWmsOptions,
+        hasVWorldApiKey,
+        VWORLD_WMS_LAYERS,
+        VWORLD_WMS_URL
+    } from '../../../../shared/map/vworld.js';
     import * as XLSX from 'xlsx';
     import { calculateTemperatureEffect } from '$lib/effects/temperatureEffect.js';
     import 'leaflet/dist/leaflet.css';
@@ -33,10 +43,19 @@
             .map((line) => line.split(',').map((value) => value.trim().replace(/^"(.*)"$/, '$1')));
     }
 
-    const regions = parseCsv(REGION_CSV).map(([sido, name, code]) => ({ sido, name, code }))
-        .filter((row) => row.sido && row.name && row.code);
-    const sidos = [...new Set(regions.map((row) => row.sido))];
-    const centers = new Map(parseCsv(CENTER_CSV).map(([code, name, lng, lat]) => [code, { name, lat: Number(lat), lng: Number(lng) }]));
+    const regions = regionOptions.map((region) => ({
+        sido: region.sido,
+        name: region.fullName,
+        code: region.code,
+        center: region.center,
+        childCodes: region.childCodes,
+        sigungu: region.sigungu,
+        type: region.type
+    }));
+    const sidos = adminSidos;
+    const centers = new Map(regions
+        .filter((region) => region.center)
+        .map((region) => [region.code, { name: region.name, lat: region.center[0], lng: region.center[1] }]));
     const solarRows = parseCsv(SOLAR_CSV).map((row) => ({
         code: row[0],
         solar_09_kst: Number(row[6]),
@@ -49,7 +68,6 @@
     }));
     const altitudeRows = parseCsv(ALTITUDE_CSV).map((row) => ({ code: row[0], meridianDeg: Number(row[2]) }));
     const areas = new Map(parseCsv(AREA_CSV).map((row) => [row[0], { areaM2: Number(row[2]), source: row[3] }]));
-    const boundaryFeatures = JSON.parse(BOUNDARY_GEOJSON).features;
 
     let selectedSido = $state('서울특별시');
     let selectedRegionCode = $state('11230');
@@ -75,6 +93,8 @@
     let map;
     let projectLayers;
     let selectedBoundaryLayer;
+    let cadastralLayer;
+    let cadastralVisible = $state(false);
     let drawingVertices = [];
     let drawingLayer;
 
@@ -142,12 +162,7 @@
     }
 
     function regionZoom(region) {
-        const localName = region.name.replace(`${region.sido} `, '');
-        const hasChildDistricts = regions.some((candidate) => candidate.name.startsWith(`${region.name} `));
-        if (hasChildDistricts) return 11;
-        if (localName.endsWith('\uAD6C')) return 13;
-        if (localName.endsWith('\uC2DC') || localName.endsWith('\uAD70')) return 11;
-        return 10;
+        return adminRegionZoom(region);
     }
 
     function normalizedName(value) {
@@ -169,20 +184,7 @@
 
     function updateSelectedBoundary(region, center) {
         if (!selectedBoundaryLayer) return false;
-        const localName = normalizedName(region.name.replace(`${region.sido} `, ''));
-        const hasChildDistricts = regions.some((candidate) => candidate.name.startsWith(`${region.name} `));
-        let matches = boundaryFeatures.filter((feature) => {
-            const featureName = normalizedName(feature.properties.name);
-            return hasChildDistricts ? featureName.startsWith(localName) : featureName === localName || featureName.endsWith(localName);
-        });
-        if (!hasChildDistricts && matches.length > 1) {
-            matches = [matches.sort((a, b) => {
-                const aCenter = featureCenter(a);
-                const bCenter = featureCenter(b);
-                return Math.hypot(aCenter.lat - center.lat, aCenter.lng - center.lng)
-                    - Math.hypot(bCenter.lat - center.lat, bCenter.lng - center.lng);
-            })[0]];
-        }
+        const matches = getBoundaryFeaturesForRegionCode(region.code);
         selectedBoundaryLayer.clearLayers();
         if (!matches.length) return false;
         selectedBoundaryLayer.addData({ type: 'FeatureCollection', features: matches });
@@ -423,6 +425,16 @@
         }
     }
 
+    function toggleCadastral() {
+        if (!map || !cadastralLayer) return;
+        cadastralVisible = !cadastralVisible;
+        if (cadastralVisible) {
+            cadastralLayer.addTo(map);
+        } else {
+            cadastralLayer.remove();
+        }
+    }
+
     function measureLine(vertices) {
         return vertices.slice(1).reduce((sum, point, index) => sum + map.distance(vertices[index], point), 0);
     }
@@ -518,12 +530,24 @@
         L = leaflet.default || leaflet;
         map = L.map(mapElement, { minZoom: 7, maxZoom: 19 }).setView([37.581956547, 127.05484785], 12);
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+        if (hasVWorldApiKey()) {
+            L.tileLayer
+                .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sidoBoundary))
+                .addTo(map);
+            L.tileLayer
+                .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sigunguBoundary))
+                .addTo(map);
+            cadastralLayer = L.tileLayer.wms(
+                VWORLD_WMS_URL,
+                createVWorldWmsOptions(VWORLD_WMS_LAYERS.cadastral, { opacity: 0.55 })
+            );
+        }
         map.createPane('selectedBoundary');
         map.getPane('selectedBoundary').style.zIndex = 450;
         selectedBoundaryLayer = L.geoJSON(null, {
             pane: 'selectedBoundary',
             interactive: false,
-            style: { color: '#e11d48', weight: 4, opacity: 1, fillColor: '#fb7185', fillOpacity: 0.06 }
+            style: { color: '#2563eb', weight: 4, opacity: 1, fillColor: '#60a5fa', fillOpacity: 0.18 }
         }).addTo(map);
         projectLayers = L.layerGroup().addTo(map);
         map.on('click', onMapClick);
@@ -536,6 +560,7 @@
 <div class="tool-shell">
     <aside class="sidebar">
         <h1>사업소관부서 지원도구</h1>
+        <a class="portal-back-link" href={portalToolsUrl}>지원도구 페이지로 돌아가기</a>
         <section class="region-selector">
             <h2>1. 지역 선택</h2>
             <label>시도<select value={selectedSido} onchange={changeSido}>{#each sidos as sido}<option>{sido}</option>{/each}</select></label>
@@ -580,6 +605,17 @@
     <main class="map-wrap">
         <div class="map" bind:this={mapElement}></div>
         <div class="map-guide">{activeProject ? `${activeProject.title}: 지도에서 ${GEOMETRIES.find((item) => item.id === activeProject.geometryType)?.label} 데이터를 생성하세요.` : '왼쪽에서 적응 사업을 디자인하고 선택하세요.'}</div>
+        <div class="map-layer-panel">
+            <strong>지도 기준 데이터</strong>
+            {#if hasVWorldApiKey()}
+                <span>VWorld 행정경계 표시 중</span>
+                <button type="button" class:active={cadastralVisible} onclick={toggleCadastral}>
+                    연속지적도 {cadastralVisible ? '끄기' : '켜기'}
+                </button>
+            {:else}
+                <span>VWorld API 키가 없어 로컬 경계만 사용 중입니다.</span>
+            {/if}
+        </div>
         {#if activeProject}
             <div class="map-edit-panel">
                 <div>
@@ -637,9 +673,10 @@
 {/if}
 
 <style>
-    :global(body){margin:0}.tool-shell{display:grid;grid-template-columns:280px minmax(400px,1fr) 340px;gap:6px;height:100vh;padding:6px;background:#10233f;color:#10233f;font-family:Pretendard,Arial,sans-serif;box-sizing:border-box}.sidebar,.dashboard{overflow:auto;border-radius:8px;background:#fff;padding:12px}.sidebar h1{font-size:18px;margin:0 0 12px}.sidebar section{padding:12px 0;border-top:1px solid #e2e8f0}.sidebar h2,.dashboard h2{font-size:15px;margin:0 0 9px}label{display:grid;gap:4px;margin:7px 0;font-size:12px;font-weight:700}input,select{padding:7px;border:1px solid #cbd5e1;border-radius:5px;background:white;color:#10233f}.region-selector{position:sticky;z-index:700;top:-12px;margin:0 -4px 10px;padding:14px 12px!important;border:2px solid #2563eb!important;border-radius:8px;background:#eff6ff;box-shadow:0 3px 10px #10233f1f}.region-selector h2{color:#0f4c9a}.region-selector select{width:100%;border-color:#60a5fa;font-weight:700;cursor:pointer}.region-selector select:hover,.region-selector select:focus{border-color:#0f4c9a;outline:2px solid #bfdbfe}.region-selector p{margin:9px 0 0;padding:7px;border-radius:5px;background:#fff;font-size:11px;color:#475569}.section-head{display:grid;gap:7px}.section-head button,.apply,.finish{padding:9px;border:0;border-radius:6px;background:#0f9f6e;color:white;font-weight:700}.project-list{display:grid;gap:6px;margin:9px 0}.project-list button{display:grid;grid-template-columns:24px 1fr;align-items:start;gap:8px;text-align:left;padding:9px;border:1px solid #dbe4ee;border-radius:7px;background:#fff}.project-list button.active{border-color:#0f9f6e;background:#ecfdf5}.project-index{display:grid!important;place-items:center;width:22px;height:22px;border-radius:999px;background:#e0f2fe!important;color:#0369a1!important;font-size:11px!important;font-weight:900}.project-summary{display:grid;gap:3px}.project-list span,.project-list small,.empty{font-size:11px;color:#64748b}.finish{width:100%;background:#2563eb;margin-bottom:6px}.apply{width:100%;background:#10233f}.apply:disabled{opacity:.4}.conditions{margin-top:auto}.conditions dl{display:grid;gap:5px;margin:0;font-size:11px}.conditions dl div{display:flex;justify-content:space-between;gap:8px}.conditions dd{margin:0;text-align:right;font-weight:700}.map-wrap{position:relative;min-width:0}.map{height:100%;border-radius:8px}.map-guide{position:absolute;z-index:600;top:10px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:20px;background:#fff;box-shadow:0 2px 12px #0003;font-size:12px;font-weight:700}.map-edit-panel{position:absolute;z-index:650;left:50%;bottom:18px;display:flex;align-items:center;gap:8px;max-width:calc(100% - 36px);padding:10px 12px;border:1px solid #ffffff99;border-radius:14px;background:#ffffffe6;box-shadow:0 12px 30px #0f172a33;backdrop-filter:blur(10px)}.map-edit-panel div{display:grid;min-width:170px;margin-right:4px}.map-edit-panel b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0f172a;font-size:12px}.map-edit-panel span{color:#475569;font-size:11px}.map-edit-panel button{padding:8px 10px;border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#10233f;font-size:11px;font-weight:800;white-space:nowrap}.map-edit-panel .danger{border-color:#fecaca;background:#fff1f2;color:#be123c}.dashboard h3{margin:0;padding:8px;border-radius:5px;background:#10233f;color:#fff;font-size:14px}.dashboard section{margin-bottom:10px;border:1px solid #dbe4ee;border-radius:7px;padding:5px}.dashboard p,.placeholder{font-size:11px;color:#64748b;padding:8px}.dashboard h4{font-size:12px;margin:7px}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:5px}.metrics div{display:grid;gap:3px;padding:8px;border-radius:6px;background:#fff7ed;font-size:11px}.implementation article{display:grid;gap:5px;padding:9px;border-bottom:1px solid #e2e8f0;font-size:12px}.implementation article span{color:#64748b;font-size:11px}progress{width:100%}.modal-backdrop{position:fixed;z-index:2000;inset:0;display:grid;place-items:center;background:#0f172a99}.modal{width:min(520px,calc(100vw - 32px));max-height:90vh;overflow:auto;padding:22px;border-radius:12px;background:#fff;box-shadow:0 20px 70px #0005}.modal h2{margin-top:0}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.modal-actions button{padding:9px 16px;border:0;border-radius:6px}.modal-actions button:last-child{background:#0f9f6e;color:#fff;font-weight:700}@media(max-width:1000px){.tool-shell{grid-template-columns:240px 1fr}.dashboard{display:none}}
+    :global(body){margin:0}.tool-shell{display:grid;grid-template-columns:280px minmax(400px,1fr) 340px;gap:8px;height:100vh;padding:8px;background:linear-gradient(135deg,#073b52 0%,#064a55 48%,#0f766e 100%);color:#10233f;font-family:Pretendard,Arial,sans-serif;box-sizing:border-box}.sidebar,.dashboard{overflow:auto;border:1px solid #dbe7ee;border-radius:14px;background:#fff;padding:14px;box-shadow:0 18px 40px #0f172a21}.sidebar h1{font-size:18px;margin:0 0 12px}.sidebar section{padding:12px 0;border-top:1px solid #e2e8f0}.sidebar h2,.dashboard h2{font-size:15px;margin:0 0 9px}label{display:grid;gap:4px;margin:7px 0;font-size:12px;font-weight:700}input,select{padding:7px;border:1px solid #cbd5e1;border-radius:5px;background:white;color:#10233f}.region-selector{position:sticky;z-index:700;top:-12px;margin:0 -4px 10px;padding:14px 12px!important;border:2px solid #0f9f6e!important;border-radius:12px;background:#ecfdf5;box-shadow:0 3px 10px #10233f1f}.region-selector h2{color:#0f766e}.region-selector select{width:100%;border-color:#99f6e4;font-weight:700;cursor:pointer}.region-selector select:hover,.region-selector select:focus{border-color:#0f766e;outline:2px solid #ccfbf1}.region-selector p{margin:9px 0 0;padding:7px;border-radius:5px;background:#fff;font-size:11px;color:#475569}.section-head{display:grid;gap:7px}.section-head button,.apply,.finish{padding:9px;border:0;border-radius:8px;background:#0f9f6e;color:white;font-weight:700}.project-list{display:grid;gap:6px;margin:9px 0}.project-list button{display:grid;grid-template-columns:24px 1fr;align-items:start;gap:8px;text-align:left;padding:9px;border:1px solid #dbe4ee;border-radius:9px;background:#fff}.project-list button.active{border-color:#0f9f6e;background:#ecfdf5}.project-index{display:grid!important;place-items:center;width:22px;height:22px;border-radius:999px;background:#dff8ef!important;color:#047857!important;font-size:11px!important;font-weight:900}.project-summary{display:grid;gap:3px}.project-list span,.project-list small,.empty{font-size:11px;color:#64748b}.finish{width:100%;background:#2563eb;margin-bottom:6px}.apply{width:100%;background:#10233f}.apply:disabled{opacity:.4}.conditions{margin-top:auto}.conditions dl{display:grid;gap:5px;margin:0;font-size:11px}.conditions dl div{display:flex;justify-content:space-between;gap:8px}.conditions dd{margin:0;text-align:right;font-weight:700}.map-wrap{position:relative;min-width:0}.map{height:100%;border-radius:14px}.map-guide{position:absolute;z-index:600;top:10px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:20px;background:#fff;box-shadow:0 2px 12px #0003;font-size:12px;font-weight:700}.map-layer-panel{position:absolute;z-index:620;top:58px;right:12px;display:grid;gap:5px;min-width:150px;padding:10px 12px;border:1px solid #ffffff99;border-radius:14px;background:#ffffffe6;box-shadow:0 12px 30px #0f172a2e;backdrop-filter:blur(10px);font-size:11px;color:#334155}.map-layer-panel strong{color:#0f172a;font-size:12px}.map-layer-panel button{padding:7px 9px;border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#10233f;font-size:11px;font-weight:800}.map-layer-panel button.active{border-color:#0f766e;background:#ecfdf5;color:#047857}.map-edit-panel{position:absolute;z-index:650;left:50%;bottom:18px;display:flex;align-items:center;gap:8px;max-width:calc(100% - 36px);padding:10px 12px;border:1px solid #ffffff99;border-radius:14px;background:#ffffffe6;box-shadow:0 12px 30px #0f172a33;backdrop-filter:blur(10px)}.map-edit-panel div{display:grid;min-width:170px;margin-right:4px}.map-edit-panel b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0f172a;font-size:12px}.map-edit-panel span{color:#475569;font-size:11px}.map-edit-panel button{padding:8px 10px;border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#10233f;font-size:11px;font-weight:800;white-space:nowrap}.map-edit-panel .danger{border-color:#fecaca;background:#fff1f2;color:#be123c}.dashboard h3{margin:0;padding:8px;border-radius:8px;background:#10233f;color:#fff;font-size:14px}.dashboard section{margin-bottom:10px;border:1px solid #dbe4ee;border-radius:10px;padding:6px}.dashboard p,.placeholder{font-size:11px;color:#64748b;padding:8px}.dashboard h4{font-size:12px;margin:7px}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:5px}.metrics div{display:grid;gap:3px;padding:8px;border-radius:6px;background:#fff7ed;font-size:11px}.implementation article{display:grid;gap:5px;padding:9px;border-bottom:1px solid #e2e8f0;font-size:12px}.implementation article span{color:#64748b;font-size:11px}progress{width:100%}.modal-backdrop{position:fixed;z-index:2000;inset:0;display:grid;place-items:center;background:#0f172a99}.modal{width:min(520px,calc(100vw - 32px));max-height:90vh;overflow:auto;padding:22px;border-radius:12px;background:#fff;box-shadow:0 20px 70px #0005}.modal h2{margin-top:0}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.modal-actions button{padding:9px 16px;border:0;border-radius:6px}.modal-actions button:last-child{background:#0f9f6e;color:#fff;font-weight:700}@media(max-width:1000px){.tool-shell{grid-template-columns:240px 1fr}.dashboard{display:none}}
     .sidebar,.dashboard{color:#0f172a;opacity:1}.sidebar h1,.sidebar h2,.dashboard h2,.sidebar label,.dashboard strong{opacity:1;color:#0f172a}.sidebar section,.dashboard section{background:#fff}.sidebar p,.empty,.project-list span,.project-list small,.implementation article span{color:#334155;opacity:1}.dashboard{background:#f8fafc}.dashboard h2{font-size:17px;font-weight:800}.dashboard h3{background:#10233f;color:#fff!important;font-weight:800}.dashboard section{padding:8px;border-color:#cbd5e1;box-shadow:0 1px 3px #0f172a12}.dashboard p,.dashboard .placeholder{margin:8px 0;padding:10px;border:1px solid #dbe4ee;border-radius:6px;background:#fff;color:#1e293b;font-size:12px;font-weight:600;line-height:1.5;opacity:1}.dashboard h4{color:#0f172a;font-weight:800}.metrics span{color:#334155;font-weight:700}.apply:disabled{opacity:1;background:#94a3b8;color:#fff}.modal-backdrop{background:#0f172a26}
     .point-upload{display:grid;gap:7px;margin:10px 0;padding:12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff}.point-upload legend{padding:0 5px;color:#0f4c9a;font-size:12px;font-weight:800}.point-upload p{margin:0;color:#334155;font-size:11px;line-height:1.5}.point-upload input[type=file]{padding:8px;background:#fff}.inline-check{display:flex;align-items:center;gap:6px;margin:2px 0;color:#334155;font-size:11px;font-weight:700}.inline-check input{width:auto}.upload-status{padding:8px!important;border-radius:6px;background:#fff!important;color:#0f766e!important;font-weight:700}.modal-actions button:disabled{background:#94a3b8!important;color:#fff;cursor:wait}
+    .portal-back-link{display:flex;align-items:center;justify-content:center;margin:-4px 0 12px;padding:9px 10px;border:1px solid #bae6fd;border-radius:999px;background:#f0fdfa;color:#03695f;font-size:12px;font-weight:900;text-decoration:none}.portal-back-link:hover{background:#ccfbf1}
     .default-spec{display:grid;gap:4px;margin-top:8px;padding:9px;border-radius:6px;background:#ecfdf5;color:#166534;font-size:11px}.default-spec strong{color:#166534!important}.tree-list-icon{display:inline-block;width:12px;height:12px;margin-right:6px;border-radius:50%;background:#16a34a;box-shadow:inset 0 0 0 2px #bbf7d0;vertical-align:-1px}:global(.tree-marker){position:relative;background:transparent;border:0}:global(.tree-canopy){position:absolute;top:0;left:3px;width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:#16a34a;box-shadow:0 1px 5px #0005}:global(.tree-canopy::after){content:'';position:absolute;top:4px;left:5px;width:8px;height:8px;border-radius:50%;background:#4ade80}:global(.tree-trunk){position:absolute;top:20px;left:12px;width:5px;height:12px;border-radius:0 0 2px 2px;background:#854d0e;box-shadow:0 1px 3px #0004}
     .map-edit-panel{transform:translateX(-50%)}
 </style>

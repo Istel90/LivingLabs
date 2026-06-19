@@ -7,9 +7,21 @@
     }
   },
   "administrativeBoundaries": {
-    "provider": "Local GeoJSON",
-    "sigunguBoundary": "../data/administrative-regions/boundaries/sigungu.geojson",
-    "source": "southkorea/southkorea-maps, KOSTAT 2013 simplified municipalities"
+    "provider": "VWorld WMS/Data API",
+    "wmsUrl": "https://api.vworld.kr/req/wms",
+    "dataUrl": "https://api.vworld.kr/req/data",
+    "sidoBoundaryLayer": "lt_c_adsido",
+    "sigunguBoundaryLayer": "lt_c_adsigg",
+    "sidoDataset": "LT_C_ADSIDO_INFO",
+    "sigunguDataset": "LT_C_ADSIGG_INFO",
+    "fallbackSigunguBoundary": "../data/administrative-regions/boundaries/sigungu.geojson",
+    "source": "VWorld administrative boundary layers; local GeoJSON is retained as a fallback for static demos"
+  },
+  "cadastral": {
+    "provider": "VWorld 2D Data API/WMS",
+    "wmsLayer": "lp_pa_cbnd_bubun",
+    "dataset": "LP_PA_CBND_BUBUN",
+    "note": "Continuous cadastral map queries should be clipped by the current map bounds because the VWorld polygon/box query area is limited."
   },
   "sharedRegionData": {
     "codes": "../data/administrative-regions/sido_sgg_codes.csv",

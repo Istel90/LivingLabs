@@ -28,7 +28,7 @@ const blockTypes = [
   { type: 'source' as BlockType, label: '출처', icon: FileText },
 ];
 
-const mapLayerOptions = ['폭염일수', '고령인구 분포', '감염병 발생 현황', '침수흔적도', '취약계층 분포', '무더위쉼터'];
+const mapLayerOptions = ['폭염일수', '고령인구 분포', '감염병 발생 현황', '침수흔적도', '취약계층 분포', '무더위쉼터', '연속지적도'];
 const editorTabs: Array<{ id: EditorTab; label: string; description: string }> = [
   { id: 'context', label: '현황정보 구성하기', description: '응답 전에 보여줄 설명 블록을 작성합니다.' },
   { id: 'map', label: '현황지도 구성하기', description: '지도 레이어, TIF 자료, 마커를 구성합니다.' },

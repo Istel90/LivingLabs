@@ -60,14 +60,16 @@ npm.cmd run build:all
 ```dotenv
 VITE_SURVEY_PLATFORM_URL=http://127.0.0.1:4174/
 VITE_RISKMAP_URL=http://127.0.0.1:4175/
-VITE_LEAD_DEPARTMENT_TOOL_URL=http://128.134.187.146:6080/living-lab/
 VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL=http://127.0.0.1:4175/responsible-department
 VITE_PRIORITY_MANAGEMENT_AREA_TOOL_URL=http://127.0.0.1:4175/priority-management-area
 VITE_ADAPTATION_PATHWAY_TOOL_URL=http://127.0.0.1:4175/adaptation-pathway
+VITE_VWORLD_API_KEY=발급받은_VWorld_API_KEY
 ```
 
-`VITE_LEAD_DEPARTMENT_TOOL_URL`은 이 저장소에 포함되지 않은 별도 주관부서
-도구의 주소입니다. 해당 서버 주소가 바뀌면 이 값만 수정합니다.
+주관부서 적응대책 지원도구는 현재 `/lead-department-tool` 내부 정적
+프로토타입으로 연결됩니다. VWorld 행정경계와 연속지적도 레이어를 쓰려면
+로컬에서는 `.env.local`, GitHub Pages 배포에서는 Actions Secret
+`VWORLD_API_KEY`에 발급 키를 등록합니다.
 
 설문 데이터는 서버가 아니라 접속한 브라우저의 `localStorage`에 저장되므로,
 다른 컴퓨터에서 사용하던 설문 데이터는 자동으로 옮겨지지 않습니다.

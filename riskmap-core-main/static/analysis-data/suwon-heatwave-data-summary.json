@@ -1,0 +1,124 @@
+{
+  "regionCode": "41110",
+  "regionName": "경기도 수원시",
+  "hazard": "heatwave",
+  "mode": "demo",
+  "title": "수원시 폭염 중점관리구역 시연 원자료",
+  "description": "수원시 시연용 원자료 묶음에서 가벼운 지표 요약과 이미 배치된 GeoTIFF를 연결합니다. 무거운 건물 원자료와 필지 추출은 API 또는 서버 단계에서 연결합니다.",
+  "sourceZip": [
+    "수원시_rawdata (1).zip",
+    "수원 리스크평가(원데이터 및 코드).zip"
+  ],
+  "rasterSources": [
+    {
+      "id": "lst",
+      "label": "지표면 온도",
+      "file": "수원LST.tif",
+      "path": "/analysis-data/수원LST.tif",
+      "status": "connected",
+      "usage": "기후위험 H 지표 및 지도 미리보기"
+    },
+    {
+      "id": "landcover",
+      "label": "세분류 토지피복도",
+      "file": "수원시_세분류토지피복도.tif",
+      "path": "/analysis-data/수원시_세분류토지피복도.tif",
+      "status": "connected",
+      "usage": "녹지 비율, 도로밀도, 비도시 기준온도 계산 후보"
+    }
+  ],
+  "tableSources": [
+    {
+      "id": "household",
+      "label": "1인가구",
+      "file": "가구원수별_가구__읍면동_20260610163536.csv",
+      "status": "summarized",
+      "usage": "민감도 V 지표"
+    },
+    {
+      "id": "welfare",
+      "label": "국민기초생활보장 수급자",
+      "file": "경기도 수원시_국민기초생활보장수급자현황_20260506.csv",
+      "status": "summarized",
+      "usage": "민감도 V 지표"
+    },
+    {
+      "id": "health",
+      "label": "건강보험 진료인원",
+      "file": "국민건강보험공단_진료형태별 시군구별 22대 주상병분류별 진료인원 및 진료비_20231231.csv",
+      "status": "summarized",
+      "usage": "건강 취약성 참고 지표"
+    },
+    {
+      "id": "shelter",
+      "label": "무더위쉼터",
+      "file": "재난안전데이터공유플랫폼_무더위쉼터현황.csv",
+      "status": "summarized",
+      "usage": "적응역량 V- 접근성 지표"
+    }
+  ],
+  "summary": {
+    "households": 508564,
+    "onePersonHouseholds": 184111,
+    "onePersonHouseholdRate": 0.362,
+    "basicLivelihoodRecipients2024": 30281,
+    "healthPatients2023": 5279807,
+    "coolingShelters": 394
+  },
+  "summaryCards": [
+    {
+      "label": "수원시 1인가구",
+      "value": "184,111가구",
+      "caption": "전체 일반가구의 36.2%"
+    },
+    {
+      "label": "기초생활보장 수급자",
+      "value": "30,281명",
+      "caption": "2024년 수원시 읍면동 집계"
+    },
+    {
+      "label": "무더위쉼터",
+      "value": "394개소",
+      "caption": "전국 쉼터 CSV 중 수원시 필터"
+    },
+    {
+      "label": "건강보험 진료인원",
+      "value": "5,279,807명",
+      "caption": "2023년 수원시 구 단위 진료인원 합계"
+    }
+  ],
+  "districtHouseholds": [
+    {
+      "name": "장안구",
+      "households": 114321,
+      "onePersonHouseholds": 38793
+    },
+    {
+      "name": "권선구",
+      "households": 155236,
+      "onePersonHouseholds": 54333
+    },
+    {
+      "name": "팔달구",
+      "households": 90276,
+      "onePersonHouseholds": 38743
+    },
+    {
+      "name": "영통구",
+      "households": 148731,
+      "onePersonHouseholds": 52242
+    }
+  ],
+  "heavySourcesDeferred": [
+    {
+      "label": "건축물 원자료",
+      "file": "F_FAC_BUILDING_41_201810.shp/dbf",
+      "reason": "압축 내 DBF 약 1.5GB, SHP 약 380MB로 GitHub Pages 정적 시연에는 부적합"
+    },
+    {
+      "label": "필지/지적 단위 추출",
+      "file": "VWorld 연속지적도 API/WFS 또는 서버 PostGIS",
+      "reason": "Hotspot과 필지 polygon 교차 분석은 벡터 데이터 또는 서버 공간연산으로 처리"
+    }
+  ]
+}

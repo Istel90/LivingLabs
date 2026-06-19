@@ -1,5 +1,6 @@
 <script>
     import { base } from '$app/paths';
+    import { portalToolsUrl } from '$lib/portalLinks.js';
 </script>
 
 <svelte:head>
@@ -8,13 +9,14 @@
 
 <main>
     <section>
+        <a class="back-link" href={portalToolsUrl}>지원도구 페이지로 돌아가기</a>
         <span>준비 중</span>
         <h1>사업 적응경로 지원도구</h1>
         <p>
             기후위기 시나리오와 사업 성과를 바탕으로 단계별 적응경로를 구성하는 내부 도구입니다.
         </p>
         <p>공통 베이스맵, 행정경계, 인구 및 격자 데이터를 연계할 예정입니다.</p>
-        <a href={`${base}/priority-management-area/`}>중점관리구역 선정 지원도구로 이동</a>
+        <a class="primary-link" href={`${base}/priority-management-area/`}>중점관리구역 선정 지원도구로 이동</a>
     </section>
 </main>
 
@@ -46,6 +48,20 @@
         font-weight: 700;
     }
 
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        margin-bottom: 1.25rem;
+        padding: 0.55rem 0.9rem;
+        border: 1px solid #bae6fd;
+        border-radius: 999px;
+        background: #f0fdfa;
+        color: #03695f;
+        font-size: 0.85rem;
+        font-weight: 800;
+        text-decoration: none;
+    }
+
     h1 {
         margin: 1rem 0;
         color: #10233f;
@@ -57,7 +73,7 @@
         line-height: 1.7;
     }
 
-    a {
+    .primary-link {
         display: inline-block;
         margin-top: 1rem;
         color: #004494;

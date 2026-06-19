@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import {
+  createVWorldWmsOptions,
+  hasVWorldApiKey,
+  VWORLD_WMS_LAYERS,
+  VWORLD_WMS_URL,
+} from '../../../../../shared/map/vworld.js';
 
 // Fix Leaflet default icon issue with bundlers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -44,6 +50,7 @@ export function ClimateMap({
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const overlayLayerRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const cadastralLayerRef = useRef<L.TileLayer.WMS | null>(null);
 
   console.log('Rendering ClimateMap with center:', center, 'zoom:', zoom, 'markers:', markers);
 
@@ -72,6 +79,19 @@ export function ClimateMap({
     tileLayerRef.current = tileLayer;
 
     console.log('TileLayer added to map');
+
+    if (hasVWorldApiKey()) {
+      L.tileLayer
+        .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sidoBoundary))
+        .addTo(map);
+      L.tileLayer
+        .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sigunguBoundary))
+        .addTo(map);
+      cadastralLayerRef.current = L.tileLayer.wms(
+        VWORLD_WMS_URL,
+        createVWorldWmsOptions(VWORLD_WMS_LAYERS.cadastral, { opacity: 0.55 }),
+      );
+    }
 
     // Create markers layer group
     overlayLayerRef.current = L.layerGroup().addTo(map);
@@ -109,6 +129,13 @@ export function ClimateMap({
     if (!mapRef.current || !overlayLayerRef.current) return;
 
     overlayLayerRef.current.clearLayers();
+    if (cadastralLayerRef.current) {
+      if (layers.includes('연속지적도')) {
+        cadastralLayerRef.current.addTo(mapRef.current);
+      } else {
+        cadastralLayerRef.current.remove();
+      }
+    }
 
     const addCircle = (
       layerName: string,

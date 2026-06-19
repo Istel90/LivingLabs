@@ -1,10 +1,17 @@
 <script>
     import { onMount } from 'svelte';
     import geojson from '$lib/동대문구_가로수.json';
+    import {
+        createVWorldWmsOptions,
+        hasVWorldApiKey,
+        VWORLD_WMS_LAYERS,
+        VWORLD_WMS_URL
+    } from '../../../../shared/map/vworld.js';
 
     let map;
     let sidoLayer;
     let sggLayer;
+    let cadastralLayer;
     let treeLayer;
 
     const locations = [
@@ -25,27 +32,19 @@
             attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(map);
 
-        sidoLayer = L.tileLayer
-            .wms('https://api.vworld.kr/req/wms', {
-                format: 'image/png',
-                key: 'FF0B2749-8F4B-3E15-BAD3-DA7CB8790552',
-                layers: 'lt_c_adsido',
-                styles: 'lt_c_adsido',
-                version: '1.3.0',
-                transparent: true
-            })
-            .addTo(map);
+        if (hasVWorldApiKey()) {
+            sidoLayer = L.tileLayer
+                .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sidoBoundary))
+                .addTo(map);
 
-        sggLayer = L.tileLayer
-            .wms('https://api.vworld.kr/req/wms', {
-                format: 'image/png',
-                key: 'FF0B2749-8F4B-3E15-BAD3-DA7CB8790552',
-                layers: 'lt_c_adsigg',
-                styles: 'lt_c_adsigg',
-                version: '1.3.0',
-                transparent: true
-            })
-            .addTo(map);
+            sggLayer = L.tileLayer
+                .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sigunguBoundary))
+                .addTo(map);
+            cadastralLayer = L.tileLayer.wms(
+                VWORLD_WMS_URL,
+                createVWorldWmsOptions(VWORLD_WMS_LAYERS.cadastral, { opacity: 0.55 })
+            );
+        }
 
         var geojsonMarkerOptions = {
             radius: 4,
@@ -72,6 +71,9 @@
             case 'sgg':
                 toggle_layer(sggLayer);
                 break;
+            case 'cadastral':
+                toggle_layer(cadastralLayer);
+                break;
             case 'tree':
                 toggle_layer(treeLayer);
                 break;
@@ -79,6 +81,7 @@
     }
 
     function toggle_layer(layer) {
+        if (!map || !layer) return;
         if (map.hasLayer(layer)) {
             layer.remove();
         } else {
@@ -114,6 +117,11 @@
             <div class="flex items-center">
                 <input type="checkbox" id="sgg" checked class="mr-1" onchange={check} /><label
                     for="sgg">시/군/구 경계</label
+                >
+            </div>
+            <div class="flex items-center">
+                <input type="checkbox" id="cadastral" class="mr-1" onchange={check} /><label
+                    for="cadastral">연속지적도</label
                 >
             </div>
             <div>

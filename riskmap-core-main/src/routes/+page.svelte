@@ -1,7 +1,6 @@
 <script>
     import { onMount } from 'svelte';
-
-    const portalToolsUrl = 'http://127.0.0.1:4173/tools';
+    import { portalToolsUrl } from '$lib/portalLinks.js';
 
     onMount(() => {
         window.location.replace(portalToolsUrl);

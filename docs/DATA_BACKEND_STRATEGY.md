@@ -23,7 +23,10 @@
   - `/lead-department-tool`
   - 데이터 게이트웨이: `src/app/lib/adapters/leadDepartmentData.ts`
 - 기본값은 내부 mock 데이터입니다.
-- `VITE_LEAD_DEPARTMENT_TOOL_URL`을 지정하면 기존처럼 외부 Java/Tomcat 도구로 연결할 수 있습니다.
+- 현재 포털의 주관부서 도구 진입점은 내부 정적 프로토타입으로 고정합니다.
+- 원본 Java/Tomcat 도구는 향후 전문 구축 단계에서 동일 게이트웨이 계약으로 다시 연결합니다.
+- 행정경계와 연속지적도는 `shared/map/vworld.js`의 VWorld 설정을 사용하며,
+  키는 `VITE_VWORLD_API_KEY` 환경변수 또는 GitHub Actions Secret `VWORLD_API_KEY`로 주입합니다.
 
 ### 설문 플랫폼
 

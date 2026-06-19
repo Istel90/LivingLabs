@@ -28,7 +28,6 @@ export function Header({ variant = 'default' }: HeaderProps) {
             <span className="text-sm">서울시립대학교</span>
           </div>
           <div className="flex items-center gap-4">
-            <button className="text-sm hover:underline">EN</button>
             <button className="text-sm hover:underline">Login</button>
           </div>
         </div>
@@ -70,7 +69,6 @@ export function Header({ variant = 'default' }: HeaderProps) {
                   기후적응 리빙랩 플랫폼으로 돌아가기
                   <ExternalLink className="size-3.5" />
                 </a>
-                <button className="hover:text-white">EN</button>
                 <button className="hover:text-white">Login</button>
               </div>
             )}

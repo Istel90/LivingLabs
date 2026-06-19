@@ -25,6 +25,12 @@
     import SOLAR_CSV from '../../../shared/data/climate/solar_admin_centroid_mean.csv?raw';
     import SOLAR_ALTITUDE_CSV from '../../../shared/data/climate/solar_altitude_by_sigungu.csv?raw';
     import REGION_DEFAULTS_CSV from '../../../shared/data/administrative-regions/region_assessment_defaults.csv?raw';
+    import {
+        createVWorldWmsOptions,
+        hasVWorldApiKey,
+        VWORLD_WMS_LAYERS,
+        VWORLD_WMS_URL
+    } from '../../../shared/map/vworld.js';
     import { calculateTemperatureEffect } from '$lib/effects/temperatureEffect.js';
 
     const ICON_SIZE = 40;
@@ -118,6 +124,7 @@
     let map;
     let sidoLayer;
     let sggLayer;
+    let cadastralLayer;
     let originalTreeLayer;
     let originalCanopyLayer;
     let gridLayer;
@@ -231,27 +238,19 @@
             attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(map);
 
-        sidoLayer = L.tileLayer
-            .wms('https://api.vworld.kr/req/wms', {
-                format: 'image/png',
-                key: 'FF0B2749-8F4B-3E15-BAD3-DA7CB8790552',
-                layers: 'lt_c_adsido',
-                styles: 'lt_c_adsido',
-                version: '1.3.0',
-                transparent: true
-            })
-            .addTo(map);
+        if (hasVWorldApiKey()) {
+            sidoLayer = L.tileLayer
+                .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sidoBoundary))
+                .addTo(map);
 
-        sggLayer = L.tileLayer
-            .wms('https://api.vworld.kr/req/wms', {
-                format: 'image/png',
-                key: 'FF0B2749-8F4B-3E15-BAD3-DA7CB8790552',
-                layers: 'lt_c_adsigg',
-                styles: 'lt_c_adsigg',
-                version: '1.3.0',
-                transparent: true
-            })
-            .addTo(map);
+            sggLayer = L.tileLayer
+                .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sigunguBoundary))
+                .addTo(map);
+            cadastralLayer = L.tileLayer.wms(
+                VWORLD_WMS_URL,
+                createVWorldWmsOptions(VWORLD_WMS_LAYERS.cadastral, { opacity: 0.55 })
+            );
+        }
 
         originalTreeLayer = L.geoJSON(ORIGINAL_SUWON_TREE_JSON, {
             pointToLayer: function (feature, latlng) {
@@ -492,6 +491,9 @@
             case 'sgg':
                 toggleLayer(sggLayer, e.target.checked);
                 break;
+            case 'cadastral':
+                toggleLayer(cadastralLayer, e.target.checked);
+                break;
             case 'tree':
                 toggleLayer(originalTreeLayer, e.target.checked);
                 break;
@@ -506,6 +508,7 @@
     }
 
     function toggleLayer(layer, isOn) {
+        if (!layer) return;
         if (isOn) {
             layer.addTo(map);
         } else {
@@ -755,6 +758,11 @@
                 <div class="flex items-center">
                     <input type="checkbox" id="sgg" checked class="mr-1" onchange={check} /><label
                         for="sgg">시군구 경계</label
+                    >
+                </div>
+                <div class="flex items-center">
+                    <input type="checkbox" id="cadastral" class="mr-1" onchange={check} /><label
+                        for="cadastral">연속지적도</label
                     >
                 </div>
                 <div class="flex items-center">

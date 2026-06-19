@@ -11,13 +11,10 @@ const priorityManagementAreaToolUrl =
   import.meta.env.VITE_PRIORITY_MANAGEMENT_AREA_TOOL_URL || 'http://127.0.0.1:4175/priority-management-area';
 const adaptationPathwayToolUrl =
   import.meta.env.VITE_ADAPTATION_PATHWAY_TOOL_URL || 'http://127.0.0.1:4175/adaptation-pathway';
-const internalLeadDepartmentToolUrl = `${import.meta.env.BASE_URL}lead-department-tool`;
-const leadDepartmentToolUrl =
-  import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL || internalLeadDepartmentToolUrl;
-const isLeadDepartmentExternal = Boolean(import.meta.env.VITE_LEAD_DEPARTMENT_TOOL_URL);
+const leadDepartmentToolUrl = `${import.meta.env.BASE_URL}lead-department-tool`;
 
 const leadTools = [
-  { title: '주관부서 적응대책 지원도구', href: leadDepartmentToolUrl, icon: FileText, external: isLeadDepartmentExternal },
+  { title: '주관부서 적응대책 지원도구', href: leadDepartmentToolUrl, icon: FileText, external: false },
   { title: '지역 리스크 우선순위 설문조사 도구', href: surveyPlatformUrl, icon: ClipboardList, external: true },
   { title: '중점관리구역 선정 지원도구', href: priorityManagementAreaToolUrl, icon: MapPin, external: true },
 ];

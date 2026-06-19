@@ -24,6 +24,7 @@ jobs:
       VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL: /LivingLabs/internal-tools/responsible-department
       VITE_PRIORITY_MANAGEMENT_AREA_TOOL_URL: /LivingLabs/internal-tools/priority-management-area
       VITE_ADAPTATION_PATHWAY_TOOL_URL: /LivingLabs/internal-tools/adaptation-pathway
+      VITE_VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
 
     steps:
       - name: Checkout

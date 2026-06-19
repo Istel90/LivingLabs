@@ -60,12 +60,11 @@ export function ToolsPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f3f7f8]">
-      <Header />
-
       <main className="flex-1">
         <section className="relative overflow-hidden bg-[#073b52] text-white">
           <div className="absolute -left-20 top-10 size-72 rounded-full bg-emerald-500/20 blur-3xl" />
           <div className="absolute right-0 top-0 size-96 rounded-full bg-sky-500/20 blur-3xl" />
+          <Header variant="hero" />
           <div className="container relative mx-auto px-4 py-9 md:py-11">
             <div className="max-w-4xl">
               <div className="flex w-fit items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-emerald-200">
