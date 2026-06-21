@@ -3,7 +3,7 @@ $ErrorActionPreference = "Continue"
 $root = Split-Path -Parent $PSScriptRoot
 $runtimeDir = Join-Path $root ".runtime-logs"
 $processFile = Join-Path $runtimeDir "platform-processes.json"
-$ports = @(4173, 4174, 4175)
+$ports = @(4173, 4174, 4175, 4176)
 
 function Stop-ProcessId($targetPid, $reason) {
   if (-not $targetPid) {

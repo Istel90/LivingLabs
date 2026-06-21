@@ -1,0 +1,45 @@
+[
+  {
+    "indicator_id": "E_population_resident_count_100m",
+    "name_ko": "상주인구 노출량",
+    "dimension": "E",
+    "component": "노출",
+    "file": "E_population_resident_count_100m.tif",
+    "normalized_file": "E_population_resident_count_100m_z.tif",
+    "source": "국토통계 B100 총 인구 수 100m 격자",
+    "unit": "persons per 100m grid cell",
+    "direction": "higher_exposure",
+    "normalization_method": "minmax_valid_grid",
+    "default_weight": 1.0,
+    "enabled_default": true
+  },
+  {
+    "indicator_id": "E_population_floating_count_100m",
+    "name_ko": "유동인구 노출량",
+    "dimension": "E",
+    "component": "노출",
+    "file": "E_population_floating_count_100m.tif",
+    "normalized_file": "E_population_floating_count_100m_z.tif",
+    "source": "Pop_Grid_100m Day_Total",
+    "unit": "persons per 100m grid cell",
+    "direction": "higher_exposure",
+    "normalization_method": "minmax_valid_grid",
+    "default_weight": 1.0,
+    "enabled_default": true
+  },
+  {
+    "indicator_id": "E_exposure_population_mean_100m",
+    "name_ko": "노출 종합지수",
+    "dimension": "E",
+    "component": "노출",
+    "file": "E_exposure_population_mean_100m.tif",
+    "normalized_file": "E_exposure_population_mean_100m_z.tif",
+    "source": "Resident and floating population z-score mean",
+    "unit": "0-1 index",
+    "direction": "higher_exposure",
+    "normalization_method": "already_0_1",
+    "formula": "mean(resident_z, floating_z)",
+    "default_weight": null,
+    "enabled_default": false
+  }
+]

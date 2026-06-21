@@ -1,0 +1,4 @@
+﻿file,role,dtype,nodata,valid_cells,description
+suwon_stat_grid_mask_100m_epsg5179.tif,analysis mask,uint8,0,12487,"1 inside statistics grid, 0 outside"
+suwon_stat_grid_id_100m_epsg5179.tif,grid id raster,uint32,0,12487,integer grid_id for each 100m cell
+suwon_stat_grid_template_float32_100m_epsg5179.tif,blank template,float32,-9999,12487,"0 inside grid, nodata outside; copy for new indicators"

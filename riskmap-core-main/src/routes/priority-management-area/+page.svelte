@@ -96,7 +96,7 @@
             <article>
                 <span>02</span>
                 <strong>재해 유형 선택</strong>
-                <p>폭염은 현재 샘플 분석을 제공하고, 홍수는 같은 구조로 확장할 수 있도록 준비했습니다.</p>
+                <p>폭염, 홍수, 생태계 부문별로 같은 H/E/V 기반 후보지 도출 구조를 제공합니다.</p>
             </article>
             <article>
                 <span>03</span>
@@ -105,32 +105,42 @@
             </article>
         </div>
 
-        <section class="map-panel" id="region-preview">
-            <div class="map-wrap">
-                <SelectedRegionMap
-                    regionCode={selectedRegion?.code}
-                    regionName={selectedRegion?.fullName}
-                    height="480px"
-                    showCadastral={false}
-                />
-            </div>
-        </section>
+        <section class="decision-layout" aria-label="대상지역 지도와 재해 유형 선택">
+            <section class="map-panel" id="region-preview">
+                <div class="map-wrap">
+                    <SelectedRegionMap
+                        regionCode={selectedRegion?.code}
+                        regionName={selectedRegion?.fullName}
+                        height="430px"
+                        showCadastral={false}
+                        locked={true}
+                    />
+                </div>
+            </section>
 
-        <section class="hazards" aria-label="재해 유형 선택">
-            <a class="hazard heat" href={toolUrl('heatwave')}>
-                <span class="icon">☀</span>
-                <small>현재 샘플 제공</small>
-                <h2>폭염</h2>
-                <p>기후위험, 노출, 취약성 지표를 결합해 폭염 중점관리구역을 선정합니다.</p>
-                <strong>폭염 분석 시작 →</strong>
-            </a>
-            <a class="hazard flood" href={toolUrl('flood')}>
-                <span class="icon">≋</span>
-                <small>구조 준비 완료</small>
-                <h2>홍수</h2>
-                <p>침수위험, 노출 인구, 취약시설 데이터를 연결하는 홍수 분석 화면입니다.</p>
-                <strong>홍수 분석 열기 →</strong>
-            </a>
+            <section class="hazards" aria-label="재해 유형 선택">
+                <a class="hazard heat" href={toolUrl('heatwave')}>
+                    <span class="icon">☀</span>
+                    <small>현재 샘플 제공</small>
+                    <h2>폭염</h2>
+                    <p>기후위험, 노출, 취약성 지표를 결합해 폭염 중점관리구역을 선정합니다.</p>
+                    <strong>폭염 분석 시작 →</strong>
+                </a>
+                <a class="hazard flood" href={toolUrl('flood')}>
+                    <span class="icon">≋</span>
+                    <small>구조 준비 완료</small>
+                    <h2>홍수</h2>
+                    <p>침수위험, 노출 인구, 취약시설 데이터를 연결하는 홍수 분석 화면입니다.</p>
+                    <strong>홍수 분석 열기 →</strong>
+                </a>
+                <a class="hazard ecosystem" href={toolUrl('ecosystem')}>
+                    <span class="icon">◇</span>
+                    <small>구조 준비 완료</small>
+                    <h2>생태계</h2>
+                    <p>생태축, 토지피복, 서식지 민감도 데이터를 연결할 생태계 분석 화면입니다.</p>
+                    <strong>생태계 분석 열기 →</strong>
+                </a>
+            </section>
         </section>
     </section>
 </main>
@@ -365,6 +375,14 @@
         line-height: 1.6;
     }
 
+    .decision-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(320px, .72fr);
+        gap: 1.25rem;
+        align-items: stretch;
+        margin-top: 1.5rem;
+    }
+
     .map-panel {
         margin-top: 1.5rem;
         border: 1px solid #e0e8ef;
@@ -372,6 +390,11 @@
         background: white;
         box-shadow: 0 .9rem 2.5rem rgb(15 36 64 / 8%);
         padding: 1.25rem;
+    }
+
+    .decision-layout .map-panel {
+        margin-top: 0;
+        min-width: 0;
     }
 
     .map-copy {
@@ -419,6 +442,11 @@
         margin-top: 1.5rem;
     }
 
+    .decision-layout .hazards {
+        grid-template-columns: 1fr;
+        margin-top: 0;
+    }
+
     .hazard {
         position: relative;
         overflow: hidden;
@@ -429,6 +457,11 @@
         padding: 2rem;
         box-shadow: 0 1rem 2.5rem rgb(15 36 64 / 12%);
         transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    .decision-layout .hazard {
+        min-height: 0;
+        padding: 1.55rem;
     }
 
     .hazard:hover {
@@ -453,6 +486,10 @@
         background: linear-gradient(135deg, #0f4c81, #2563eb);
     }
 
+    .hazard.ecosystem {
+        background: linear-gradient(135deg, #166534, #65a30d);
+    }
+
     .icon {
         display: grid;
         width: 3.4rem;
@@ -470,9 +507,18 @@
         font-weight: 900;
     }
 
+    .decision-layout .hazard small {
+        margin-top: .9rem;
+    }
+
     .hazard h2 {
         color: white;
         font-size: 2rem;
+    }
+
+    .decision-layout .hazard h2 {
+        margin-bottom: .45rem;
+        font-size: 1.75rem;
     }
 
     .hazard p {
@@ -487,7 +533,7 @@
 
     @media (max-width: 900px) {
         .hero-grid,
-        .map-panel,
+        .decision-layout,
         .hazards,
         .feature-strip,
         .region-card,

@@ -28,6 +28,10 @@ export function getVWorldDomain() {
   return import.meta.env.VITE_VWORLD_DOMAIN || VWORLD_DEFAULT_DOMAIN;
 }
 
+export function getVWorldProxyUrl() {
+  return import.meta.env.VITE_VWORLD_PROXY_URL || '';
+}
+
 export function createVWorldWmsOptions(layer, options = {}) {
   return {
     format: 'image/png',
@@ -39,4 +43,31 @@ export function createVWorldWmsOptions(layer, options = {}) {
     transparent: true,
     ...options,
   };
+}
+
+export function createVWorldDataUrl(data, params = {}) {
+  const proxyUrl = getVWorldProxyUrl();
+  const url = new URL(proxyUrl || VWORLD_DATA_URL);
+  const query = {
+    service: 'data',
+    version: '2.0',
+    request: 'GetFeature',
+    format: 'json',
+    data,
+    ...(proxyUrl ? {} : { key: getVWorldApiKey(), domain: getVWorldDomain() }),
+    geometry: true,
+    attribute: true,
+    crs: 'EPSG:4326',
+    size: 1000,
+    page: 1,
+    ...params,
+  };
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  });
+
+  return url.toString();
 }

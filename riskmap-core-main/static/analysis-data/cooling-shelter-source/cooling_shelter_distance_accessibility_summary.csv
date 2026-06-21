@@ -1,0 +1,4 @@
+﻿file,meaning,min,max,mean,std,direction
+V_adaptive_cooling_shelter_distance_100m.tif,격자 중심점에서 최근접 무더위쉼터까지 유클리디언 거리(m),0.27915486693382263,4875.58349609375,613.6298828125,770.8427734375,값이 클수록 접근성 낮음/취약성 증가
+V_adaptive_cooling_shelter_distance_100m_z.tif,거리 정규화값(0~1),0.0,1.0,0.12580768764019012,0.15811173617839813,값이 클수록 접근성 낮음/취약성 증가
+V_adaptive_cooling_shelter_accessibility_100m_z.tif,접근성 점수(1-distance_z),0.0,1.0,0.8741922974586487,0.15811175107955933,값이 클수록 적응역량 증가

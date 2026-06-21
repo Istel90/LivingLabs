@@ -1,0 +1,41 @@
+{
+  "name": "suwon_stat_grid_100m_epsg5179",
+  "source": "NGII national statistics grid 100m from uploaded population grid SHP",
+  "region": "Gyeonggi-do Suwon-si",
+  "crs": "EPSG:5179",
+  "cell_size_m": 100,
+  "width": 146,
+  "height": 142,
+  "bounds": {
+    "left": 949100,
+    "bottom": 1914000,
+    "right": 963700,
+    "top": 1928200
+  },
+  "transform": [
+    100.0,
+    0.0,
+    949100.0,
+    0.0,
+    -100.0,
+    1928200.0
+  ],
+  "grid_cell_count": 12487,
+  "mask_valid_cell_count": 12487,
+  "nodata": {
+    "mask": 0,
+    "grid_id": 0,
+    "template": -9999.0
+  },
+  "files": {
+    "mask": "suwon_stat_grid_mask_100m_epsg5179.tif",
+    "grid_id": "suwon_stat_grid_id_100m_epsg5179.tif",
+    "template": "suwon_stat_grid_template_float32_100m_epsg5179.tif",
+    "lookup": "suwon_stat_grid_id_lookup_100m_epsg5179.csv"
+  },
+  "notes": [
+    "Use this template/profile to align all H/E/V indicator GeoTIFFs.",
+    "grid_id raster stores integer IDs; original gid is stored in lookup CSV.",
+    "Do not treat NoData as zero in H/E/V/Risk calculations."
+  ]
+}

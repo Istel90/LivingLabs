@@ -1,0 +1,24 @@
+{
+  "title": "Suwon standard statistics grid 100m matching",
+  "sourceZip": "suwon_stat_grid_100m_standard_tif.zip",
+  "defaultGrid": "/analysis-data/stat-grid/suwon-stat-grid-100m-epsg5179.json",
+  "crs": "EPSG:5179",
+  "resolutionM": 100,
+  "rows": 142,
+  "columns": 146,
+  "validCells": 12487,
+  "notes": [
+    "Use this template/profile to align all H/E/V indicator GeoTIFFs.",
+    "grid_id raster stores integer IDs; original gid is stored in lookup CSV.",
+    "Do not treat NoData as zero in H/E/V/Risk calculations."
+  ],
+  "files": {
+    "source": {
+      "mask": "suwon_stat_grid_mask_100m_epsg5179.tif",
+      "grid_id": "suwon_stat_grid_id_100m_epsg5179.tif",
+      "template": "suwon_stat_grid_template_float32_100m_epsg5179.tif",
+      "lookup": "suwon_stat_grid_id_lookup_100m_epsg5179.csv"
+    },
+    "json": "suwon-stat-grid-100m-epsg5179.json"
+  }
+}

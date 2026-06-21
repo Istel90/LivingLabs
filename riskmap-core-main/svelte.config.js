@@ -13,7 +13,8 @@ const config_static = {
             strict: true
         }),
         paths: {
-            base: process.argv.includes('dev') ? '' : (process.env.PAGES_BASE_PATH || '')
+            base: process.argv.includes('dev') ? '' : (process.env.PAGES_BASE_PATH || ''),
+            relative: false
         }
     }
 };

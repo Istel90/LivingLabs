@@ -101,6 +101,8 @@ export interface LeadDepartmentGateway {
   getSnapshot(regionCode?: string): Promise<LeadDepartmentSnapshot>;
 }
 
+const DEFAULT_LEAD_REGION_CODE = '41110';
+
 const fallbackRegions: LeadDepartmentRegionOption[] = [
   {
     sidoCode: '11',
@@ -456,14 +458,9 @@ const scenarioPlans: LeadDepartmentScenarioPlan[] = [
 
 const layers = [
   { id: 'admin-boundary', name: '행정경계', source: 'VWorld WMS · lt_c_adsido/lt_c_adsigg', enabled: true },
-  { id: 'emd-boundary', name: '읍면동 경계', source: 'VWorld WMS/Data API · ADEMD', enabled: false },
-  { id: 'cadastral', name: '연속지적도', source: 'VWorld WMS · lp_pa_cbnd_bubun', enabled: false },
-  { id: 'risk-index', name: '지역 리스크 지표', source: '정적 데모 · 향후 PostGIS/GeoServer 연결', enabled: true },
-  { id: 'scenario-poi', name: '적응사업 후보지', source: '정적 데모 · poi_scenario_up 대체', enabled: true },
-  { id: 'vulnerable-population', name: '취약계층 분포', source: '정적 데모 · 통계/격자 데이터 연계 예정', enabled: false },
 ];
 
-function getRegion(regionCode = '11230'): LeadDepartmentRegion {
+function getRegion(regionCode = DEFAULT_LEAD_REGION_CODE): LeadDepartmentRegion {
   const region = regions.find((item) => item.sggCode === regionCode) ?? regions[0];
   return {
     code: region.sggCode,
@@ -478,7 +475,7 @@ function getRegion(regionCode = '11230'): LeadDepartmentRegion {
   };
 }
 
-function createIndicators(regionCode = '11230'): LeadDepartmentIndicator[] {
+function createIndicators(regionCode = DEFAULT_LEAD_REGION_CODE): LeadDepartmentIndicator[] {
   const localRiskCount = risks.filter((risk) => risk.admCode === regionCode).length;
   const planCount = scenarioPlans.length;
   const savedCount = scenarioPlans.filter((plan) => plan.status === 'saved').length;
@@ -492,7 +489,7 @@ function createIndicators(regionCode = '11230'): LeadDepartmentIndicator[] {
 }
 
 const mockGateway: LeadDepartmentGateway = {
-  async getSnapshot(regionCode = '11230') {
+  async getSnapshot(regionCode = DEFAULT_LEAD_REGION_CODE) {
     return {
       region: getRegion(regionCode),
       regions,

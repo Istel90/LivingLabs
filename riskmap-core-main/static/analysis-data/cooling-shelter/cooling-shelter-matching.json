@@ -1,0 +1,78 @@
+{
+  "title": "수원시 무더위쉼터 접근성 100m 데이터 매칭 현황",
+  "source": {
+    "zip": "suwon_cooling_shelter_100m_distance_accessibility_tifs.zip",
+    "csv": "재난안전데이터공유플랫폼_무더위쉼터현황.csv"
+  },
+  "crs": "EPSG:5179",
+  "resolutionM": 100,
+  "shelterCountUsed": 379,
+  "method": "Euclidean distance from grid cell centers to nearest cooling shelter point using scipy.spatial.cKDTree",
+  "caution": "네트워크 보행거리나 실제 접근시간이 아니라 직선거리 기반입니다.",
+  "defaultIndicator": "V_adaptive_cooling_shelter_accessibility_100m_z",
+  "indicators": [
+    {
+      "id": "V_adaptive_cooling_shelter_distance_100m",
+      "label": "무더위쉼터 거리",
+      "sourceTif": "V_adaptive_cooling_shelter_distance_100m.tif",
+      "json": "V_adaptive_cooling_shelter_distance_100m.json",
+      "webPath": "/analysis-data/cooling-shelter/V_adaptive_cooling_shelter_distance_100m.json",
+      "crs": "EPSG:5179",
+      "rows": 142,
+      "columns": 146,
+      "unit": "m",
+      "direction": "vulnerability_increase",
+      "useForVDefault": false,
+      "stats": {
+        "sourceBytes": 65800,
+        "validCells": 12487,
+        "min": 0.27915,
+        "max": 4875.5835,
+        "mean": 613.62989,
+        "normalizedMean": 613.62989
+      }
+    },
+    {
+      "id": "V_adaptive_cooling_shelter_distance_100m_z",
+      "label": "V_adaptive_cooling_shelter_distance_100m_z.tif",
+      "sourceTif": "V_adaptive_cooling_shelter_distance_100m_z.tif",
+      "json": "V_adaptive_cooling_shelter_distance_100m_z.json",
+      "webPath": "/analysis-data/cooling-shelter/V_adaptive_cooling_shelter_distance_100m_z.json",
+      "crs": "EPSG:5179",
+      "rows": 142,
+      "columns": 146,
+      "unit": null,
+      "direction": null,
+      "useForVDefault": false,
+      "stats": {
+        "sourceBytes": 65868,
+        "validCells": 12487,
+        "min": 0,
+        "max": 1,
+        "mean": 0.12581,
+        "normalizedMean": 0.12581
+      }
+    },
+    {
+      "id": "V_adaptive_cooling_shelter_accessibility_100m_z",
+      "label": "무더위쉼터 접근성",
+      "sourceTif": "V_adaptive_cooling_shelter_accessibility_100m_z.tif",
+      "json": "V_adaptive_cooling_shelter_accessibility_100m_z.json",
+      "webPath": "/analysis-data/cooling-shelter/V_adaptive_cooling_shelter_accessibility_100m_z.json",
+      "crs": "EPSG:5179",
+      "rows": 142,
+      "columns": 146,
+      "unit": "0-1 score",
+      "direction": "adaptive_capacity_increase",
+      "useForVDefault": true,
+      "stats": {
+        "sourceBytes": 58138,
+        "validCells": 12487,
+        "min": 0,
+        "max": 1,
+        "mean": 0.87419,
+        "normalizedMean": 0.87419
+      }
+    }
+  ]
+}

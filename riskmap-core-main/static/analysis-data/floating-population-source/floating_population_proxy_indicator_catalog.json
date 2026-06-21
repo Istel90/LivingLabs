@@ -1,0 +1,131 @@
+{
+  "dataset": "2024년 국토모니터링 국토공간거점지도 기반 수원시 유동/주간노출 proxy 100m TIF",
+  "warning": "이 자료는 실제 유동인구 관측값이 아니라 1km 격자의 근무인구 밀도 및 통근 중심성 지수를 100m 통계격자에 할당/환산한 proxy이다.",
+  "source": {
+    "file": "2024년_국토모니터링_국토공간거점지도_전국.zip",
+    "metadata": "2024년_국토모니터링_국토공간거점지도_메타데이터.xlsx",
+    "source_crs": "EPSG:5179",
+    "source_grid": "1km x 1km",
+    "suwon_source_cells": 124
+  },
+  "target_grid": {
+    "crs": "EPSG:5179",
+    "resolution_m": 100,
+    "width": 146,
+    "height": 142,
+    "valid_cells": 12487,
+    "profile_source": "suwon_stat_grid_mask_100m_epsg5179.tif"
+  },
+  "indicators": [
+    {
+      "file": "E_floating_population_work_density_100m.tif",
+      "meaning": "KCB 직장주소지 기반 근무인구 밀도(명/km²)를 100m 통계격자에 할당",
+      "source_column": "pop_w",
+      "direction": "높을수록 노출 증가",
+      "valid_cells": 11802,
+      "min": 0.0,
+      "max": 63354.0,
+      "mean": 5464.61669921875,
+      "std": 7624.26318359375
+    },
+    {
+      "file": "E_floating_population_work_count_proxy_100m.tif",
+      "meaning": "근무인구 밀도를 100m 셀 면적(0.01km²)으로 환산한 100m 격자당 근무인구 추정값",
+      "source_column": "pop_w/100",
+      "direction": "높을수록 노출 증가",
+      "valid_cells": 11802,
+      "min": 0.0,
+      "max": 633.5399780273438,
+      "mean": 54.64616012573242,
+      "std": 76.24263763427734
+    },
+    {
+      "file": "E_floating_population_work_count_proxy_100m_z.tif",
+      "meaning": "근무인구 추정값의 수원 100m 격자 기준 min-max 정규화값",
+      "source_column": "pop_w/100 normalized",
+      "direction": "높을수록 노출 증가",
+      "valid_cells": 11802,
+      "min": 0.0,
+      "max": 1.0,
+      "mean": 0.0862552747130394,
+      "std": 0.12034383416175842
+    },
+    {
+      "file": "E_commute_in_centrality_100m.tif",
+      "meaning": "통근유입 중심성 지수",
+      "source_column": "pc_in",
+      "direction": "높을수록 유입 노출/거점성 증가",
+      "valid_cells": 11802,
+      "min": 0.0,
+      "max": 23.937767028808594,
+      "mean": 1.8036184310913086,
+      "std": 2.7658064365386963
+    },
+    {
+      "file": "E_commute_in_centrality_100m_z.tif",
+      "meaning": "통근유입 중심성 지수의 수원 100m 격자 기준 min-max 정규화값",
+      "source_column": "pc_in normalized",
+      "direction": "높을수록 유입 노출/거점성 증가",
+      "valid_cells": 11802,
+      "min": 0.0,
+      "max": 1.0,
+      "mean": 0.07534613460302353,
+      "std": 0.11554154008626938
+    },
+    {
+      "file": "E_commute_out_centrality_100m.tif",
+      "meaning": "통근유출 중심성 지수",
+      "source_column": "pc_out",
+      "direction": "높을수록 유출 거주노출/통근발생 증가",
+      "valid_cells": 11802,
+      "min": 0.0,
+      "max": 10.833457946777344,
+      "mean": 3.180492401123047,
+      "std": 2.9237563610076904
+    },
+    {
+      "file": "E_commute_out_centrality_100m_z.tif",
+      "meaning": "통근유출 중심성 지수의 수원 100m 격자 기준 min-max 정규화값",
+      "source_column": "pc_out normalized",
+      "direction": "높을수록 유출 거주노출/통근발생 증가",
+      "valid_cells": 11802,
+      "min": 0.0,
+      "max": 1.0,
+      "mean": 0.293580561876297,
+      "std": 0.26988208293914795
+    },
+    {
+      "file": "E_workplace_employee_count_proxy_100m.tif",
+      "meaning": "사업체 종사자 밀도를 100m 셀 면적으로 환산한 종사자 추정값",
+      "source_column": "wk_cnt/100",
+      "direction": "높을수록 노출 증가",
+      "valid_cells": 11802,
+      "min": 0.0,
+      "max": 409.0799865722656,
+      "mean": 40.75437927246094,
+      "std": 55.47365951538086
+    },
+    {
+      "file": "E_workplace_employee_count_proxy_100m_z.tif",
+      "meaning": "사업체 종사자 추정값의 수원 100m 격자 기준 min-max 정규화값",
+      "source_column": "wk_cnt/100 normalized",
+      "direction": "높을수록 노출 증가",
+      "valid_cells": 11802,
+      "min": 0.0,
+      "max": 1.0,
+      "mean": 0.09962447732686996,
+      "std": 0.13560590147972107
+    },
+    {
+      "file": "E_daytime_exposure_proxy_100m_z.tif",
+      "meaning": "근무인구 추정 정규화값과 통근유입 중심성 정규화값의 평균 기반 주간 노출 proxy",
+      "source_column": "mean(pop_w_z, pc_in_z)",
+      "direction": "높을수록 노출 증가",
+      "valid_cells": 11802,
+      "min": 0.0,
+      "max": 1.0,
+      "mean": 0.08080071210861206,
+      "std": 0.11784262210130692
+    }
+  ]
+}

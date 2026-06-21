@@ -1,0 +1,30 @@
+{
+  "b100_source": "(B100)국토통계_인구정보-총 인구 수(전체)-(격자) 100M_경기도 수원시_202410.zip",
+  "pop_grid_source": "Pop_Grid_100m.zip",
+  "b100_feature_count": 12487,
+  "pop_grid_feature_count": 10879,
+  "crs_output": "EPSG:5179",
+  "resolution_m": 100,
+  "width": 146,
+  "height": 142,
+  "bounds": [
+    949100.0,
+    1914000.0,
+    963700.0,
+    1928200.0
+  ],
+  "valid_mask_cells": 12487,
+  "resident_total_sum_valid_cells": 1191626.0,
+  "floating_total_sum_valid_cells": 6961452.5,
+  "normalization": "min-max over valid B100 grid cells; unchecked/NoData not used; zero population is valid zero",
+  "E_formula": "E = 0.5 * E_population_resident_count_100m_z + 0.5 * E_population_floating_count_100m_z",
+  "resident_min_max": [
+    0.0,
+    2885.0
+  ],
+  "floating_min_max": [
+    0.0,
+    44293.3203125
+  ],
+  "note": "Pop_Grid_100m Day_Total is treated as floating population count. It was reprojected from EPSG:5181 to EPSG:5179 and rasterized to the B100 100m standard grid."
+}

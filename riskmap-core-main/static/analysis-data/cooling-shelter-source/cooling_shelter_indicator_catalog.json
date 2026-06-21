@@ -1,0 +1,42 @@
+{
+  "indicators": [
+    {
+      "indicator_id": "V_adaptive_cooling_shelter_distance_100m",
+      "name_ko": "무더위쉼터 거리",
+      "dimension": "V",
+      "sub_dimension": "Adaptive Capacity",
+      "component": "공공 시설",
+      "file": "V_adaptive_cooling_shelter_distance_100m.tif",
+      "unit": "m",
+      "direction": "vulnerability_increase",
+      "normalization_method": "fixed_minmax_from_suwon_grid",
+      "min_value": 0.27915486693382263,
+      "max_value": 4875.58349609375,
+      "use_for_v_default": false,
+      "note": "거리 자체는 값이 클수록 접근성이 낮고 취약성이 커지는 보조 지표입니다."
+    },
+    {
+      "indicator_id": "V_adaptive_cooling_shelter_accessibility_100m_z",
+      "name_ko": "무더위쉼터 접근성",
+      "dimension": "V",
+      "sub_dimension": "Adaptive Capacity",
+      "component": "공공 시설",
+      "file": "V_adaptive_cooling_shelter_accessibility_100m_z.tif",
+      "unit": "0-1 score",
+      "direction": "adaptive_capacity_increase",
+      "normalization_method": "1 - minmax(distance_m)",
+      "min_value": 0,
+      "max_value": 1,
+      "use_for_v_default": true,
+      "note": "PDF의 무더위쉼터 접근성 지표에 대응합니다. 값이 높을수록 적응역량이 큽니다. V 계산 시 Adaptive Capacity 방향 반전 규칙에 따라 사용하세요."
+    }
+  ],
+  "source_csv": "재난안전데이터공유플랫폼_무더위쉼터현황.csv",
+  "shelter_filter": "ARCD startswith 4111 and valid LO/LA",
+  "shelter_count_used": 379,
+  "grid": "suwon_stat_grid_mask_100m_epsg5179.tif",
+  "crs": "EPSG:5179",
+  "resolution_m": 100,
+  "method": "Euclidean distance from grid cell centers to nearest cooling shelter point using scipy.spatial.cKDTree",
+  "caution": "네트워크 보행거리나 실제 접근시간이 아니라 직선거리 기반입니다."
+}

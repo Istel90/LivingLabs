@@ -37,6 +37,9 @@
         '그늘막': { widthM: 4, heightM: 3, transmission: 0.05, shape: 'square' },
         '무더위쉼터': { widthM: 6, heightM: 3, transmission: 0.05, shape: 'square' }
     };
+    const DEPARTMENT_HANDOFF_KEY = 'livinglabs.responsibleDepartmentHandoff';
+    const DEFAULT_REGION_CODE = '41110';
+    const DEFAULT_SIDO = '경기도';
 
     function parseCsv(text) {
         return text.replace(/^\uFEFF/, '').trim().split(/\r?\n/).slice(1)
@@ -69,8 +72,8 @@
     const altitudeRows = parseCsv(ALTITUDE_CSV).map((row) => ({ code: row[0], meridianDeg: Number(row[2]) }));
     const areas = new Map(parseCsv(AREA_CSV).map((row) => [row[0], { areaM2: Number(row[2]), source: row[3] }]));
 
-    let selectedSido = $state('서울특별시');
-    let selectedRegionCode = $state('11230');
+    let selectedSido = $state(DEFAULT_SIDO);
+    let selectedRegionCode = $state(DEFAULT_REGION_CODE);
     let availableRegions = $derived(regions.filter((row) => row.sido === selectedSido));
     let selectedRegion = $derived(regions.find((row) => row.code === selectedRegionCode));
     let regionConditions = $derived(resolveRegionConditions(selectedRegion));
@@ -87,8 +90,14 @@
     let pointUploadFileName = $state('');
     let allowAddressGeocoding = $state(false);
     let isCompletingDesign = $state(false);
+    let incomingHandoff = $state(null);
+    let incomingHandoffStatus = $state('');
+    let activeHandoffAlternativeId = $state('');
+    let departmentSelection = $state(null);
+    let workspaceView = $state(false);
+    let mapReady = $state(false);
     let tempGraph = $state();
-    let mapElement;
+    let mapElement = $state();
     let L;
     let map;
     let projectLayers;
@@ -98,6 +107,15 @@
     let drawingVertices = [];
     let drawingLayer;
 
+    let incomingAlternatives = $derived((incomingHandoff?.alternatives || [])
+        .filter((alternative) => alternative.candidates?.length));
+    let activeIncomingAlternative = $derived(
+        incomingAlternatives.find((alternative) => alternative.id === activeHandoffAlternativeId)
+            || incomingAlternatives[0]
+    );
+    let incomingCandidateCount = $derived(incomingAlternatives.reduce((sum, alternative) => (
+        sum + (alternative.candidates?.length || 0)
+    ), 0));
     let activeProject = $derived(projects.find((project) => project.id === activeProjectId));
 
     function defaultDesign() {
@@ -150,6 +168,72 @@
     function changeRegion(event) {
         selectedRegionCode = event.currentTarget.value;
         locateRegion();
+    }
+
+    function loadResponsibleHandoff() {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const handoffRequested = params.get('handoff') === 'lead-department';
+            if (!handoffRequested) {
+                incomingHandoff = null;
+                incomingHandoffStatus = '';
+                return null;
+            }
+
+            const raw = window.localStorage.getItem(DEPARTMENT_HANDOFF_KEY)
+                || window.sessionStorage.getItem(DEPARTMENT_HANDOFF_KEY);
+            let payload = raw ? JSON.parse(raw) : null;
+            if (!payload && window.name) {
+                const namedPayload = JSON.parse(window.name);
+                if (namedPayload?.type === DEPARTMENT_HANDOFF_KEY) payload = namedPayload.payload;
+            }
+            if (!payload?.alternatives?.some((alternative) => alternative.candidates?.length) && payload?.candidates?.length) {
+                payload.alternatives = [{
+                    id: 'legacy-alternative',
+                    name: '전달 대안',
+                    status: '검토요청',
+                    description: '이전 전달 형식에서 변환된 후보 묶음',
+                    candidates: payload.candidates
+                }];
+            }
+
+            const alternatives = (payload?.alternatives || []).filter((alternative) => alternative.candidates?.length);
+            if (!alternatives.length) return null;
+
+            incomingHandoff = payload;
+            activeHandoffAlternativeId = alternatives[0].id;
+            incomingHandoffStatus = `${payload.region || '중점관리 대상지'} ${alternatives.length}개 대안 · ${alternatives.reduce((sum, alternative) => sum + alternative.candidates.length, 0)}개 후보가 전달되었습니다.`;
+            const region = regions.find((row) => row.code === payload.regionCode);
+            if (region) {
+                selectedSido = region.sido;
+                selectedRegionCode = region.code;
+            }
+            return payload;
+        } catch (error) {
+            console.error(error);
+            incomingHandoffStatus = '전달 대안 패키지를 읽지 못했습니다.';
+            return null;
+        }
+    }
+
+    function focusIncomingCandidate(candidate) {
+        const center = candidate?.geometry?.center || candidate?.center;
+        if (!map || !center) return;
+        map.flyTo([center.lat, center.lng], 16, { duration: 0.65 });
+    }
+
+    function reviewIncomingCandidate(alternative, candidate) {
+        departmentSelection = {
+            alternativeId: alternative.id,
+            alternativeName: alternative.name,
+            candidateName: candidate.name,
+            risk: candidate.scores?.risk ?? candidate.risk,
+            parcelCount: candidate.attributes?.parcelCount ?? candidate.parcelCount,
+            hotspotCount: candidate.attributes?.hotspotCount ?? candidate.hotspotCount,
+            leadReviewState: candidate.leadReviewState,
+            decidedAt: new Date().toISOString()
+        };
+        focusIncomingCandidate(candidate);
     }
 
     function locateRegion() {
@@ -525,7 +609,10 @@
         }
     }
 
-    onMount(async () => {
+    async function initializeMap() {
+        if (mapReady || map) return;
+        await tick();
+        if (!mapElement) return;
         const leaflet = await import('leaflet');
         L = leaflet.default || leaflet;
         map = L.map(mapElement, { minZoom: 7, maxZoom: 19 }).setView([37.581956547, 127.05484785], 12);
@@ -553,10 +640,84 @@
         map.on('click', onMapClick);
         map.on('dblclick', finishGeometry);
         locateRegion();
-        return () => map.remove();
+        mapReady = true;
+    }
+
+    function enterWorkspace() {
+        workspaceView = true;
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set('regionCode', selectedRegionCode);
+        nextUrl.searchParams.set('view', 'workspace');
+        if (incomingHandoff) {
+            nextUrl.searchParams.set('handoff', 'lead-department');
+        } else {
+            nextUrl.searchParams.delete('handoff');
+        }
+        window.history.pushState({}, '', nextUrl.toString());
+        initializeMap();
+    }
+
+    onMount(() => {
+        const params = new URLSearchParams(window.location.search);
+        const requestedRegionCode = params.get('regionCode');
+        if (requestedRegionCode) {
+            const region = regions.find((row) => row.code === requestedRegionCode);
+            if (region) {
+                selectedSido = region.sido;
+                selectedRegionCode = region.code;
+            }
+        }
+        loadResponsibleHandoff();
+        workspaceView = params.get('view') === 'workspace';
+        if (workspaceView) initializeMap();
+        return () => map?.remove();
     });
 </script>
 
+{#if !workspaceView}
+    <main class="responsible-entry">
+        <header class="entry-header">
+            <a class="entry-back" href={portalToolsUrl}>지원도구 페이지로 돌아가기</a>
+            <div>
+                <strong>사업소관부서 지원도구</strong>
+                <span>지역을 먼저 선택한 뒤 실행 업무로 들어갑니다.</span>
+            </div>
+        </header>
+        <section class="entry-grid">
+            <article class="entry-card">
+                <p class="entry-eyebrow">REGION SELECT</p>
+                <h1>실행 지역 선택</h1>
+                <p>사업소관부서가 검토할 지역을 선택합니다. 기본 지역은 경기도 수원시입니다.</p>
+                <label>시도<select value={selectedSido} onchange={changeSido}>{#each sidos as sido}<option>{sido}</option>{/each}</select></label>
+                <label>시군구<select value={selectedRegionCode} onchange={changeRegion}>{#each availableRegions as region}<option value={region.code}>{region.name.replace(`${region.sido} `, '')}</option>{/each}</select></label>
+                <div class="entry-region">
+                    <span>선택 지역</span>
+                    <strong>{selectedRegion?.name}</strong>
+                    <small>행정코드 {selectedRegionCode}</small>
+                </div>
+                <button type="button" class="entry-primary" onclick={enterWorkspace}>사업소관부서 도구 입장</button>
+            </article>
+            <article class:hasRequest={incomingCandidateCount} class="entry-card request-card">
+                <p class="entry-eyebrow">주관부서 검토 전달</p>
+                <h2>전달 요청 건수</h2>
+                <p>주관부서 적응대책 지원도구에서 사업소관부서로 전달한 대안만 표시합니다.</p>
+                <div class="entry-counts">
+                    <div><span>대안</span><strong>{incomingAlternatives.length}</strong></div>
+                    <div><span>후보지</span><strong>{incomingCandidateCount}</strong></div>
+                </div>
+                {#if incomingHandoff}
+                    <div class="entry-package">
+                        <span>전달 패키지</span>
+                        <strong>{incomingHandoff.projectName || '중점관리구역 후보 검토'}</strong>
+                        <small>{incomingHandoff.hazardLabel || '재해'} · {incomingHandoff.region || selectedRegion?.name}</small>
+                    </div>
+                {:else}
+                    <div class="entry-empty">현재 선택 지역에 주관부서에서 전달한 대안이 없습니다.</div>
+                {/if}
+            </article>
+        </section>
+    </main>
+{:else}
 <div class="tool-shell">
     <aside class="sidebar">
         <h1>사업소관부서 지원도구</h1>
@@ -567,6 +728,49 @@
             <label>시군구<select value={selectedRegionCode} onchange={changeRegion}>{#each availableRegions as region}<option value={region.code}>{region.name.replace(`${region.sido} `, '')}</option>{/each}</select></label>
             <p>현재 대상지역: <strong>{selectedRegion?.name}</strong></p>
         </section>
+        {#if incomingHandoff}
+            <section class="handoff-section">
+                <h2>중점관리 대안 패키지</h2>
+                <p>{incomingHandoffStatus}</p>
+                <div class="handoff-alternative-tabs" aria-label="전달 대안">
+                    {#each incomingAlternatives as alternative}
+                        <button
+                            type="button"
+                            class:active={activeIncomingAlternative?.id === alternative.id}
+                            onclick={() => activeHandoffAlternativeId = alternative.id}
+                        >
+                            <strong>{alternative.name}</strong>
+                            <span>{alternative.candidates.length}개 후보</span>
+                        </button>
+                    {/each}
+                </div>
+                {#if activeIncomingAlternative}
+                    <div class="handoff-alternative-summary">
+                        <strong>{activeIncomingAlternative.name}</strong>
+                        <span>{activeIncomingAlternative.description}</span>
+                    </div>
+                    <div class="handoff-candidate-list">
+                        {#each activeIncomingAlternative.candidates as candidate}
+                            <article class:reviewed={departmentSelection?.alternativeId === activeIncomingAlternative.id && departmentSelection?.candidateName === candidate.name}>
+                                <button type="button" onclick={() => focusIncomingCandidate(candidate)}>
+                                    <strong>{candidate.name}</strong>
+                                    <span>Risk {Number(candidate.scores?.risk ?? candidate.risk).toFixed(2)} · {formatCount(candidate.attributes?.parcelCount ?? candidate.parcelCount)}필지 · hotspot {formatCount(candidate.attributes?.hotspotCount ?? candidate.hotspotCount)}셀</span>
+                                </button>
+                                <button type="button" class="review-button" onclick={() => reviewIncomingCandidate(activeIncomingAlternative, candidate)}>
+                                    검토대상 지정
+                                </button>
+                            </article>
+                        {/each}
+                    </div>
+                {/if}
+                {#if departmentSelection}
+                    <div class="department-selection">
+                        <b>사업소관부서 검토대상</b>
+                        <span>{departmentSelection.alternativeName} · {departmentSelection.candidateName} · Risk {Number(departmentSelection.risk).toFixed(2)}</span>
+                    </div>
+                {/if}
+            </section>
+        {/if}
         <section class="design-section">
             <div class="section-head"><h2>2. 적응 사업 디자인</h2><button onclick={openDesigner}>+ 적응 사업 디자인 하기</button></div>
             {#if projects.length}
@@ -671,12 +875,16 @@
         </form>
     </div>
 {/if}
+{/if}
 
 <style>
+    .responsible-entry{min-height:100vh;background:#10233f;color:#0f172a;font-family:Pretendard,Arial,sans-serif}.entry-header{display:flex;align-items:center;gap:14px;min-height:56px;padding:0 20px;background:#233447;color:#fff;box-shadow:0 12px 32px #02061733}.entry-header strong{display:block;font-size:15px}.entry-header span{display:block;margin-top:3px;color:#cbd5e1;font-size:12px}.entry-back{display:inline-flex;align-items:center;border:1px solid #ffffff29;border-radius:999px;background:#ffffff14;color:#f8fafc;padding:8px 13px;font-size:12px;font-weight:900;text-decoration:none}.entry-grid{display:grid;grid-template-columns:420px minmax(0,1fr);gap:20px;max-width:1100px;margin:0 auto;padding:32px 24px}.entry-card{border:1px solid #dbe7ee;border-radius:18px;background:#fff;padding:22px;box-shadow:0 20px 48px #0206172e}.entry-card h1,.entry-card h2{margin:8px 0 10px;color:#0f172a;font-size:26px;line-height:1.18}.entry-card h2{font-size:24px}.entry-card p{margin:0 0 18px;color:#475569;font-size:14px;line-height:1.7}.entry-eyebrow{margin:0!important;color:#0f766e!important;font-size:12px!important;font-weight:900!important;letter-spacing:0!important}.entry-card label{display:grid;gap:6px;margin-top:12px;color:#475569;font-size:12px;font-weight:900}.entry-card select{width:100%;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#10233f;padding:10px 12px;font-size:14px;font-weight:800}.entry-region,.entry-package,.entry-empty{display:grid;gap:5px;margin-top:16px;border-radius:14px;background:#f8fafc;padding:15px}.entry-region span,.entry-package span{color:#64748b;font-size:12px;font-weight:900}.entry-region strong,.entry-package strong{color:#0f172a;font-size:18px}.entry-region small,.entry-package small{color:#64748b;font-size:12px;font-weight:800}.entry-primary{width:100%;margin-top:18px;border:0;border-radius:10px;background:#10233f;color:#fff;padding:13px 16px;font-size:14px;font-weight:900;cursor:pointer}.request-card{background:#ffffff}.request-card.hasRequest{border-color:#fed7aa;background:#fff7ed}.request-card .entry-eyebrow{color:#c2410c!important}.entry-counts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.entry-counts div{display:grid;gap:6px;border-radius:14px;background:#f8fafc;padding:16px}.request-card.hasRequest .entry-counts div{background:#fff}.entry-counts span{color:#64748b;font-size:12px;font-weight:900}.entry-counts strong{color:#0f172a;font-size:32px;line-height:1}.entry-empty{color:#64748b;font-size:14px;font-weight:800;line-height:1.6}.entry-package{background:#fff}
+    @media(max-width:900px){.entry-grid{grid-template-columns:1fr}.entry-header{align-items:flex-start;flex-direction:column;padding:12px 16px}}
     :global(body){margin:0}.tool-shell{display:grid;grid-template-columns:280px minmax(400px,1fr) 340px;gap:8px;height:100vh;padding:8px;background:linear-gradient(135deg,#073b52 0%,#064a55 48%,#0f766e 100%);color:#10233f;font-family:Pretendard,Arial,sans-serif;box-sizing:border-box}.sidebar,.dashboard{overflow:auto;border:1px solid #dbe7ee;border-radius:14px;background:#fff;padding:14px;box-shadow:0 18px 40px #0f172a21}.sidebar h1{font-size:18px;margin:0 0 12px}.sidebar section{padding:12px 0;border-top:1px solid #e2e8f0}.sidebar h2,.dashboard h2{font-size:15px;margin:0 0 9px}label{display:grid;gap:4px;margin:7px 0;font-size:12px;font-weight:700}input,select{padding:7px;border:1px solid #cbd5e1;border-radius:5px;background:white;color:#10233f}.region-selector{position:sticky;z-index:700;top:-12px;margin:0 -4px 10px;padding:14px 12px!important;border:2px solid #0f9f6e!important;border-radius:12px;background:#ecfdf5;box-shadow:0 3px 10px #10233f1f}.region-selector h2{color:#0f766e}.region-selector select{width:100%;border-color:#99f6e4;font-weight:700;cursor:pointer}.region-selector select:hover,.region-selector select:focus{border-color:#0f766e;outline:2px solid #ccfbf1}.region-selector p{margin:9px 0 0;padding:7px;border-radius:5px;background:#fff;font-size:11px;color:#475569}.section-head{display:grid;gap:7px}.section-head button,.apply,.finish{padding:9px;border:0;border-radius:8px;background:#0f9f6e;color:white;font-weight:700}.project-list{display:grid;gap:6px;margin:9px 0}.project-list button{display:grid;grid-template-columns:24px 1fr;align-items:start;gap:8px;text-align:left;padding:9px;border:1px solid #dbe4ee;border-radius:9px;background:#fff}.project-list button.active{border-color:#0f9f6e;background:#ecfdf5}.project-index{display:grid!important;place-items:center;width:22px;height:22px;border-radius:999px;background:#dff8ef!important;color:#047857!important;font-size:11px!important;font-weight:900}.project-summary{display:grid;gap:3px}.project-list span,.project-list small,.empty{font-size:11px;color:#64748b}.finish{width:100%;background:#2563eb;margin-bottom:6px}.apply{width:100%;background:#10233f}.apply:disabled{opacity:.4}.conditions{margin-top:auto}.conditions dl{display:grid;gap:5px;margin:0;font-size:11px}.conditions dl div{display:flex;justify-content:space-between;gap:8px}.conditions dd{margin:0;text-align:right;font-weight:700}.map-wrap{position:relative;min-width:0}.map{height:100%;border-radius:14px}.map-guide{position:absolute;z-index:600;top:10px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:20px;background:#fff;box-shadow:0 2px 12px #0003;font-size:12px;font-weight:700}.map-layer-panel{position:absolute;z-index:620;top:58px;right:12px;display:grid;gap:5px;min-width:150px;padding:10px 12px;border:1px solid #ffffff99;border-radius:14px;background:#ffffffe6;box-shadow:0 12px 30px #0f172a2e;backdrop-filter:blur(10px);font-size:11px;color:#334155}.map-layer-panel strong{color:#0f172a;font-size:12px}.map-layer-panel button{padding:7px 9px;border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#10233f;font-size:11px;font-weight:800}.map-layer-panel button.active{border-color:#0f766e;background:#ecfdf5;color:#047857}.map-edit-panel{position:absolute;z-index:650;left:50%;bottom:18px;display:flex;align-items:center;gap:8px;max-width:calc(100% - 36px);padding:10px 12px;border:1px solid #ffffff99;border-radius:14px;background:#ffffffe6;box-shadow:0 12px 30px #0f172a33;backdrop-filter:blur(10px)}.map-edit-panel div{display:grid;min-width:170px;margin-right:4px}.map-edit-panel b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0f172a;font-size:12px}.map-edit-panel span{color:#475569;font-size:11px}.map-edit-panel button{padding:8px 10px;border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#10233f;font-size:11px;font-weight:800;white-space:nowrap}.map-edit-panel .danger{border-color:#fecaca;background:#fff1f2;color:#be123c}.dashboard h3{margin:0;padding:8px;border-radius:8px;background:#10233f;color:#fff;font-size:14px}.dashboard section{margin-bottom:10px;border:1px solid #dbe4ee;border-radius:10px;padding:6px}.dashboard p,.placeholder{font-size:11px;color:#64748b;padding:8px}.dashboard h4{font-size:12px;margin:7px}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:5px}.metrics div{display:grid;gap:3px;padding:8px;border-radius:6px;background:#fff7ed;font-size:11px}.implementation article{display:grid;gap:5px;padding:9px;border-bottom:1px solid #e2e8f0;font-size:12px}.implementation article span{color:#64748b;font-size:11px}progress{width:100%}.modal-backdrop{position:fixed;z-index:2000;inset:0;display:grid;place-items:center;background:#0f172a99}.modal{width:min(520px,calc(100vw - 32px));max-height:90vh;overflow:auto;padding:22px;border-radius:12px;background:#fff;box-shadow:0 20px 70px #0005}.modal h2{margin-top:0}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.modal-actions button{padding:9px 16px;border:0;border-radius:6px}.modal-actions button:last-child{background:#0f9f6e;color:#fff;font-weight:700}@media(max-width:1000px){.tool-shell{grid-template-columns:240px 1fr}.dashboard{display:none}}
     .sidebar,.dashboard{color:#0f172a;opacity:1}.sidebar h1,.sidebar h2,.dashboard h2,.sidebar label,.dashboard strong{opacity:1;color:#0f172a}.sidebar section,.dashboard section{background:#fff}.sidebar p,.empty,.project-list span,.project-list small,.implementation article span{color:#334155;opacity:1}.dashboard{background:#f8fafc}.dashboard h2{font-size:17px;font-weight:800}.dashboard h3{background:#10233f;color:#fff!important;font-weight:800}.dashboard section{padding:8px;border-color:#cbd5e1;box-shadow:0 1px 3px #0f172a12}.dashboard p,.dashboard .placeholder{margin:8px 0;padding:10px;border:1px solid #dbe4ee;border-radius:6px;background:#fff;color:#1e293b;font-size:12px;font-weight:600;line-height:1.5;opacity:1}.dashboard h4{color:#0f172a;font-weight:800}.metrics span{color:#334155;font-weight:700}.apply:disabled{opacity:1;background:#94a3b8;color:#fff}.modal-backdrop{background:#0f172a26}
     .point-upload{display:grid;gap:7px;margin:10px 0;padding:12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff}.point-upload legend{padding:0 5px;color:#0f4c9a;font-size:12px;font-weight:800}.point-upload p{margin:0;color:#334155;font-size:11px;line-height:1.5}.point-upload input[type=file]{padding:8px;background:#fff}.inline-check{display:flex;align-items:center;gap:6px;margin:2px 0;color:#334155;font-size:11px;font-weight:700}.inline-check input{width:auto}.upload-status{padding:8px!important;border-radius:6px;background:#fff!important;color:#0f766e!important;font-weight:700}.modal-actions button:disabled{background:#94a3b8!important;color:#fff;cursor:wait}
     .portal-back-link{display:flex;align-items:center;justify-content:center;margin:-4px 0 12px;padding:9px 10px;border:1px solid #bae6fd;border-radius:999px;background:#f0fdfa;color:#03695f;font-size:12px;font-weight:900;text-decoration:none}.portal-back-link:hover{background:#ccfbf1}
+    .handoff-section{display:grid;gap:8px;margin:0 0 10px;padding:12px!important;border:2px solid #fed7aa!important;border-radius:12px;background:#fff7ed!important}.handoff-section h2{color:#9a3412!important}.handoff-section p{margin:0;color:#7c2d12!important;font-size:11px;font-weight:800;line-height:1.45}.handoff-alternative-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.handoff-alternative-tabs button{display:grid;gap:2px;min-width:0;border:1px solid #fed7aa;border-radius:8px;background:#fff;padding:7px;color:#7c2d12;text-align:center}.handoff-alternative-tabs button.active{border-color:#ea580c;background:#ffedd5}.handoff-alternative-tabs strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#7c2d12!important;font-size:10px}.handoff-alternative-tabs span{font-size:9px;color:#92400e!important;font-weight:800}.handoff-alternative-summary{display:grid;gap:3px;padding:8px;border-radius:8px;background:#fff;color:#7c2d12}.handoff-alternative-summary strong{font-size:12px;color:#7c2d12!important}.handoff-alternative-summary span{font-size:10px;color:#92400e!important;font-weight:700;line-height:1.35}.handoff-candidate-list{display:grid;gap:6px}.handoff-candidate-list article{display:grid;grid-template-columns:1fr auto;border:1px solid #fed7aa;border-radius:8px;background:#fff;overflow:hidden}.handoff-candidate-list article.reviewed{border-color:#0f766e;background:#ecfdf5}.handoff-candidate-list article>button:first-child{display:grid;gap:3px;width:100%;border:0;background:transparent;text-align:left;padding:8px;color:#10233f}.handoff-candidate-list article>button:first-child:hover{background:#fffbeb}.handoff-candidate-list strong{font-size:11px;color:#7c2d12!important}.handoff-candidate-list span{font-size:10px;color:#92400e!important;font-weight:700}.review-button{border:0;border-left:1px solid #fed7aa;background:#f97316;color:#fff;font-size:9px;font-weight:900;padding:0 8px;white-space:nowrap}.department-selection{display:grid;gap:3px;padding:8px;border-radius:8px;background:#0f766e;color:#fff}.department-selection b,.department-selection span{color:#fff!important}.department-selection b{font-size:11px}.department-selection span{font-size:10px;font-weight:800}
     .default-spec{display:grid;gap:4px;margin-top:8px;padding:9px;border-radius:6px;background:#ecfdf5;color:#166534;font-size:11px}.default-spec strong{color:#166534!important}.tree-list-icon{display:inline-block;width:12px;height:12px;margin-right:6px;border-radius:50%;background:#16a34a;box-shadow:inset 0 0 0 2px #bbf7d0;vertical-align:-1px}:global(.tree-marker){position:relative;background:transparent;border:0}:global(.tree-canopy){position:absolute;top:0;left:3px;width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:#16a34a;box-shadow:0 1px 5px #0005}:global(.tree-canopy::after){content:'';position:absolute;top:4px;left:5px;width:8px;height:8px;border-radius:50%;background:#4ade80}:global(.tree-trunk){position:absolute;top:20px;left:12px;width:5px;height:12px;border-radius:0 0 2px 2px;background:#854d0e;box-shadow:0 1px 3px #0004}
     .map-edit-panel{transform:translateX(-50%)}
 </style>

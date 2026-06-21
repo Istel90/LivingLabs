@@ -4,7 +4,7 @@
   "hazard": "heatwave",
   "mode": "demo",
   "title": "수원시 폭염 중점관리구역 시연 원자료",
-  "description": "수원시 시연용 원자료 묶음에서 가벼운 지표 요약과 이미 배치된 GeoTIFF를 연결합니다. 무거운 건물 원자료와 필지 추출은 API 또는 서버 단계에서 연결합니다.",
+  "description": "수원시 시연용 원자료 묶음에서 현재 확인 가능한 요약 통계를 먼저 사용합니다. GeoTIFF, 건물 원자료, 필지 추출은 API 또는 서버 단계에서 연결합니다.",
   "sourceZip": [
     "수원시_rawdata (1).zip",
     "수원 리스크평가(원데이터 및 코드).zip"
@@ -12,19 +12,20 @@
   "rasterSources": [
     {
       "id": "lst",
-      "label": "지표면 온도",
-      "file": "수원LST.tif",
-      "path": "/analysis-data/수원LST.tif",
-      "status": "connected",
-      "usage": "기후위험 H 지표 및 지도 미리보기"
+      "label": "지표면 온도 100m 격자",
+      "file": "suwon-lst-100m-grid.json",
+      "sourceFile": "수원LST.tif",
+      "path": "/analysis-data/suwon-lst-100m-grid.json",
+      "status": "prepared",
+      "usage": "30m LST 원본을 100m 단위격자로 평균 집계해 기후위험 H 지표에 사용"
     },
     {
       "id": "landcover",
       "label": "세분류 토지피복도",
       "file": "수원시_세분류토지피복도.tif",
       "path": "/analysis-data/수원시_세분류토지피복도.tif",
-      "status": "connected",
-      "usage": "녹지 비율, 도로밀도, 비도시 기준온도 계산 후보"
+      "status": "missing",
+      "usage": "녹지 비율, 도로밀도, 비도시 기준온도 계산 후보. 파일 배치 후 사용"
     }
   ],
   "tableSources": [

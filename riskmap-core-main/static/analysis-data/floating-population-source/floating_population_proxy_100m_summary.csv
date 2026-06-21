@@ -1,0 +1,11 @@
+﻿file,meaning,source_column,direction,valid_cells,min,max,mean,std
+E_floating_population_work_density_100m.tif,KCB 직장주소지 기반 근무인구 밀도(명/km²)를 100m 통계격자에 할당,pop_w,높을수록 노출 증가,11802,0.0,63354.0,5464.61669921875,7624.26318359375
+E_floating_population_work_count_proxy_100m.tif,근무인구 밀도를 100m 셀 면적(0.01km²)으로 환산한 100m 격자당 근무인구 추정값,pop_w/100,높을수록 노출 증가,11802,0.0,633.5399780273438,54.64616012573242,76.24263763427734
+E_floating_population_work_count_proxy_100m_z.tif,근무인구 추정값의 수원 100m 격자 기준 min-max 정규화값,pop_w/100 normalized,높을수록 노출 증가,11802,0.0,1.0,0.0862552747130394,0.12034383416175842
+E_commute_in_centrality_100m.tif,통근유입 중심성 지수,pc_in,높을수록 유입 노출/거점성 증가,11802,0.0,23.937767028808594,1.8036184310913086,2.7658064365386963
+E_commute_in_centrality_100m_z.tif,통근유입 중심성 지수의 수원 100m 격자 기준 min-max 정규화값,pc_in normalized,높을수록 유입 노출/거점성 증가,11802,0.0,1.0,0.07534613460302353,0.11554154008626938
+E_commute_out_centrality_100m.tif,통근유출 중심성 지수,pc_out,높을수록 유출 거주노출/통근발생 증가,11802,0.0,10.833457946777344,3.180492401123047,2.9237563610076904
+E_commute_out_centrality_100m_z.tif,통근유출 중심성 지수의 수원 100m 격자 기준 min-max 정규화값,pc_out normalized,높을수록 유출 거주노출/통근발생 증가,11802,0.0,1.0,0.293580561876297,0.26988208293914795
+E_workplace_employee_count_proxy_100m.tif,사업체 종사자 밀도를 100m 셀 면적으로 환산한 종사자 추정값,wk_cnt/100,높을수록 노출 증가,11802,0.0,409.0799865722656,40.75437927246094,55.47365951538086
+E_workplace_employee_count_proxy_100m_z.tif,사업체 종사자 추정값의 수원 100m 격자 기준 min-max 정규화값,wk_cnt/100 normalized,높을수록 노출 증가,11802,0.0,1.0,0.09962447732686996,0.13560590147972107
+E_daytime_exposure_proxy_100m_z.tif,근무인구 추정 정규화값과 통근유입 중심성 정규화값의 평균 기반 주간 노출 proxy,"mean(pop_w_z, pc_in_z)",높을수록 노출 증가,11802,0.0,1.0,0.08080071210861206,0.11784262210130692

@@ -36,15 +36,20 @@ if not exist "%ROOT%riskmap-core-main\.svelte-kit\output\server\index.js" (
 )
 
 :start_servers
-start "LivingLabs Portal 4173" /D "%ROOT%" cmd /k npm.cmd run preview:local
-start "LivingLabs Survey 4174" /D "%ROOT%Survey platform for collaboration" cmd /k npm.cmd run preview:local
-start "LivingLabs Internal Tools 4175" /D "%ROOT%riskmap-core-main" cmd /k npm.cmd run preview:local
+call npm.cmd run platform:start
+if errorlevel 1 (
+  echo.
+  echo Platform startup failed. Please check the messages above.
+  pause
+  exit /b 1
+)
 
 echo Portal:         http://127.0.0.1:4173/
 echo Survey:         http://127.0.0.1:4174/
 echo Internal tools: http://127.0.0.1:4175/
+echo VWorld proxy:   http://127.0.0.1:4176/health
 echo.
-echo Keep the three server windows open while using the platform.
+echo Platform servers are running in the background.
 echo Use STOP_PLATFORM.bat to stop them.
 echo.
 pause

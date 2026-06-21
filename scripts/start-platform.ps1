@@ -15,6 +15,7 @@ $apps = @(
     Port = 4173
     Url = "http://127.0.0.1:4173/"
     Cwd = $root
+    Script = "preview:local"
   },
   @{
     Name = "survey"
@@ -22,6 +23,7 @@ $apps = @(
     Port = 4174
     Url = "http://127.0.0.1:4174/"
     Cwd = Join-Path $root "Survey platform for collaboration"
+    Script = "preview:local"
   },
   @{
     Name = "riskmap"
@@ -29,6 +31,15 @@ $apps = @(
     Port = 4175
     Url = "http://127.0.0.1:4175/"
     Cwd = Join-Path $root "riskmap-core-main"
+    Script = "preview:local"
+  },
+  @{
+    Name = "vworld-proxy"
+    Label = "VWorld Data Proxy"
+    Port = 4176
+    Url = "http://127.0.0.1:4176/health"
+    Cwd = Join-Path $root "riskmap-core-main"
+    Script = "vworld:proxy"
   }
 )
 
@@ -67,7 +78,7 @@ foreach ($app in $apps) {
 
   $process = Start-Process `
     -FilePath "npm.cmd" `
-    -ArgumentList @("run", "preview:local") `
+    -ArgumentList @("run", $app.Script) `
     -WorkingDirectory $app.Cwd `
     -WindowStyle Hidden `
     -RedirectStandardOutput $combinedLog `
