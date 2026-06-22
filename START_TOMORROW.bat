@@ -1,7 +1,9 @@
 @echo off
-cd /d E:\40_LocalPython\LivingLabs
+setlocal
+set "ROOT=%~dp0"
+cd /d "%ROOT%"
 echo Starting LivingLabs local platform...
-call npm run platform:start
+call npm.cmd run platform:start
 echo.
 echo Open these URLs after startup:
 echo   Portal:              http://127.0.0.1:4173/tools#adaptation-support-tools
