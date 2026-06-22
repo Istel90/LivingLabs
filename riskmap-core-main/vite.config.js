@@ -8,7 +8,7 @@ export default defineConfig({
     assetsInclude: ['**/*.tif'],
     server: {
         host: '127.0.0.1',
-        port: 4175,
+        port: 5175,
         strictPort: true,
         fs: {
             allow: [path.resolve('..')]

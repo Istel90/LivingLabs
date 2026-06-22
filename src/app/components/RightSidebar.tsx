@@ -21,6 +21,13 @@ const sidebarItems = [
     internalUrl: '/tools#adaptation-support-tools',
     icon: Wrench,
   },
+  {
+    id: 'livinglab-toolkit',
+    label: '리빙랩 툴킷',
+    description: '기후적응 리빙랩 실행 자료 모음',
+    externalUrl: 'https://livinglab-web.vercel.app/toolkit',
+    icon: Wrench,
+  },
 ];
 
 export function RightSidebar({ selectedItem, onSelectItem }: RightSidebarProps) {

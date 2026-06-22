@@ -20,7 +20,7 @@ try {
 }
 
 const apiKey = env.VITE_VWORLD_API_KEY || '';
-const domain = env.VITE_VWORLD_DOMAIN || 'http://127.0.0.1:4175/';
+const domain = env.VITE_VWORLD_DOMAIN || 'http://127.0.0.1:5175/';
 const allowInsecureTls = env.VWORLD_ALLOW_INSECURE_TLS === 'true' || process.env.VWORLD_ALLOW_INSECURE_TLS === 'true';
 const httpsAgent = allowInsecureTls ? new HttpsAgent({ rejectUnauthorized: false }) : undefined;
 const port = Number(process.env.VWORLD_PROXY_PORT || process.argv.find((arg) => arg.startsWith('--port='))?.split('=')[1] || 4176);

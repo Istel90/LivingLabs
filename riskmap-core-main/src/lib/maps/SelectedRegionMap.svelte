@@ -68,6 +68,7 @@
     let parcelCandidateLegend = $state([]);
     let focusedParcelCandidateKey = $state('');
     let renderedParcelCandidateScope = $state('');
+    let parcelCandidateRunId = 0;
 
     function groupsForGridLayer(layer) {
         if (layer === 'H') return ['기후위험'];
@@ -591,7 +592,7 @@
 
         return [...boxes.values()]
             .sort((left, right) => (right.maxRisk - left.maxRisk) || (right.count - left.count))
-            .slice(0, 18)
+            .slice(0, 12)
             .map((box) => ({
                 minLng: box.minLng - 0.0012,
                 minLat: box.minLat - 0.0012,
@@ -613,23 +614,45 @@
         return properties.pnu || properties.PNU || properties.gid || properties.GID || properties.id || JSON.stringify(featureBounds(feature));
     }
 
-    async function fetchVWorldCadastralFeatures(boxes) {
+    function yieldToBrowser() {
+        return new Promise((resolve) => window.setTimeout(resolve, 0));
+    }
+
+    async function fetchJsonWithTimeout(url, timeoutMs = 9000) {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+            const response = await fetch(url, { signal: controller.signal });
+            if (!response.ok) throw new Error(`VWorld ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            if (error?.name === 'AbortError') throw new Error('request-timeout');
+            throw error;
+        } finally {
+            window.clearTimeout(timer);
+        }
+    }
+
+    async function fetchVWorldCadastralFeatures(boxes, { timeoutMs = 45000 } = {}) {
         const featuresById = new Map();
-        const pageSize = 1000;
-        const maxPages = 2;
+        const pageSize = 650;
+        const maxPages = 1;
+        const maxFeatures = 5000;
+        const deadline = Date.now() + timeoutMs;
 
         for (const box of boxes) {
+            if (featuresById.size >= maxFeatures) break;
+            if (Date.now() > deadline) throw new Error('request-timeout');
             for (let page = 1; page <= maxPages; page += 1) {
+                if (Date.now() > deadline) throw new Error('request-timeout');
                 const geomFilter = `BOX(${box.minLng},${box.minLat},${box.maxLng},${box.maxLat})`;
                 const url = createVWorldDataUrl(VWORLD_DATASETS.cadastral, {
                     geomFilter,
                     size: pageSize,
                     page
                 });
-                const response = await fetch(url);
-                if (!response.ok) throw new Error(`VWorld ${response.status}`);
-
-                const payload = await response.json();
+                const payload = await fetchJsonWithTimeout(url);
                 if (payload?.response?.status === 'ERROR') {
                     const code = payload.response.error?.code || 'API_ERROR';
                     const text = payload.response.error?.text || 'VWorld 데이터 API 오류';
@@ -641,6 +664,8 @@
                     if (id) featuresById.set(id, feature);
                 });
 
+                await yieldToBrowser();
+                if (featuresById.size >= maxFeatures) break;
                 if (features.length < pageSize) break;
             }
         }
@@ -654,7 +679,7 @@
     }
 
     function parcelScoreRecords(features, hotspots) {
-        const topHotspots = hotspots.slice(0, 900);
+        const topHotspots = hotspots.slice(0, 600);
         const hotspotIndex = buildHotspotSpatialIndex(topHotspots);
 
         return features.map((feature) => {
@@ -794,11 +819,12 @@
     }
 
     function renderParcelCandidateLayer(candidates) {
-        parcelCandidateLegend = [];
         if (!map || !window.L) return;
         parcelCandidateLayer?.remove();
         parcelCandidateLayer = null;
-        const nextCandidateLegend = candidates.map((candidate) => ({
+        const legendCandidates = candidates.filter(Boolean);
+        const drawableCandidates = legendCandidates.filter((candidate) => (candidate.features || []).length);
+        const nextCandidateLegend = legendCandidates.map((candidate) => ({
             id: candidate.id || candidate.name || `parcel-candidate-${candidate.rank}`,
             name: candidate.name,
             rank: candidate.rank,
@@ -809,7 +835,7 @@
             bounds: candidate.bounds,
             isPriority: Number(candidate.rank) <= 3
         }));
-        const features = candidates.flatMap((candidate) =>
+        const features = drawableCandidates.flatMap((candidate) =>
             (candidate.features || []).map((feature) => ({
                 ...feature,
                 properties: {
@@ -821,12 +847,13 @@
                 }
             }))
         );
-        if (!features.length) return;
         parcelCandidateLegend = nextCandidateLegend;
+        if (!features.length) return;
 
         parcelCandidateLayer = window.L.geoJSON(
             { type: 'FeatureCollection', features },
             {
+                pane: 'parcelCandidatePane',
                 style: (feature) => ({
                     color: parcelFeatureStyle(feature).color,
                     weight: parcelFeatureStyle(feature).weight,
@@ -845,6 +872,7 @@
                 }
             }
         ).addTo(map);
+        parcelCandidateLayer.bringToFront?.();
     }
 
     function parcelCandidateKey(candidate) {
@@ -866,7 +894,7 @@
         if (!map || !window.L) return;
         const candidates = Array.isArray(parcelCandidates) ? parcelCandidates : [];
         const nextScope = parcelCandidateLayerScope(candidates);
-        if (nextScope === renderedParcelCandidateScope) return;
+        if (nextScope === renderedParcelCandidateScope && (!candidates.length || parcelCandidateLegend.length)) return;
 
         renderedParcelCandidateScope = nextScope;
         focusedParcelCandidateKey = '';
@@ -965,6 +993,7 @@
         parcelCandidateRunning = true;
         parcelCandidateStatus = 'Hotspot 격자 준비 중';
         const runCandidateContextKey = candidateContextKey;
+        const runId = ++parcelCandidateRunId;
 
         try {
             const hotspots = createHotspotPoints(riskGrid);
@@ -973,12 +1002,17 @@
             const requestBoxes = hotspotRequestBoxes(hotspots);
             parcelCandidateStatus = `연속지적도 API 요청 중 · ${requestBoxes.length}개 구역`;
             const cadastralFeatures = await fetchVWorldCadastralFeatures(requestBoxes);
+            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             if (!cadastralFeatures.length) throw new Error('parcel-empty');
 
             parcelCandidateStatus = `${cadastralFeatures.length.toLocaleString()}필지 · 100m 셀 교차 분석 중`;
+            await yieldToBrowser();
+            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             const parcelRecords = parcelScoreRecords(cadastralFeatures, hotspots);
             if (!parcelRecords.length) throw new Error('intersection-empty');
 
+            await yieldToBrowser();
+            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             const candidates = clusterParcelRecords(parcelRecords);
             renderParcelCandidateLayer(candidates);
             const slimCandidates = candidates.map(({ features, ...candidate }) => ({
@@ -1002,6 +1036,7 @@
             parcelCandidateStatus = message;
             onParcelCandidatesChange(slimCandidates, message, runCandidateContextKey);
         } catch (error) {
+            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             console.error(error);
             parcelCandidateLayer?.remove();
             parcelCandidateLayer = null;
@@ -1012,13 +1047,15 @@
                     ? 'Hotspot과 겹치는 필지를 찾지 못했습니다.'
                     : error?.message === 'hotspot-empty'
                         ? 'Hotspot 격자가 없습니다.'
+                        : error?.message === 'request-timeout'
+                            ? 'VWorld 필지 API 응답 시간이 초과되었습니다. 범위를 줄이거나 잠시 후 다시 실행하세요.'
                         : error?.message?.startsWith('VWorld ')
                             ? error.message
                             : '필지 후보 도출 실패 · VWorld API 응답을 확인하세요.';
             parcelCandidateStatus = message;
             onParcelCandidatesChange([], message, runCandidateContextKey);
         } finally {
-            parcelCandidateRunning = false;
+            if (parcelCandidateRunId === runId) parcelCandidateRunning = false;
         }
     }
 
@@ -1363,6 +1400,11 @@
             L.control.zoom({ position: 'bottomright' }).addTo(map);
         }
 
+        if (!map.getPane('parcelCandidatePane')) {
+            map.createPane('parcelCandidatePane');
+            map.getPane('parcelCandidatePane').style.zIndex = 560;
+        }
+
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors',
             maxZoom: 19
@@ -1461,96 +1503,102 @@
 <div class="region-map-wrap">
     <div class:locked-map={locked} class="region-map" bind:this={mapElement} style={`height:${height}`}></div>
     {#if showAnalysisLegend}
-        <div class="analysis-legend" aria-label="분석 범례">
-            <strong>분석 범례</strong>
-            <span class="legend-note">체크된 지표만 표시</span>
+        <div class="analysis-overlay-stack">
+            <div class="analysis-legend" aria-label="분석 범례">
+                <strong>분석 범례</strong>
+                <span class="legend-note">체크된 지표만 표시</span>
+                {#if riskGrid?.stats}
+                    <label class="risk-surface-summary">
+                        <input
+                            type="checkbox"
+                            checked={riskGridVisible}
+                            onchange={(event) => { riskGridVisible = event.currentTarget.checked; renderRiskGridLayer(); }}
+                        />
+                        <b>100m {gridLayerLabels[selectedGridLayer] || selectedGridLayer} 격자</b>
+                        <span>{riskGridVisible ? `${riskGrid.stats.validCells?.toLocaleString()}셀 표시 중` : '숨김'}</span>
+                        <div class="risk-ramp" aria-hidden="true"></div>
+                        <small>낮음 → 높음</small>
+                    </label>
+                    <div class="analysis-grid-tabs" aria-label="분석 격자 레이어">
+                        {#each gridLayers as layer}
+                            <button
+                                type="button"
+                                class:active={selectedGridLayer === layer}
+                                onclick={() => { selectedGridLayer = layer; onGridLayerChange(layer); renderRiskGridLayer(); }}
+                            >
+                                {layer}
+                            </button>
+                        {/each}
+                    </div>
+                {/if}
+                {#each analysisGroups.filter((group) => groupsForGridLayer(selectedGridLayer).includes(group)) as group}
+                    {@const items = analysisIndicators.filter((item) => item.enabled && item.group === group)}
+                    {#if items.length}
+                        <section>
+                            <h3>{group}</h3>
+                            <div class="legend-items">
+                                {#each items as item}
+                                    <label>
+                                        <input
+                                            type="checkbox"
+                                            checked={visibleAnalysisLayerIds.includes(String(item.id))}
+                                            onchange={(event) => toggleAnalysisLayer(item.id, event.currentTarget.checked)}
+                                        />
+                                        <i style={`--legend-color:${item.color || '#64748b'}`}></i>
+                                        <b>{item.label}</b>
+                                        <small>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</small>
+                                    </label>
+                                {/each}
+                            </div>
+                        </section>
+                    {/if}
+                {/each}
+                {#if ['Risk', 'Hotspot'].includes(selectedGridLayer)}
+                    <p>{gridLayerLabels[selectedGridLayer]} 결과 레이어만 표시 중입니다.</p>
+                {:else if !enabledAnalysisIndicators().length}
+                    <p>선택된 분석 지표가 없습니다.</p>
+                {/if}
+                {#if enabledAnalysisIndicators().length && !enabledAnalysisIndicators().some((item) => item.geojson) && !riskGrid?.values?.length}
+                    <p>실제 공간 결과 레이어는 아직 연결 전입니다.</p>
+                {/if}
+            </div>
             {#if riskGrid?.stats}
-                <label class="risk-surface-summary">
-                    <input
-                        type="checkbox"
-                        checked={riskGridVisible}
-                        onchange={(event) => { riskGridVisible = event.currentTarget.checked; renderRiskGridLayer(); }}
-                    />
-                    <b>100m {gridLayerLabels[selectedGridLayer] || selectedGridLayer} 격자</b>
-                    <span>{riskGridVisible ? `${riskGrid.stats.validCells?.toLocaleString()}셀 표시 중` : '숨김'}</span>
-                    <div class="risk-ramp" aria-hidden="true"></div>
-                    <small>낮음 → 높음</small>
-                </label>
-                <div class="analysis-grid-tabs" aria-label="분석 격자 레이어">
-                    {#each gridLayers as layer}
+                <div class="parcel-candidate-panel" aria-label="필지 후보 도출 패널">
+                    <div class="parcel-candidate-tools">
                         <button
                             type="button"
-                            class:active={selectedGridLayer === layer}
-                            onclick={() => { selectedGridLayer = layer; onGridLayerChange(layer); renderRiskGridLayer(); }}
+                            disabled={parcelCandidateRunning || !hasVWorldApiKey()}
+                            onclick={deriveParcelCandidates}
                         >
-                            {layer}
+                            {parcelCandidateRunning ? '필지 분석 중...' : '필지 후보 도출'}
                         </button>
-                    {/each}
+                        <span>{parcelCandidateStatus}</span>
+                    </div>
+                    {#if parcelCandidateLegend.length}
+                        <section class="parcel-candidate-legend" aria-label="필지 후보 범례">
+                            <h3>후보지 범례</h3>
+                            <div class="candidate-legend-items">
+                                {#each parcelCandidateLegend as candidate}
+                                    <button
+                                        type="button"
+                                        class:priority={candidate.isPriority}
+                                        class:active={focusedParcelCandidateKey === parcelCandidateKey(candidate)}
+                                        onpointerdown={(event) => {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                            focusParcelCandidate(candidate, true);
+                                        }}
+                                        onclick={() => focusParcelCandidate(candidate, true)}
+                                    >
+                                        <i aria-hidden="true"></i>
+                                        <b>{candidate.name}</b>
+                                        <small>Risk {candidate.riskLabel} · {candidate.parcelLabel}필지 · {candidate.totalAreaLabel}</small>
+                                    </button>
+                                {/each}
+                            </div>
+                        </section>
+                    {/if}
                 </div>
-                <div class="parcel-candidate-tools">
-                    <button
-                        type="button"
-                        disabled={parcelCandidateRunning || !hasVWorldApiKey()}
-                        onclick={deriveParcelCandidates}
-                    >
-                        {parcelCandidateRunning ? '필지 분석 중...' : '필지 후보 도출'}
-                    </button>
-                    <span>{parcelCandidateStatus}</span>
-                </div>
-                {#if parcelCandidateLegend.length}
-                    <section class="parcel-candidate-legend" aria-label="필지 후보 범례">
-                        <h3>후보지 범례</h3>
-                        <div class="candidate-legend-items">
-                            {#each parcelCandidateLegend as candidate}
-                                <button
-                                    type="button"
-                                    class:priority={candidate.isPriority}
-                                    class:active={focusedParcelCandidateKey === parcelCandidateKey(candidate)}
-                                    onpointerdown={(event) => {
-                                        event.preventDefault();
-                                        event.stopPropagation();
-                                        focusParcelCandidate(candidate, true);
-                                    }}
-                                    onclick={() => focusParcelCandidate(candidate, true)}
-                                >
-                                    <i aria-hidden="true"></i>
-                                    <b>{candidate.name}</b>
-                                    <small>Risk {candidate.riskLabel} · {candidate.parcelLabel}필지 · {candidate.totalAreaLabel}</small>
-                                </button>
-                            {/each}
-                        </div>
-                    </section>
-                {/if}
-            {/if}
-            {#each analysisGroups.filter((group) => groupsForGridLayer(selectedGridLayer).includes(group)) as group}
-                {@const items = analysisIndicators.filter((item) => item.enabled && item.group === group)}
-                {#if items.length}
-                    <section>
-                        <h3>{group}</h3>
-                        <div class="legend-items">
-                            {#each items as item}
-                                <label>
-                                    <input
-                                        type="checkbox"
-                                        checked={visibleAnalysisLayerIds.includes(String(item.id))}
-                                        onchange={(event) => toggleAnalysisLayer(item.id, event.currentTarget.checked)}
-                                    />
-                                    <i style={`--legend-color:${item.color || '#64748b'}`}></i>
-                                    <b>{item.label}</b>
-                                    <small>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</small>
-                                </label>
-                            {/each}
-                        </div>
-                    </section>
-                {/if}
-            {/each}
-            {#if ['Risk', 'Hotspot'].includes(selectedGridLayer)}
-                <p>{gridLayerLabels[selectedGridLayer]} 결과 레이어만 표시 중입니다.</p>
-            {:else if !enabledAnalysisIndicators().length}
-                <p>선택된 분석 지표가 없습니다.</p>
-            {/if}
-            {#if enabledAnalysisIndicators().length && !enabledAnalysisIndicators().some((item) => item.geojson) && !riskGrid?.values?.length}
-                <p>실제 공간 결과 레이어는 아직 연결 전입니다.</p>
             {/if}
         </div>
     {/if}
@@ -1619,21 +1667,30 @@
         backdrop-filter: blur(10px);
     }
 
-    .analysis-legend {
+    .analysis-overlay-stack {
         position: absolute;
         left: .85rem;
         top: .85rem;
-        z-index: 500;
-        width: min(18rem, calc(100% - 2rem));
-        max-height: calc(100% - 9.5rem);
+        z-index: 640;
+        display: grid;
+        gap: .6rem;
+        width: min(19rem, calc(100% - 2rem));
+        max-height: calc(100% - 1.7rem);
+        pointer-events: none;
+    }
+
+    .analysis-legend {
+        width: 100%;
+        max-height: 16rem;
         overflow: auto;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .9rem;
-        background: rgb(255 255 255 / 93%);
+        background: rgb(255 255 255 / 96%);
         padding: .8rem .9rem;
-        box-shadow: 0 18px 36px rgb(15 23 42 / 14%);
+        box-shadow: 0 22px 46px rgb(15 23 42 / 18%);
         color: #0f172a;
         backdrop-filter: blur(10px);
+        pointer-events: auto;
     }
 
     .analysis-legend > strong {
@@ -1723,11 +1780,23 @@
     .parcel-candidate-tools {
         display: grid;
         gap: .35rem;
-        margin-top: .6rem;
         border: 1px solid rgb(185 28 28 / 16%);
         border-radius: .72rem;
         background: rgb(255 247 237 / 88%);
         padding: .58rem .62rem;
+    }
+
+    .parcel-candidate-panel {
+        width: 100%;
+        max-height: min(24rem, 45vh);
+        overflow: auto;
+        border: 1px solid rgb(185 28 28 / 14%);
+        border-radius: .9rem;
+        background: rgb(255 255 255 / 94%);
+        padding: .65rem;
+        box-shadow: 0 22px 46px rgb(15 23 42 / 16%);
+        backdrop-filter: blur(10px);
+        pointer-events: auto;
     }
 
     .parcel-candidate-tools button {
@@ -1755,8 +1824,10 @@
 
     .parcel-candidate-legend {
         margin-top: .65rem;
-        border-top: 1px solid rgb(185 28 28 / 14%);
-        padding-top: .55rem;
+        border: 1px solid rgb(185 28 28 / 16%);
+        border-radius: .75rem;
+        background: rgb(255 247 237 / 76%);
+        padding: .58rem;
     }
 
     .parcel-candidate-legend h3 {
@@ -1773,21 +1844,22 @@
 
     .candidate-legend-items button {
         display: grid;
-        grid-template-columns: .62rem 1fr;
-        gap: .12rem .42rem;
+        grid-template-columns: .72rem 1fr;
+        gap: .14rem .48rem;
         align-items: center;
-        border: 1px solid rgb(249 115 22 / 18%);
-        border-radius: .5rem;
-        background: rgb(255 247 237 / 82%);
+        border: 1px solid rgb(249 115 22 / 24%);
+        border-radius: .58rem;
+        background: rgb(255 255 255 / 90%);
         color: inherit;
-        padding: .4rem .48rem;
+        padding: .46rem .52rem;
         text-align: left;
         cursor: pointer;
+        box-shadow: 0 8px 16px rgb(124 45 18 / 7%);
     }
 
     .candidate-legend-items button.priority {
-        border-color: rgb(220 38 38 / 22%);
-        background: rgb(254 242 242 / 84%);
+        border-color: rgb(220 38 38 / 30%);
+        background: rgb(254 242 242 / 94%);
     }
 
     .candidate-legend-items button.active {
@@ -1797,8 +1869,8 @@
     }
 
     .candidate-legend-items i {
-        width: .58rem;
-        height: .58rem;
+        width: .66rem;
+        height: .66rem;
         border-radius: 999px;
         background: #f97316;
         box-shadow: 0 0 0 3px rgb(249 115 22 / 14%);
@@ -1812,15 +1884,15 @@
 
     .candidate-legend-items b {
         min-width: 0;
-        color: #334155;
-        font-size: .68rem;
+        color: #1e293b;
+        font-size: .72rem;
         font-weight: 900;
     }
 
     .candidate-legend-items small {
         grid-column: 2;
         color: #7c2d12;
-        font-size: .61rem;
+        font-size: .64rem;
         font-weight: 800;
         line-height: 1.28;
     }

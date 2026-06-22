@@ -191,12 +191,13 @@ declare global {
 const LEAFLET_CSS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 const LEAFLET_JS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
 const PRIORITY_HANDOFF_KEY = 'livinglabs.priorityManagementHandoff';
+const PRIORITY_HANDOFF_RECALL_KEY = `${PRIORITY_HANDOFF_KEY}:recall`;
 const RESPONSIBLE_HANDOFF_KEY = 'livinglabs.responsibleDepartmentHandoff';
 const LEAD_REVIEW_STATE_KEY = 'livinglabs.leadDepartmentPriorityReviewState';
 const LEAD_REQUEST_LIFECYCLE_KEY = 'livinglabs.leadDepartmentPriorityRequestLifecycle';
 const LEAD_ADAPTATION_PLACEMENT_KEY = 'livinglabs.leadDepartmentAdaptationPlacementDraft';
 const DEFAULT_LEAD_REGION_CODE = '41110';
-const responsibleDepartmentToolUrl = import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:4175/responsible-department';
+const responsibleDepartmentToolUrl = import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:5175/responsible-department';
 const initialSearchParams = new URLSearchParams(window.location.search);
 const initialPriorityRegionCode = initialSearchParams.get('regionCode') || DEFAULT_LEAD_REGION_CODE;
 const initialWorkspaceView = initialSearchParams.get('view') === 'workspace';
@@ -346,6 +347,18 @@ export function LeadDepartmentPrototypePage() {
     };
 
     const handlePriorityMessage = (event: MessageEvent) => {
+      if (isPriorityHandoffRecallMessage(event.data)) {
+        clearPriorityHandoffPayload();
+        applyPriorityPayload(null);
+        if (event.source && 'postMessage' in event.source) {
+          (event.source as Window).postMessage({
+            type: `${PRIORITY_HANDOFF_KEY}:recall:ack`,
+            packageId: (event.data as { packageId?: string }).packageId,
+          }, event.origin);
+        }
+        return;
+      }
+
       const payload = priorityPayloadFromMessage(event.data);
       if (!isDeliveredPriorityHandoff(payload)) return;
 
@@ -361,6 +374,11 @@ export function LeadDepartmentPrototypePage() {
     };
 
     const handlePriorityStorage = (event: StorageEvent) => {
+      if (event.key === PRIORITY_HANDOFF_RECALL_KEY || (event.key === PRIORITY_HANDOFF_KEY && event.newValue === null)) {
+        clearPriorityHandoffPayload();
+        applyPriorityPayload(null);
+        return;
+      }
       if (event.key !== PRIORITY_HANDOFF_KEY) return;
       applyPriorityPayload(readPriorityHandoffPayload());
     };
@@ -2726,6 +2744,10 @@ function clearPriorityHandoffPayload() {
   } catch {
     // Leave unrelated window.name values untouched.
   }
+}
+
+function isPriorityHandoffRecallMessage(data: unknown): data is { type: string; packageId?: string } {
+  return Boolean(data && typeof data === 'object' && (data as { type?: string }).type === `${PRIORITY_HANDOFF_KEY}:recall`);
 }
 
 function isDeliveredPriorityHandoff(payload?: PriorityHandoffPayload | null): payload is PriorityHandoffPayload {

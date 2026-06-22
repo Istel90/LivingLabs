@@ -190,6 +190,9 @@
     let detailCandidateKey = null;
     let handoffMessage = '필지 후보를 도출하면 주관부서 지원도구로 전달할 수 있습니다.';
     let handoffDialog = null;
+    let latestHandoffPackage = null;
+    let sentHandoffPackages = [];
+    let requestListOpen = false;
     let draftStorageStatus = '임시 저장 준비 중';
     let draftLoadComplete = false;
     let draftSaveTimer = null;
@@ -226,6 +229,12 @@
     $: handoffAlternativeCount = alternatives.filter((alternative) => (
         alternative.analysisResult?.parcelCandidates?.length
     )).length;
+    $: handoffStatusText = latestHandoffPackage
+        ? `전달됨 · ${latestHandoffPackage.alternativeCount}개 대안 · ${latestHandoffPackage.candidateCount}개 후보 · ${formatHandoffTime(latestHandoffPackage.deliveredAt)}`
+        : handoffCandidateCount
+            ? `${handoffAlternativeCount}개 대안 · ${handoffCandidateCount}개 후보 전달 가능`
+            : handoffMessage;
+    $: sentRequestCount = sentHandoffPackages.length;
 
     let cells = Array.from({ length: 108 }, (_, i) => {
         const x = i % 12;
@@ -314,14 +323,29 @@
             selectedCandidate,
             detailCandidateKey,
             activeLayer,
+            latestHandoffPackage,
+            sentHandoffPackages,
             alternatives
         };
+    }
+
+    function alternativeStatusLabel(alternative) {
+        const currentStatus = alternative?.status || '검토중';
+        if (currentStatus === '선정' || currentStatus === '검토완료') return currentStatus;
+
+        const hasAnalysis = Boolean(alternative?.analysisDone && alternative?.analysisResult);
+        if (!hasAnalysis) return '검토중';
+
+        const hasParcelCandidates = Array.isArray(alternative?.analysisResult?.parcelCandidates)
+            && alternative.analysisResult.parcelCandidates.length > 0;
+        return hasParcelCandidates ? '분석완료' : '리스크분석완료';
     }
 
     function normalizeDraftAlternative(alternative, index) {
         return {
             ...alternative,
             id: alternative?.id || `alternative-${index + 1}`,
+            status: alternativeStatusLabel(alternative),
             settings: alternative?.settings || null,
             analysisResult: alternative?.analysisResult || null,
             appliedIndicators: Array.isArray(alternative?.appliedIndicators) ? alternative.appliedIndicators : [],
@@ -343,6 +367,8 @@
         gridUnit = draft.gridUnit || gridUnit;
         dimensionWeights = { ...(draft.dimensionWeights || dimensionWeights) };
         mapSource = draft.mapSource || mapSource;
+        latestHandoffPackage = draft.latestHandoffPackage || null;
+        sentHandoffPackages = Array.isArray(draft.sentHandoffPackages) ? draft.sentHandoffPackages : (latestHandoffPackage ? [latestHandoffPackage] : []);
         alternatives = draft.alternatives.map(normalizeDraftAlternative);
         activeAlternative = Math.min(Math.max(0, Number(draft.activeAlternative) || 0), alternatives.length - 1);
         activeStep = Math.max(0, Number(draft.activeStep) || 0);
@@ -816,6 +842,22 @@
         return Number.isFinite(number) ? Math.round(number).toLocaleString() : '--';
     }
 
+    function formatHandoffTime(value) {
+        if (!value) return '전달 시각 기록 없음';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '전달 시각 기록 없음';
+        return date.toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function rememberHandoffPackage(packageRecord) {
+        if (!packageRecord?.packageId) return;
+        latestHandoffPackage = packageRecord;
+        sentHandoffPackages = [
+            packageRecord,
+            ...sentHandoffPackages.filter((item) => item.packageId !== packageRecord.packageId)
+        ].slice(0, 20);
+    }
+
     function candidateTotalAreaLabel(candidate) {
         if (candidate?.totalAreaLabel) return candidate.totalAreaLabel;
         const area = Number(candidate?.totalAreaSqm);
@@ -923,7 +965,7 @@
                     selectedCandidate: 0,
                     detailCandidateKey: null,
                     activeLayer,
-                    status: alternative.status === '선정' ? alternative.status : '분석완료'
+                    status: alternative.status === '선정' ? alternative.status : '리스크분석완료'
                 }
                 : alternative
             );
@@ -970,7 +1012,12 @@
                 analysisResult: nextAnalysisResult,
                 parcelCandidateMessage: nextMessage,
                 selectedCandidate: 0,
-                detailCandidateKey: nextDetailKey
+                detailCandidateKey: nextDetailKey,
+                status: alternative.status === '선정'
+                    ? alternative.status
+                    : nextCandidates.length
+                        ? '분석완료'
+                        : '리스크분석완료'
             }
             : alternative
         );
@@ -1186,6 +1233,163 @@
         });
     }
 
+    function relayRecallToLeadDepartment(packageId) {
+        if (typeof window === 'undefined' || typeof document === 'undefined') return Promise.resolve(false);
+
+        return new Promise((resolve) => {
+            let settled = false;
+            const targetUrl = new URL(leadDepartmentToolUrl, window.location.href);
+            targetUrl.searchParams.set('handoffRelay', 'priority-management');
+            targetUrl.searchParams.set('regionCode', regionCode);
+
+            const iframe = document.createElement('iframe');
+            iframe.title = 'priority-management-handoff-recall';
+            iframe.setAttribute('aria-hidden', 'true');
+            iframe.style.position = 'fixed';
+            iframe.style.width = '1px';
+            iframe.style.height = '1px';
+            iframe.style.left = '-10000px';
+            iframe.style.top = '-10000px';
+            iframe.style.opacity = '0';
+            iframe.style.pointerEvents = 'none';
+
+            const cleanup = () => {
+                window.removeEventListener('message', handleAck);
+                window.setTimeout(() => iframe.remove(), 250);
+            };
+            const finish = (ok) => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                resolve(ok);
+            };
+            const send = () => {
+                try {
+                    iframe.contentWindow?.postMessage({
+                        type: `${DEPARTMENT_HANDOFF_KEY}:recall`,
+                        packageId
+                    }, targetUrl.origin);
+                } catch {
+                    // The timeout below will report a relay miss.
+                }
+            };
+            function handleAck(event) {
+                if (event.origin !== targetUrl.origin) return;
+                if (event.data?.type !== `${DEPARTMENT_HANDOFF_KEY}:recall:ack`) return;
+                if (packageId && event.data?.packageId !== packageId) return;
+                finish(true);
+            }
+
+            window.addEventListener('message', handleAck);
+            iframe.addEventListener('load', () => {
+                send();
+                window.setTimeout(send, 200);
+            });
+            iframe.src = targetUrl.toString();
+            document.body.appendChild(iframe);
+            window.setTimeout(() => finish(false), 2500);
+        });
+    }
+
+    function clearStoredDepartmentHandoff(packageId = latestHandoffPackage?.packageId) {
+        if (typeof window === 'undefined') return;
+
+        try {
+            window.localStorage.removeItem(DEPARTMENT_HANDOFF_KEY);
+            window.localStorage.setItem(`${DEPARTMENT_HANDOFF_KEY}:recall`, JSON.stringify({
+                packageId,
+                recalledAt: new Date().toISOString()
+            }));
+        } catch {
+            // Ignore storage permission issues in demo environments.
+        }
+        try {
+            window.sessionStorage.removeItem(DEPARTMENT_HANDOFF_KEY);
+        } catch {
+            // Ignore storage permission issues in demo environments.
+        }
+        try {
+            const namedPayload = JSON.parse(window.name || '{}');
+            if (namedPayload?.type === DEPARTMENT_HANDOFF_KEY) window.name = '';
+        } catch {
+            // Window name may contain non-JSON data from another page.
+        }
+    }
+
+    async function recallDepartmentHandoff(packageRecord = latestHandoffPackage) {
+        const recalledPackageId = packageRecord?.packageId;
+        clearStoredDepartmentHandoff(recalledPackageId);
+        const relayOk = await relayRecallToLeadDepartment(recalledPackageId);
+        sentHandoffPackages = recalledPackageId
+            ? sentHandoffPackages.filter((item) => item.packageId !== recalledPackageId)
+            : [];
+        latestHandoffPackage = sentHandoffPackages[0] || null;
+        requestListOpen = Boolean(sentHandoffPackages.length && requestListOpen);
+        handoffDialog = null;
+        handoffMessage = recalledPackageId
+            ? relayOk
+                ? `검토 요청 ${recalledPackageId}을 회수했습니다. 주관부서 화면에서도 요청이 비워집니다.`
+                : `검토 요청 ${recalledPackageId}을 회수했습니다. 주관부서 화면이 열려 있으면 새로고침해 주세요.`
+            : '저장된 검토 요청을 비웠습니다. 필요하면 다시 전달하세요.';
+        schedulePriorityDraftSave();
+    }
+
+    async function recallAllDepartmentHandoffs() {
+        clearStoredDepartmentHandoff(null);
+        const relayOk = await relayRecallToLeadDepartment(null);
+        sentHandoffPackages = [];
+        latestHandoffPackage = null;
+        requestListOpen = false;
+        handoffDialog = null;
+        handoffMessage = relayOk
+            ? '주관부서 지원도구에 남아 있는 검토 요청을 모두 비웠습니다.'
+            : '로컬 요청 이력을 비웠습니다. 주관부서 화면이 열려 있으면 새로고침해 주세요.';
+        schedulePriorityDraftSave();
+    }
+
+    function resetActiveAlternative() {
+        const nextMessage = '현재 대안의 Risk 분석 결과와 필지 후보를 초기화했습니다. 지표 설정을 확인한 뒤 다시 실행하세요.';
+
+        analysisResult = null;
+        appliedIndicators = [];
+        analysisDone = false;
+        analysisMessage = nextMessage;
+        parcelCandidateMessage = 'Risk 분석 후 지도에서 필지 후보를 도출하세요.';
+        selectedCandidate = 0;
+        detailCandidateKey = null;
+        focusedCandidate = null;
+        activeLayer = 'Risk';
+        activeStep = Math.min(activeStep, 2);
+
+        persistAlternative(activeAlternative, {
+            status: '검토중'
+        });
+        handoffMessage = latestHandoffPackage
+            ? '현재 대안을 초기화했습니다. 이미 전달한 요청은 필요하면 별도로 회수하세요.'
+            : '현재 대안을 초기화했습니다. Risk 분석 후 다시 전달할 수 있습니다.';
+        schedulePriorityDraftSave();
+    }
+
+    function resetAllAlternatives() {
+        handoffDialog = null;
+        activeAlternative = 0;
+        const baseAlternative = {
+            ...createDefaultAlternative(0),
+            settings: {
+                gridUnit,
+                dimensionWeights: { ...dimensionWeights },
+                indicators: cloneIndicatorsForAlternative(indicators)
+            },
+            analysisMessage: '전체 대안을 초기화했습니다. 지표 설정을 확인한 뒤 Risk 분석을 다시 실행하세요.'
+        };
+        alternatives = [baseAlternative];
+        loadAlternative(0);
+        handoffMessage = sentHandoffPackages.length
+            ? '전체 대안을 초기화했습니다. 기존 검토 요청은 보낸 요청 관리에서 회수할 수 있습니다.'
+            : '전체 대안을 초기화했습니다. 새 대안을 구성한 뒤 다시 전달할 수 있습니다.';
+        schedulePriorityDraftSave();
+    }
+
     async function handoffToDepartmentPlatform() {
         const activeSnapshot = {
             ...alternatives[activeAlternative],
@@ -1219,6 +1423,16 @@
         });
         const relayOk = await relayHandoffToLeadDepartment(deliveredPayload);
         const deliveredAlternativeCount = deliveredPayload.alternatives.filter((alternative) => alternative.candidates?.length).length;
+        const packageRecord = {
+            packageId: deliveredPayload.packageId,
+            deliveredAt,
+            alternativeCount: deliveredAlternativeCount,
+            candidateCount: deliveredPayload.candidates.length,
+            region: deliveredPayload.region,
+            hazardLabel: deliveredPayload.hazardLabel,
+            relayOk
+        };
+        rememberHandoffPackage(packageRecord);
         handoffMessage = relayOk
             ? `${deliveredAlternativeCount}개 대안 · ${deliveredPayload.candidates.length}개 후보를 주관부서 지원도구 검토 요청으로 전달했습니다.`
             : `${deliveredAlternativeCount}개 대안 · ${deliveredPayload.candidates.length}개 후보를 로컬에 저장했습니다. 주관부서 페이지가 열려 있지 않으면 새로고침 후 확인하세요.`;
@@ -1231,6 +1445,7 @@
             packageId: deliveredPayload.packageId,
             relayOk
         };
+        schedulePriorityDraftSave();
     }
 
     function addIndicator() {
@@ -1269,6 +1484,25 @@
         ];
         activeAlternative = nextIndex;
         loadAlternative(nextIndex);
+        schedulePriorityDraftSave();
+    }
+
+    function deleteActiveAlternative() {
+        if (alternatives.length <= 1) {
+            resetActiveAlternative();
+            handoffMessage = '마지막 대안은 삭제하지 않고 내용만 초기화했습니다.';
+            return;
+        }
+
+        const deletedAlternative = alternatives[activeAlternative];
+        const nextAlternatives = alternatives.filter((_, index) => index !== activeAlternative);
+        const nextIndex = Math.min(activeAlternative, nextAlternatives.length - 1);
+        alternatives = nextAlternatives;
+        activeAlternative = nextIndex;
+        loadAlternative(nextIndex);
+        handoffMessage = latestHandoffPackage
+            ? `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다. 이미 전달한 요청은 필요하면 별도로 회수하세요.`
+            : `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다.`;
         schedulePriorityDraftSave();
     }
 
@@ -1348,6 +1582,38 @@
                     <label>분석 대상 지역<input value={region} readonly /></label>
                     <label>행정구역 코드<input value={regionCode} readonly /></label>
                     <small>{config.sampleNotice}</small>
+                    <div class="request-manager">
+                        <button type="button" class="request-manager-toggle" onclick={() => requestListOpen = !requestListOpen}>
+                            보낸 요청 관리
+                            <span>{sentRequestCount}</span>
+                        </button>
+                        {#if requestListOpen}
+                            <div class="request-manager-panel">
+                                <div>
+                                    <strong>보낸 검토 요청</strong>
+                                    <small>초기화 후에도 이 목록에서 요청을 회수할 수 있습니다.</small>
+                                </div>
+                                {#if sentHandoffPackages.length}
+                                    <ul>
+                                        {#each sentHandoffPackages as request}
+                                            <li>
+                                                <div>
+                                                    <b>{request.hazardLabel || config.label} · {request.region || region}</b>
+                                                    <span>{request.alternativeCount || 0}개 대안 · {request.candidateCount || 0}개 후보 · {formatHandoffTime(request.deliveredAt)}</span>
+                                                    <small>{request.packageId}</small>
+                                                </div>
+                                                <button type="button" onclick={() => recallDepartmentHandoff(request)}>회수</button>
+                                            </li>
+                                        {/each}
+                                    </ul>
+                                    <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>전체 요청 회수</button>
+                                {:else}
+                                    <p>현재 도구에 기록된 요청은 없습니다. 주관부서 화면에 이전 요청이 남아 있으면 아래 버튼으로 비울 수 있습니다.</p>
+                                    <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>주관부서 요청 비우기</button>
+                                {/if}
+                            </div>
+                        {/if}
+                    </div>
                 </div>
             </section>
 
@@ -1421,17 +1687,23 @@
                             <div><h2>{alternatives[activeAlternative]?.name} 분석 지도</h2><p>{alternatives[activeAlternative]?.description} · {region} · 행정구역 코드 {regionCode}</p></div>
                             <div class="map-toolbar">
                                 <div class="handoff-actions">
-                                    <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 전달</button>
-                                    <span class="handoff-note">{handoffCandidateCount ? `${handoffAlternativeCount}개 대안 · ${handoffCandidateCount}개 후보 전달 가능` : handoffMessage}</span>
+                                    <div class="handoff-button-row">
+                                        <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 전달</button>
+                                        <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 회수</button>
+                                        <button class="secondary-action muted" onclick={resetAllAlternatives}>전체 대안 초기화</button>
+                                    </div>
+                                    <span class="handoff-note">{handoffStatusText}</span>
                                 </div>
                                 <div class="alternative-tabs" aria-label="중점관리구역 대안">
                                     {#each alternatives as alternative, index}
                                         <button class:active={activeAlternative === index} onclick={() => switchAlternative(index)}>
                                             <span>{alternative.name}</span>
-                                            <small>{alternative.status}</small>
+                                            <small>{alternativeStatusLabel(alternative)}</small>
                                         </button>
                                     {/each}
                                     <button class="add-alt" onclick={addAlternative}>+</button>
+                                    <button class="reset-alt" onclick={resetActiveAlternative} title="현재 대안 초기화">초기화</button>
+                                    <button class="delete-alt" onclick={deleteActiveAlternative} title="현재 대안 삭제">삭제</button>
                                 </div>
                             </div>
                         </div>
@@ -1542,7 +1814,10 @@
                 <div><dt>후보지</dt><dd>{handoffDialog.candidateCount}개</dd></div>
                 <div><dt>패키지</dt><dd>{handoffDialog.packageId}</dd></div>
             </dl>
-            <button type="button" onclick={() => handoffDialog = null}>확인</button>
+            <div class="handoff-modal-actions">
+                <button type="button" class="secondary-modal-button" onclick={recallDepartmentHandoff}>요청 회수</button>
+                <button type="button" onclick={() => handoffDialog = null}>확인</button>
+            </div>
         </section>
     </div>
 {/if}
