@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { request as httpsRequest } from 'node:https';
+import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
@@ -11,7 +11,8 @@ const env = {};
 try {
   const content = readFileSync(envPath, 'utf8');
   content.split(/\r?\n/).forEach((line) => {
-    const match = line.match(/^([^#=\s]+)=(.*)$/);
+    const cleanLine = line.replace(/^\uFEFF/, '');
+    const match = cleanLine.match(/^([^#=\s]+)=(.*)$/);
     if (match) env[match[1]] = match[2].trim();
   });
 } catch {
@@ -20,6 +21,8 @@ try {
 
 const apiKey = env.VITE_VWORLD_API_KEY || '';
 const domain = env.VITE_VWORLD_DOMAIN || 'http://127.0.0.1:4175/';
+const allowInsecureTls = env.VWORLD_ALLOW_INSECURE_TLS === 'true' || process.env.VWORLD_ALLOW_INSECURE_TLS === 'true';
+const httpsAgent = allowInsecureTls ? new HttpsAgent({ rejectUnauthorized: false }) : undefined;
 const port = Number(process.env.VWORLD_PROXY_PORT || process.argv.find((arg) => arg.startsWith('--port='))?.split('=')[1] || 4176);
 
 function send(response, status, body, contentType = 'application/json; charset=utf-8') {
@@ -60,7 +63,7 @@ function fetchVWorldData(searchParams) {
     url.searchParams.set('key', apiKey);
     url.searchParams.set('domain', domain);
 
-    const request = httpsRequest(url, { method: 'GET', timeout: 20000 }, (upstream) => {
+    const request = httpsRequest(url, { method: 'GET', timeout: 20000, agent: httpsAgent }, (upstream) => {
       let data = '';
       upstream.setEncoding('utf8');
       upstream.on('data', (chunk) => {
