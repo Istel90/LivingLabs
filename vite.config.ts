@@ -9,6 +9,21 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 4173,
     strictPort: true,
+    proxy: {
+      '/priority-handoff': 'http://127.0.0.1:4176',
+      '/responsible-handoff': 'http://127.0.0.1:4176',
+      '/responsible-review-response': 'http://127.0.0.1:4176',
+      '/vworld-data': 'http://127.0.0.1:4176',
+    },
+    watch: {
+      ignored: [
+        '**/riskmap-core-main/.svelte-kit/**',
+        '**/riskmap-core-main/build/**',
+        '**/riskmap-core-main/dist/**',
+        '**/Survey platform for collaboration/dist/**',
+        '**/dist/**',
+      ],
+    },
   },
   plugins: [
     react(),

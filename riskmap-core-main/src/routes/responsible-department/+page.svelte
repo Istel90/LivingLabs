@@ -1,9 +1,14 @@
 <script>
     import ResponsibleDepartmentTool from '$lib/tools/ResponsibleDepartmentTool.svelte';
+
+    let { data } = $props();
 </script>
 
 <svelte:head>
     <title>사업소관부서 지원도구</title>
 </svelte:head>
 
-<ResponsibleDepartmentTool />
+<ResponsibleDepartmentTool
+    initialHandoff={data?.initialResponsibleHandoff || null}
+    initialWorkspace={Boolean(data?.initialWorkspace)}
+/>

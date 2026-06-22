@@ -192,12 +192,16 @@ const LEAFLET_CSS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 const LEAFLET_JS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
 const PRIORITY_HANDOFF_KEY = 'livinglabs.priorityManagementHandoff';
 const PRIORITY_HANDOFF_RECALL_KEY = `${PRIORITY_HANDOFF_KEY}:recall`;
+const PRIORITY_HANDOFF_CHANNEL = 'livinglabs.priorityManagementHandoffChannel';
+const PRIORITY_HANDOFF_INBOX_URL = import.meta.env.VITE_PRIORITY_HANDOFF_INBOX_URL || '/priority-handoff';
+const RESPONSIBLE_HANDOFF_INBOX_URL = import.meta.env.VITE_RESPONSIBLE_HANDOFF_INBOX_URL || '/responsible-handoff';
+const RESPONSIBLE_REVIEW_INBOX_URL = import.meta.env.VITE_RESPONSIBLE_REVIEW_INBOX_URL || '/responsible-review-response';
 const RESPONSIBLE_HANDOFF_KEY = 'livinglabs.responsibleDepartmentHandoff';
 const LEAD_REVIEW_STATE_KEY = 'livinglabs.leadDepartmentPriorityReviewState';
 const LEAD_REQUEST_LIFECYCLE_KEY = 'livinglabs.leadDepartmentPriorityRequestLifecycle';
 const LEAD_ADAPTATION_PLACEMENT_KEY = 'livinglabs.leadDepartmentAdaptationPlacementDraft';
 const DEFAULT_LEAD_REGION_CODE = '41110';
-const responsibleDepartmentToolUrl = import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:5175/responsible-department';
+const responsibleDepartmentToolUrl = import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:4175/responsible-department';
 const initialSearchParams = new URLSearchParams(window.location.search);
 const initialPriorityRegionCode = initialSearchParams.get('regionCode') || DEFAULT_LEAD_REGION_CODE;
 const initialWorkspaceView = initialSearchParams.get('view') === 'workspace';
@@ -308,6 +312,7 @@ export function LeadDepartmentPrototypePage() {
   const [candidateReviewState, setCandidateReviewState] = useState<CandidateReviewState>({});
   const [priorityRequestLifecycle, setPriorityRequestLifecycle] = useState<PriorityRequestLifecycle>({});
   const [responsibleHandoffMessage, setResponsibleHandoffMessage] = useState('검토한 대안을 사업소관부서 지원도구로 전달할 수 있습니다.');
+  const [responsibleReviewResponse, setResponsibleReviewResponse] = useState<any | null>(null);
   const [placementDraftMessage, setPlacementDraftMessage] = useState('지도에 배치한 사업 공간배치 제안을 저장하거나 불러올 수 있습니다.');
   const [workspaceView, setWorkspaceView] = useState(initialWorkspaceView);
   const noticeShownRef = useRef(false);
@@ -346,14 +351,21 @@ export function LeadDepartmentPrototypePage() {
       }
     };
 
+    const applyPriorityRecall = (packageId?: string, regionCode?: string) => {
+      markPriorityHandoffRecalled(packageId, regionCode);
+      clearPriorityHandoffPayload();
+      applyPriorityPayload(null);
+    };
+
     const handlePriorityMessage = (event: MessageEvent) => {
       if (isPriorityHandoffRecallMessage(event.data)) {
-        clearPriorityHandoffPayload();
-        applyPriorityPayload(null);
+        const recall = event.data as { packageId?: string; regionCode?: string };
+        applyPriorityRecall(recall.packageId, recall.regionCode);
         if (event.source && 'postMessage' in event.source) {
           (event.source as Window).postMessage({
             type: `${PRIORITY_HANDOFF_KEY}:recall:ack`,
-            packageId: (event.data as { packageId?: string }).packageId,
+            packageId: recall.packageId,
+            regionCode: recall.regionCode,
           }, event.origin);
         }
         return;
@@ -364,6 +376,7 @@ export function LeadDepartmentPrototypePage() {
 
       persistPriorityHandoffPayload(payload);
       applyPriorityPayload(payload);
+      broadcastPriorityPayload(payload);
 
       if (event.source && 'postMessage' in event.source) {
         (event.source as Window).postMessage({
@@ -374,17 +387,45 @@ export function LeadDepartmentPrototypePage() {
     };
 
     const handlePriorityStorage = (event: StorageEvent) => {
-      if (event.key === PRIORITY_HANDOFF_RECALL_KEY || (event.key === PRIORITY_HANDOFF_KEY && event.newValue === null)) {
-        clearPriorityHandoffPayload();
-        applyPriorityPayload(null);
+      if ((event.key === PRIORITY_HANDOFF_RECALL_KEY && event.newValue) || (event.key === PRIORITY_HANDOFF_KEY && event.newValue === null)) {
+        applyPriorityRecall();
         return;
       }
       if (event.key !== PRIORITY_HANDOFF_KEY) return;
       applyPriorityPayload(readPriorityHandoffPayload());
     };
 
+    const recallFromUrl = priorityRecallFromUrl();
+    if (recallFromUrl) {
+      applyPriorityRecall(recallFromUrl.packageId, recallFromUrl.regionCode);
+      broadcastPriorityRecall(recallFromUrl.packageId, recallFromUrl.regionCode);
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+          type: `${PRIORITY_HANDOFF_KEY}:recall:ack`,
+          packageId: recallFromUrl.packageId,
+          regionCode: recallFromUrl.regionCode,
+        }, '*');
+      }
+    }
+
     setPriorityRequestLifecycle(readPriorityRequestLifecycle());
     applyPriorityPayload(readPriorityHandoffPayload());
+
+    const handoffChannel = createPriorityHandoffChannel();
+    if (handoffChannel) {
+      handoffChannel.onmessage = (event) => {
+        if (isPriorityHandoffRecallMessage(event.data)) {
+          const recall = event.data as { packageId?: string; regionCode?: string };
+          applyPriorityRecall(recall.packageId, recall.regionCode);
+          return;
+        }
+
+        const payload = priorityPayloadFromMessage(event.data);
+        if (!isDeliveredPriorityHandoff(payload)) return;
+        persistPriorityHandoffPayload(payload);
+        applyPriorityPayload(payload);
+      };
+    }
 
     try {
       const savedState = window.localStorage.getItem(LEAD_REVIEW_STATE_KEY);
@@ -398,6 +439,7 @@ export function LeadDepartmentPrototypePage() {
     return () => {
       window.removeEventListener('message', handlePriorityMessage);
       window.removeEventListener('storage', handlePriorityStorage);
+      handoffChannel?.close();
     };
   }, []);
 
@@ -416,6 +458,57 @@ export function LeadDepartmentPrototypePage() {
       // Request lifecycle is local UI state; the request payload still remains readable.
     }
   }, [priorityRequestLifecycle]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadInboxPayload = async () => {
+      const payload = await fetchPriorityHandoffFromInbox(selectedSgg);
+      if (cancelled || !isDeliveredPriorityHandoff(payload)) return;
+      persistPriorityHandoffPayload(payload);
+      setPriorityHandoff((current) => (
+        current?.packageId === payload.packageId ? current : payload
+      ));
+      const key = priorityRequestKey(payload);
+      if (key) {
+        setPriorityRequestLifecycle((current) => ({
+          ...current,
+          [key]: {
+            status: current[key]?.status && current[key].status !== '보관' ? current[key].status : '신규',
+            updatedAt: current[key]?.updatedAt ?? new Date().toISOString(),
+          },
+        }));
+      }
+      if (payload.regionCode && payload.regionCode !== selectedSgg) {
+        setSelectedSido(payload.regionCode.slice(0, 2));
+        setSelectedSgg(payload.regionCode);
+      }
+    };
+
+    loadInboxPayload();
+    const timer = window.setInterval(loadInboxPayload, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [selectedSgg]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadResponsibleResponse = async () => {
+      const payload = await fetchResponsibleReviewResponse(selectedSgg);
+      if (cancelled) return;
+      setResponsibleReviewResponse(payload);
+    };
+
+    loadResponsibleResponse();
+    const timer = window.setInterval(loadResponsibleResponse, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [selectedSgg]);
 
   const availableSidos = useMemo(() => {
     if (!snapshot) return [];
@@ -489,9 +582,12 @@ export function LeadDepartmentPrototypePage() {
   const activePriorityRequestStatus = activePriorityRequestKey
     ? priorityRequestLifecycle[activePriorityRequestKey]?.status ?? '신규'
     : '신규';
+  const activePriorityRequestInInbox = activePriorityRequestStatus !== '보관' && activePriorityRequestStatus !== '전달완료';
+  const inboxPriorityHandoff = activePriorityRequestInInbox ? activeRegionHandoff : null;
   const priorityAlternatives = useMemo(() => {
+    if (!activePriorityRequestInInbox) return [];
     return (activeRegionHandoff?.alternatives ?? []).filter((alternative) => alternative.candidates?.length);
-  }, [activeRegionHandoff]);
+  }, [activePriorityRequestInInbox, activeRegionHandoff]);
   const priorityCandidateCount = useMemo(() => {
     return priorityAlternatives.reduce((sum, alternative) => sum + (alternative.candidates?.length ?? 0), 0);
   }, [priorityAlternatives]);
@@ -737,6 +833,8 @@ export function LeadDepartmentPrototypePage() {
 
   const clearActivePriorityRequest = () => {
     const keyToRemove = activePriorityRequestKey;
+    markPriorityHandoffRecalled(activeRegionHandoff?.packageId, activeRegionHandoff?.regionCode ?? selectedSgg);
+    broadcastPriorityRecall(activeRegionHandoff?.packageId, activeRegionHandoff?.regionCode ?? selectedSgg);
     clearPriorityHandoffPayload();
     setPriorityHandoff(null);
     setPriorityReviewOpen(false);
@@ -756,7 +854,7 @@ export function LeadDepartmentPrototypePage() {
     window.history.replaceState({}, '', nextUrl.toString());
   };
 
-  const handoffToResponsibleDepartment = () => {
+  const handoffToResponsibleDepartment = async () => {
     if (!activeRegionHandoff || !priorityAlternatives.length) {
       setResponsibleHandoffMessage('사업소관부서로 전달할 중점관리구역 대안이 없습니다.');
       return;
@@ -817,6 +915,11 @@ export function LeadDepartmentPrototypePage() {
       window.sessionStorage.setItem(RESPONSIBLE_HANDOFF_KEY, serialized);
     }
     window.name = JSON.stringify({ type: RESPONSIBLE_HANDOFF_KEY, payload });
+    const inboxOk = await saveResponsibleHandoffToInbox(payload);
+    if (!inboxOk) {
+      setResponsibleHandoffMessage('현재 브라우저에는 저장했지만 사업소관부서 인박스 저장에 실패했습니다. 4176 프록시 상태를 확인하세요.');
+      return;
+    }
     setResponsibleHandoffMessage(
       adaptationPlacements.length
         ? `${alternatives.length}개 선택 대안 · ${candidateCount}개 후보 · 사업 공간배치 제안 ${adaptationPlacements.length}건을 사업소관부서 지원도구로 전달했습니다.`
@@ -853,10 +956,11 @@ export function LeadDepartmentPrototypePage() {
         availableSggs={availableSggs}
         onSidoChange={handleSidoChange}
         onSggChange={setSelectedSgg}
-        handoff={activeRegionHandoff}
+        handoff={inboxPriorityHandoff}
         alternativeCount={priorityAlternatives.length}
         candidateCount={priorityCandidateCount}
         onEnter={() => enterWorkspace(false)}
+        onClearRequest={clearActivePriorityRequest}
       />
     );
   }
@@ -891,7 +995,7 @@ export function LeadDepartmentPrototypePage() {
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-extrabold text-slate-900">알림</h2>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-extrabold text-slate-500">
-                {priorityCandidateCount ? '1건' : '0건'}
+                {(priorityCandidateCount ? 1 : 0) + (responsibleReviewResponse ? 1 : 0)}건
               </span>
             </div>
             <p className="mt-1 truncate text-[11px] font-bold text-slate-500">
@@ -918,16 +1022,22 @@ export function LeadDepartmentPrototypePage() {
             </button>
 
             <button
-              className="mt-1.5 flex w-full items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2 py-2 text-left text-slate-500"
-              disabled
+              className={`mt-1.5 flex w-full items-center gap-2 rounded-lg border px-2 py-2 text-left ${responsibleReviewResponse ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : 'border-slate-100 bg-slate-50 text-slate-500'}`}
+              disabled={!responsibleReviewResponse}
+              onClick={() => setEvaluationPanelOpen(true)}
             >
-              <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-slate-200 text-slate-500">
+              <span className={`grid size-7 shrink-0 place-items-center rounded-lg ${responsibleReviewResponse ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
                 <Route className="size-3.5" />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs font-extrabold">사업소관부서 요청</span>
-                <span className="block truncate text-[11px] font-bold opacity-80">대기 요청 없음</span>
+                <span className="block truncate text-[11px] font-bold opacity-80">
+                  {responsibleReviewResponse ? '수정 검토 요청 1건' : '대기 요청 없음'}
+                </span>
               </span>
+              {responsibleReviewResponse ? (
+                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-extrabold text-emerald-700">열기</span>
+              ) : null}
             </button>
           </section>
 
@@ -1272,13 +1382,13 @@ export function LeadDepartmentPrototypePage() {
 
         <aside className="overflow-auto rounded-lg bg-white p-3 shadow-lg">
           <PriorityReviewRequestSection
-            hasRequest={Boolean(activeRegionHandoff && priorityCandidateCount)}
+            hasRequest={Boolean(inboxPriorityHandoff && priorityCandidateCount)}
             open={priorityReviewOpen}
             alternativeCount={priorityAlternatives.length}
             candidateCount={priorityCandidateCount}
-            regionName={activeRegionHandoff?.region ?? selectedRegionName}
-            projectName={activeRegionHandoff?.projectName}
-            hazardLabel={activeRegionHandoff?.hazardLabel}
+            regionName={inboxPriorityHandoff?.region ?? selectedRegionName}
+            projectName={inboxPriorityHandoff?.projectName}
+            hazardLabel={inboxPriorityHandoff?.hazardLabel}
             requestStatus={activePriorityRequestStatus}
             onToggle={() => {
               if (!priorityCandidateCount) return;
@@ -1295,9 +1405,9 @@ export function LeadDepartmentPrototypePage() {
               startPriorityReview();
             }}
           >
-            {activeRegionHandoff && activePriorityAlternative && (
+            {inboxPriorityHandoff && activePriorityAlternative && (
               <PriorityAlternativeReviewPanel
-                handoff={activeRegionHandoff}
+                handoff={inboxPriorityHandoff}
                 alternatives={priorityAlternatives}
                 activeAlternative={activePriorityAlternative}
                 activeCandidate={activePriorityCandidate}
@@ -1403,9 +1513,9 @@ export function LeadDepartmentPrototypePage() {
         />
       )}
 
-      {priorityNoticeOpen && activeRegionHandoff && (
+      {priorityNoticeOpen && inboxPriorityHandoff && (
         <PriorityReviewNotice
-          handoff={activeRegionHandoff}
+          handoff={inboxPriorityHandoff}
           alternativeCount={priorityAlternatives.length}
           candidateCount={priorityCandidateCount}
           onStart={startPriorityReview}
@@ -1428,6 +1538,7 @@ function LeadDepartmentEntryPage({
   alternativeCount,
   candidateCount,
   onEnter,
+  onClearRequest,
 }: {
   selectedSido: string;
   selectedSgg: string;
@@ -1440,6 +1551,7 @@ function LeadDepartmentEntryPage({
   alternativeCount: number;
   candidateCount: number;
   onEnter: () => void;
+  onClearRequest: () => void;
 }) {
   return (
     <main className="min-h-screen bg-[#10233f] text-slate-900">
@@ -1535,9 +1647,14 @@ function LeadDepartmentEntryPage({
           )}
 
           {candidateCount ? (
-            <p className="mt-4 rounded-xl bg-orange-100 px-4 py-3 text-xs font-extrabold leading-5 text-orange-800">
+            <div className="mt-4 grid gap-2">
+            <p className="rounded-xl bg-orange-100 px-4 py-3 text-xs font-extrabold leading-5 text-orange-800">
               주관부서 도구 입장 후 지도와 평가 패널에서 요청 내용을 검토합니다.
             </p>
+            <button type="button" className="rounded-lg border border-orange-200 bg-white px-4 py-2.5 text-xs font-extrabold text-rose-600 shadow-sm transition hover:border-rose-200 hover:bg-rose-50" onClick={onClearRequest}>
+              현재 검토 요청 비우기
+            </button>
+            </div>
           ) : null}
         </div>
       </section>
@@ -1691,6 +1808,16 @@ function LeadDepartmentMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
+    const pointerEvents = editMode === 'add' ? 'none' : 'auto';
+    ['priorityCandidate', 'priorityCandidateMarker'].forEach((paneName) => {
+      const pane = map.getPane?.(paneName);
+      if (pane) pane.style.pointerEvents = pointerEvents;
+    });
+  }, [editMode, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
     Object.entries(baseLayersRef.current).forEach(([id, layer]) => {
       const isVisible = map.hasLayer(layer);
       if (id === baseMap && !isVisible) layer.addTo(map);
@@ -1714,6 +1841,7 @@ function LeadDepartmentMap({
     if (!map || !mapReady) return;
 
     const handleMapClick = (event: any) => {
+      if (editModeRef.current !== 'add') return;
       const project = activeAdaptationProjectRef.current;
       if (!project) return;
       const lat = Number(event.latlng?.lat);
@@ -1852,6 +1980,7 @@ function LeadDepartmentMap({
       const candidateLayer = createPriorityCandidateMapLayer(L, hydratedCandidate, true);
       if (!candidateLayer) return;
       candidateLayer.on?.('click', (event: any) => {
+        if (editModeRef.current === 'add') return;
         L.DomEvent?.stopPropagation?.(event);
         onSelectPriorityCandidate(candidateKey(candidate));
       });
@@ -1922,6 +2051,13 @@ function LeadDepartmentMap({
               <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-extrabold text-slate-600">
                 배치 {activeProjectPlacements.length.toLocaleString()}개
               </span>
+              <button
+                type="button"
+                className={`rounded-lg px-3 py-2 text-xs font-extrabold ${editMode === 'add' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-700'}`}
+                onClick={() => setEditMode(editMode === 'add' ? 'none' : 'add')}
+              >
+                {editMode === 'add' ? '배치 추가 중지' : '배치 추가 시작'}
+              </button>
               <button
                 type="button"
                 className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white"
@@ -2686,6 +2822,10 @@ function readPriorityHandoffPayload(): PriorityHandoffPayload | null {
       const parsed = JSON.parse(raw);
       const payload = parsed?.type === PRIORITY_HANDOFF_KEY ? parsed.payload : parsed;
       if (payload?.schemaVersion === 'priority-management-handoff/v1' && Array.isArray(payload.alternatives)) {
+        if (isRecalledPriorityHandoffPayload(payload)) {
+          clearPriorityHandoffPayload();
+          return null;
+        }
         try {
           window.localStorage.setItem(PRIORITY_HANDOFF_KEY, JSON.stringify(payload));
         } catch {
@@ -2699,6 +2839,80 @@ function readPriorityHandoffPayload(): PriorityHandoffPayload | null {
   }
 
   return null;
+}
+
+function isRecalledPriorityHandoffPayload(payload: PriorityHandoffPayload) {
+  try {
+    const raw = window.localStorage.getItem(PRIORITY_HANDOFF_RECALL_KEY);
+    if (!raw) return false;
+    const recall = JSON.parse(raw);
+    if (!recall?.packageId && !recall?.regionCode) return true;
+    if (recall?.packageId && recall.packageId === payload.packageId) return true;
+    return Boolean(recall?.regionCode && payload.regionCode && recall.regionCode === payload.regionCode);
+  } catch {
+    return false;
+  }
+}
+
+function priorityRecallFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('handoffRelay') !== 'priority-management') return null;
+    if (params.get('handoffRecall') !== 'priority-management') return null;
+    return {
+      packageId: params.get('packageId') || undefined,
+      regionCode: params.get('regionCode') || undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function markPriorityHandoffRecalled(packageId?: string, regionCode?: string) {
+  try {
+    window.localStorage.setItem(PRIORITY_HANDOFF_RECALL_KEY, JSON.stringify({
+      packageId: packageId || null,
+      regionCode: regionCode || null,
+      recalledAt: new Date().toISOString(),
+    }));
+  } catch {
+    // Recall markers are only used to suppress stale local demo payloads.
+  }
+}
+
+function createPriorityHandoffChannel() {
+  try {
+    return typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(PRIORITY_HANDOFF_CHANNEL);
+  } catch {
+    return null;
+  }
+}
+
+function broadcastPriorityRecall(packageId?: string, regionCode?: string) {
+  const channel = createPriorityHandoffChannel();
+  if (!channel) return;
+  try {
+    channel.postMessage({
+      type: `${PRIORITY_HANDOFF_KEY}:recall`,
+      packageId,
+      regionCode,
+    });
+  } finally {
+    channel.close();
+  }
+}
+
+function broadcastPriorityPayload(payload: PriorityHandoffPayload) {
+  const channel = createPriorityHandoffChannel();
+  if (!channel) return;
+  try {
+    channel.postMessage({
+      type: PRIORITY_HANDOFF_KEY,
+      payload,
+    });
+  } finally {
+    channel.close();
+  }
 }
 
 function readPriorityRequestLifecycle(): PriorityRequestLifecycle {
@@ -2740,13 +2954,13 @@ function clearPriorityHandoffPayload() {
 
   try {
     const parsed = JSON.parse(window.name || '{}');
-    if (parsed?.type === PRIORITY_HANDOFF_KEY) window.name = '';
+    if (parsed?.type === PRIORITY_HANDOFF_KEY || parsed?.schemaVersion === 'priority-management-handoff/v1') window.name = '';
   } catch {
     // Leave unrelated window.name values untouched.
   }
 }
 
-function isPriorityHandoffRecallMessage(data: unknown): data is { type: string; packageId?: string } {
+function isPriorityHandoffRecallMessage(data: unknown): data is { type: string; packageId?: string; regionCode?: string } {
   return Boolean(data && typeof data === 'object' && (data as { type?: string }).type === `${PRIORITY_HANDOFF_KEY}:recall`);
 }
 
@@ -2771,9 +2985,50 @@ function priorityPayloadFromMessage(data: unknown): PriorityHandoffPayload | nul
 
 function persistPriorityHandoffPayload(payload: PriorityHandoffPayload) {
   try {
+    window.localStorage.removeItem(PRIORITY_HANDOFF_RECALL_KEY);
     window.localStorage.setItem(PRIORITY_HANDOFF_KEY, JSON.stringify(payload));
   } catch {
     window.sessionStorage.setItem(PRIORITY_HANDOFF_KEY, JSON.stringify(payload));
+  }
+}
+
+async function fetchPriorityHandoffFromInbox(regionCode: string): Promise<PriorityHandoffPayload | null> {
+  try {
+    const url = new URL(PRIORITY_HANDOFF_INBOX_URL, window.location.origin);
+    url.searchParams.set('regionCode', regionCode);
+    const response = await fetch(url.toString(), { cache: 'no-store' });
+    if (!response.ok) return null;
+    const result = await response.json();
+    return priorityPayloadFromMessage(result?.payload);
+  } catch {
+    return null;
+  }
+}
+
+async function saveResponsibleHandoffToInbox(payload: Record<string, any>) {
+  try {
+    const response = await fetch(RESPONSIBLE_HANDOFF_INBOX_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchResponsibleReviewResponse(regionCode: string) {
+  try {
+    const url = new URL(RESPONSIBLE_REVIEW_INBOX_URL, window.location.origin);
+    url.searchParams.set('regionCode', regionCode);
+    const response = await fetch(url.toString(), { cache: 'no-store' });
+    if (!response.ok) return null;
+    const result = await response.json();
+    const payload = result?.payload;
+    return payload?.schemaVersion === 'responsible-to-lead-review/v1' ? payload : null;
+  } catch {
+    return null;
   }
 }
 
@@ -3113,7 +3368,7 @@ async function fetchCandidateFeaturesByPnu(candidate: PriorityCandidate) {
 }
 
 function createLeadVWorldDataUrl(data: string, params: Record<string, string | number>) {
-  const url = new URL(import.meta.env.VITE_VWORLD_PROXY_URL || 'http://127.0.0.1:4176/vworld-data');
+  const url = new URL(import.meta.env.VITE_VWORLD_PROXY_URL || '/vworld-data', window.location.origin);
   const query = {
     service: 'data',
     version: '2.0',

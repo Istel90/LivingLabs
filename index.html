@@ -15,8 +15,83 @@
     <body>
       
       <div id="root"></div>
+      <script>
+        (() => {
+          const handoffKey = 'livinglabs.priorityManagementHandoff';
+          const recallKey = `${handoffKey}:recall`;
+          const channelKey = 'livinglabs.priorityManagementHandoffChannel';
+
+          function persistPayload(payload) {
+            if (!payload || payload.schemaVersion !== 'priority-management-handoff/v1' || !Array.isArray(payload.alternatives)) return false;
+            try {
+              window.localStorage.removeItem(recallKey);
+              window.localStorage.setItem(handoffKey, JSON.stringify(payload));
+            } catch {
+              try {
+                window.sessionStorage.setItem(handoffKey, JSON.stringify(payload));
+              } catch {
+                return false;
+              }
+            }
+            try {
+              const channel = new BroadcastChannel(channelKey);
+              channel.postMessage({ type: handoffKey, payload });
+              channel.close();
+            } catch {
+              // BroadcastChannel is a convenience for already-open tabs.
+            }
+            return true;
+          }
+
+          function persistRecall(message) {
+            try {
+              window.localStorage.removeItem(handoffKey);
+              window.sessionStorage.removeItem(handoffKey);
+              window.localStorage.setItem(recallKey, JSON.stringify({
+                packageId: message.packageId || null,
+                regionCode: message.regionCode || null,
+                recalledAt: new Date().toISOString(),
+              }));
+            } catch {
+              // Storage may be unavailable in embedded browser contexts.
+            }
+            try {
+              const channel = new BroadcastChannel(channelKey);
+              channel.postMessage({
+                type: `${handoffKey}:recall`,
+                packageId: message.packageId,
+                regionCode: message.regionCode,
+              });
+              channel.close();
+            } catch {
+              // BroadcastChannel is optional.
+            }
+          }
+
+          window.addEventListener('message', (event) => {
+            const message = event.data || {};
+            if (message.type === handoffKey) {
+              const payload = message.payload || message;
+              if (!persistPayload(payload)) return;
+              event.source?.postMessage({
+                type: `${handoffKey}:ack`,
+                packageId: payload.packageId,
+              }, event.origin);
+              return;
+            }
+
+            if (message.type === `${handoffKey}:recall`) {
+              persistRecall(message);
+              event.source?.postMessage({
+                type: `${handoffKey}:recall:ack`,
+                packageId: message.packageId,
+                regionCode: message.regionCode,
+              }, event.origin);
+            }
+          });
+        })();
+      </script>
       <script type="module" src="/src/main.tsx"></script>
-      
+
     </body>
   </html>
-  

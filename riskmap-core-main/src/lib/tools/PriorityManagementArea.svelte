@@ -12,6 +12,7 @@
     const vLambda = 0.5;
     const asset = (path) => `${base}${path}`;
     const DEPARTMENT_HANDOFF_KEY = 'livinglabs.priorityManagementHandoff';
+    const priorityHandoffInboxUrl = import.meta.env.VITE_PRIORITY_HANDOFF_INBOX_URL || '/priority-handoff';
     const PRIORITY_DRAFT_DB_NAME = 'livinglabs-priority-management';
     const PRIORITY_DRAFT_STORE_NAME = 'priority-management-sessions';
     const PRIORITY_DRAFT_SCHEMA_VERSION = 'priority-management-draft/v1';
@@ -1070,6 +1071,8 @@
     }
 
     function summarizeCandidateForHandoff(candidate, alternative, alternativeIndex) {
+        const pnuList = (candidate.pnuList || []).slice(0, 200);
+        const featureTotal = candidate.featureTotal || candidate.featureLimit || candidate.features?.length || 0;
         const scores = {
             risk: candidate.risk,
             h: candidate.h,
@@ -1085,14 +1088,16 @@
             hotspotCount: candidate.hotspotCount,
             totalAreaSqm: candidate.totalAreaSqm,
             totalAreaLabel: candidateTotalAreaLabel(candidate),
-            pnuList: candidate.pnuList || [],
+            pnuList,
+            pnuTotal: candidate.pnuList?.length || 0,
             featureLimit: candidate.featureLimit || 0,
-            featureTotal: candidate.featureTotal || candidate.featureLimit || 0
+            featureTotal,
+            geometryMode: 'compact'
         };
         const geometry = {
             center: candidate.center || null,
             bounds: candidate.bounds || null,
-            features: candidate.features || []
+            features: []
         };
 
         return {
@@ -1114,13 +1119,15 @@
             hotspotCount: candidate.hotspotCount,
             totalAreaSqm: candidate.totalAreaSqm,
             totalAreaLabel: candidateTotalAreaLabel(candidate),
-            pnuList: candidate.pnuList || [],
+            pnuList,
+            pnuTotal: candidate.pnuList?.length || 0,
             center: candidate.center || null,
             bounds: candidate.bounds || null,
-            features: candidate.features || [],
+            features: [],
             scores,
             attributes,
             geometry,
+            geometryMode: 'compact',
             score: candidate.score
         };
     }
@@ -1180,6 +1187,7 @@
 
         return new Promise((resolve) => {
             let settled = false;
+            let resendTimer = null;
             const targetUrl = new URL(leadDepartmentToolUrl, window.location.href);
             targetUrl.searchParams.set('handoffRelay', 'priority-management');
             targetUrl.searchParams.set('regionCode', deliveredPayload.regionCode || regionCode);
@@ -1197,6 +1205,7 @@
 
             const cleanup = () => {
                 window.removeEventListener('message', handleAck);
+                if (resendTimer) window.clearInterval(resendTimer);
                 window.setTimeout(() => iframe.remove(), 250);
             };
             const finish = (ok) => {
@@ -1225,7 +1234,7 @@
             window.addEventListener('message', handleAck);
             iframe.addEventListener('load', () => {
                 send();
-                window.setTimeout(send, 200);
+                resendTimer = window.setInterval(send, 250);
             });
             iframe.src = targetUrl.toString();
             document.body.appendChild(iframe);
@@ -1233,14 +1242,32 @@
         });
     }
 
+    async function saveHandoffToLocalInbox(deliveredPayload) {
+        try {
+            const response = await fetch(priorityHandoffInboxUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(deliveredPayload)
+            });
+            if (!response.ok) return false;
+            const result = await response.json().catch(() => null);
+            return Boolean(result?.ok);
+        } catch {
+            return false;
+        }
+    }
+
     function relayRecallToLeadDepartment(packageId) {
         if (typeof window === 'undefined' || typeof document === 'undefined') return Promise.resolve(false);
 
         return new Promise((resolve) => {
             let settled = false;
+            let resendTimer = null;
             const targetUrl = new URL(leadDepartmentToolUrl, window.location.href);
             targetUrl.searchParams.set('handoffRelay', 'priority-management');
+            targetUrl.searchParams.set('handoffRecall', 'priority-management');
             targetUrl.searchParams.set('regionCode', regionCode);
+            if (packageId) targetUrl.searchParams.set('packageId', packageId);
 
             const iframe = document.createElement('iframe');
             iframe.title = 'priority-management-handoff-recall';
@@ -1255,6 +1282,7 @@
 
             const cleanup = () => {
                 window.removeEventListener('message', handleAck);
+                if (resendTimer) window.clearInterval(resendTimer);
                 window.setTimeout(() => iframe.remove(), 250);
             };
             const finish = (ok) => {
@@ -1267,7 +1295,8 @@
                 try {
                     iframe.contentWindow?.postMessage({
                         type: `${DEPARTMENT_HANDOFF_KEY}:recall`,
-                        packageId
+                        packageId,
+                        regionCode
                     }, targetUrl.origin);
                 } catch {
                     // The timeout below will report a relay miss.
@@ -1283,7 +1312,7 @@
             window.addEventListener('message', handleAck);
             iframe.addEventListener('load', () => {
                 send();
-                window.setTimeout(send, 200);
+                resendTimer = window.setInterval(send, 250);
             });
             iframe.src = targetUrl.toString();
             document.body.appendChild(iframe);
@@ -1298,6 +1327,7 @@
             window.localStorage.removeItem(DEPARTMENT_HANDOFF_KEY);
             window.localStorage.setItem(`${DEPARTMENT_HANDOFF_KEY}:recall`, JSON.stringify({
                 packageId,
+                regionCode,
                 recalledAt: new Date().toISOString()
             }));
         } catch {
@@ -1310,7 +1340,7 @@
         }
         try {
             const namedPayload = JSON.parse(window.name || '{}');
-            if (namedPayload?.type === DEPARTMENT_HANDOFF_KEY) window.name = '';
+            if (namedPayload?.type === DEPARTMENT_HANDOFF_KEY || namedPayload?.schemaVersion === 'priority-management-handoff/v1') window.name = '';
         } catch {
             // Window name may contain non-JSON data from another page.
         }
@@ -1421,7 +1451,11 @@
             type: DEPARTMENT_HANDOFF_KEY,
             payload: deliveredPayload
         });
-        const relayOk = await relayHandoffToLeadDepartment(deliveredPayload);
+        const [relayOk, inboxOk] = await Promise.all([
+            relayHandoffToLeadDepartment(deliveredPayload),
+            saveHandoffToLocalInbox(deliveredPayload)
+        ]);
+        const deliveryOk = relayOk || inboxOk;
         const deliveredAlternativeCount = deliveredPayload.alternatives.filter((alternative) => alternative.candidates?.length).length;
         const packageRecord = {
             packageId: deliveredPayload.packageId,
@@ -1430,10 +1464,10 @@
             candidateCount: deliveredPayload.candidates.length,
             region: deliveredPayload.region,
             hazardLabel: deliveredPayload.hazardLabel,
-            relayOk
+            relayOk: deliveryOk
         };
         rememberHandoffPackage(packageRecord);
-        handoffMessage = relayOk
+        handoffMessage = deliveryOk
             ? `${deliveredAlternativeCount}개 대안 · ${deliveredPayload.candidates.length}개 후보를 주관부서 지원도구 검토 요청으로 전달했습니다.`
             : `${deliveredAlternativeCount}개 대안 · ${deliveredPayload.candidates.length}개 후보를 로컬에 저장했습니다. 주관부서 페이지가 열려 있지 않으면 새로고침 후 확인하세요.`;
         handoffDialog = {
@@ -1443,7 +1477,7 @@
             hazardLabel: deliveredPayload.hazardLabel,
             deliveredAt,
             packageId: deliveredPayload.packageId,
-            relayOk
+            relayOk: deliveryOk
         };
         schedulePriorityDraftSave();
     }

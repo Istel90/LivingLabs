@@ -8,7 +8,7 @@ import { BookOpen, ChevronDown, ChevronRight, Compass, Sparkles } from 'lucide-r
 
 const leadDepartmentToolUrl = `${import.meta.env.BASE_URL}lead-department-tool`;
 const responsibleDepartmentToolUrl =
-  import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:5175/responsible-department';
+  import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:4175/responsible-department';
 
 interface TreeNode {
   id: string;
