@@ -1004,18 +1004,23 @@
     function moveMapToCandidateBounds(bounds) {
         if (!map || !bounds?.isValid?.()) return false;
         map.invalidateSize?.({ pan: false });
+        const center = bounds.getCenter?.();
+        if (!center) return false;
+        const padding = window.L?.point?.(120, 120) || [120, 120];
+        const fitZoom = typeof map.getBoundsZoom === 'function'
+            ? map.getBoundsZoom(bounds, false, padding)
+            : map.getZoom();
+        const targetZoom = Math.min(18, Math.max(15, Number.isFinite(fitZoom) ? fitZoom : 15));
         const options = {
-            paddingTopLeft: [320, 70],
-            paddingBottomRight: [70, 150],
-            maxZoom: 17,
             animate: true,
             duration: 0.65
         };
-        if (typeof map.flyToBounds === 'function') {
-            map.flyToBounds(bounds, options);
+        if (typeof map.flyTo === 'function') {
+            map.flyTo(center, targetZoom, options);
         } else {
-            map.fitBounds(bounds, options);
+            map.setView(center, targetZoom);
         }
+        window.setTimeout(() => map.invalidateSize?.({ pan: false }), 80);
         return true;
     }
 
