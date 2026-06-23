@@ -18,13 +18,15 @@ supabase secrets set VWORLD_API_KEY=F2BE7753-45CF-308D-BFFD-BB85E75F2DF5
 supabase secrets set VWORLD_DOMAIN=https://istel90.github.io/LivingLabs/
 ```
 
-그 다음 GitHub 저장소 Secret에 아래 값을 추가합니다.
+GitHub 저장소 Secret으로 다른 프록시 URL을 쓰고 싶다면 아래 값을 추가합니다.
 
 ```text
 VWORLD_PROXY_URL=https://<project-ref>.supabase.co/functions/v1/vworld-data
 ```
 
-다음 GitHub Pages 배포부터 앱은 `VWORLD_PROXY_URL`을 통해 실제 VWorld Data API 응답을 받습니다. 필지 후보 도출에는 샘플 fallback 데이터를 사용하지 않습니다.
+현재 GitHub Pages 배포 워크플로우에는 `https://ehjygntjhqkddtcnvjdj.supabase.co/functions/v1/vworld-data`가 기본 프록시 URL로 들어가 있습니다. Secret `VWORLD_PROXY_URL`을 설정하면 그 값이 우선 적용됩니다.
+
+다음 GitHub Pages 배포부터 앱은 프록시 URL을 통해 실제 VWorld Data API 응답을 받습니다. 필지 후보 도출에는 샘플 fallback 데이터를 사용하지 않습니다.
 
 ## 빠른 테스트
 
