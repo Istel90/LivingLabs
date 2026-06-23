@@ -33,6 +33,7 @@ import {
   VWORLD_WMS_LAYERS,
   VWORLD_WMS_URL,
 } from '../../../shared/map/vworld.js';
+import { getLatestPlatformHandoff, savePlatformHandoff } from '../../../shared/services/platformHandoffs.js';
 import SIGUNGU_BOUNDARY_GEOJSON from '../../../shared/data/administrative-regions/boundaries/sigungu.geojson?raw';
 import DOWNLOADS_SIGUNGU_BOUNDARIES from '../../../shared/data/administrative-regions/boundaries/downloads-sigungu-boundaries.json?raw';
 import {
@@ -201,7 +202,7 @@ const LEAD_REVIEW_STATE_KEY = 'livinglabs.leadDepartmentPriorityReviewState';
 const LEAD_REQUEST_LIFECYCLE_KEY = 'livinglabs.leadDepartmentPriorityRequestLifecycle';
 const LEAD_ADAPTATION_PLACEMENT_KEY = 'livinglabs.leadDepartmentAdaptationPlacementDraft';
 const DEFAULT_LEAD_REGION_CODE = '41110';
-const responsibleDepartmentToolUrl = import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:4175/responsible-department';
+const responsibleDepartmentToolUrl = import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:5175/responsible-department';
 const initialSearchParams = new URLSearchParams(window.location.search);
 const initialPriorityRegionCode = initialSearchParams.get('regionCode') || DEFAULT_LEAD_REGION_CODE;
 const initialWorkspaceView = initialSearchParams.get('view') === 'workspace';
@@ -582,7 +583,7 @@ export function LeadDepartmentPrototypePage() {
   const activePriorityRequestStatus = activePriorityRequestKey
     ? priorityRequestLifecycle[activePriorityRequestKey]?.status ?? '신규'
     : '신규';
-  const activePriorityRequestInInbox = activePriorityRequestStatus !== '보관' && activePriorityRequestStatus !== '전달완료';
+  const activePriorityRequestInInbox = activePriorityRequestStatus !== '보관';
   const inboxPriorityHandoff = activePriorityRequestInInbox ? activeRegionHandoff : null;
   const priorityAlternatives = useMemo(() => {
     if (!activePriorityRequestInInbox) return [];
@@ -2445,7 +2446,7 @@ function PriorityAlternativeReviewPanel({
                   <div>
                     <b className="text-sm text-slate-950">{candidate.name ?? `후보 ${candidate.rank ?? ''}`}</b>
                     <p className="mt-1 text-xs leading-5 text-slate-500">
-                      {candidate.attributes?.area ?? candidate.area ?? '-'} · {candidate.attributes?.parcelCount ?? candidate.parcelCount ?? 0}필지
+                      {candidate.attributes?.area ?? candidate.area ?? '-'} · {priorityCandidateParcelCount(candidate).toLocaleString()}필지
                     </p>
                   </div>
                   <span className="rounded-full bg-orange-100 px-2 py-1 text-[11px] font-extrabold text-orange-700">
@@ -2993,6 +2994,10 @@ function persistPriorityHandoffPayload(payload: PriorityHandoffPayload) {
 }
 
 async function fetchPriorityHandoffFromInbox(regionCode: string): Promise<PriorityHandoffPayload | null> {
+  const supabasePayload = await getLatestPlatformHandoff('priority_to_lead', regionCode, ['requested', 'reviewing', 'risk_done', 'sent', 'completed']);
+  const parsedSupabasePayload = priorityPayloadFromMessage(supabasePayload);
+  if (parsedSupabasePayload) return parsedSupabasePayload;
+
   try {
     const url = new URL(PRIORITY_HANDOFF_INBOX_URL, window.location.origin);
     url.searchParams.set('regionCode', regionCode);
@@ -3006,19 +3011,23 @@ async function fetchPriorityHandoffFromInbox(regionCode: string): Promise<Priori
 }
 
 async function saveResponsibleHandoffToInbox(payload: Record<string, any>) {
+  const supabaseOk = await savePlatformHandoff('lead_to_responsible', payload, 'requested');
   try {
     const response = await fetch(RESPONSIBLE_HANDOFF_INBOX_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    return response.ok;
+    return supabaseOk || response.ok;
   } catch {
-    return false;
+    return supabaseOk;
   }
 }
 
 async function fetchResponsibleReviewResponse(regionCode: string) {
+  const supabasePayload = await getLatestPlatformHandoff('responsible_to_lead', regionCode, ['completed']);
+  if (supabasePayload?.schemaVersion === 'responsible-to-lead-review/v1') return supabasePayload;
+
   try {
     const url = new URL(RESPONSIBLE_REVIEW_INBOX_URL, window.location.origin);
     url.searchParams.set('regionCode', regionCode);
@@ -3216,6 +3225,22 @@ function priorityCandidatePnuList(candidate?: PriorityCandidate | null) {
     .filter(Boolean);
 }
 
+function priorityCandidateParcelCount(candidate?: PriorityCandidate | null) {
+  const pnuCount = priorityCandidatePnuList(candidate).length;
+  const candidates = [
+    candidate?.attributes?.pnuTotal,
+    candidate?.pnuTotal,
+    candidate?.attributes?.parcelCount,
+    candidate?.parcelCount,
+    pnuCount,
+    priorityCandidateFeatures(candidate).length,
+  ]
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value >= 0);
+
+  return candidates.length ? Math.max(...candidates) : 0;
+}
+
 function withHydratedPriorityGeometry(candidate: PriorityCandidate, cache: Record<string, GeoJsonFeature[]>) {
   const features = cache[candidateKey(candidate)];
   if (!features?.length) return candidate;
@@ -3342,9 +3367,10 @@ function padPriorityBounds(bounds: PriorityCandidateBounds) {
 
 async function fetchCandidateFeaturesByPnu(candidate: PriorityCandidate) {
   const featuresByPnu = new Map<string, GeoJsonFeature>();
-  const pnuList = priorityCandidatePnuList(candidate).slice(0, 8);
+  const pnuList = priorityCandidatePnuList(candidate);
+  const chunkSize = 12;
 
-  for (const pnu of pnuList) {
+  async function fetchOne(pnu: string) {
     try {
       const url = createLeadVWorldDataUrl(VWORLD_DATASETS.cadastral, {
         attrFilter: `pnu:=:${pnu}`,
@@ -3352,7 +3378,7 @@ async function fetchCandidateFeaturesByPnu(candidate: PriorityCandidate) {
         page: 1,
       });
       const response = await fetch(url);
-      if (!response.ok) continue;
+      if (!response.ok) return;
       const payload = await response.json();
       const features = extractLeadVWorldFeatures(payload);
       features.forEach((feature) => {
@@ -3362,6 +3388,10 @@ async function fetchCandidateFeaturesByPnu(candidate: PriorityCandidate) {
     } catch {
       // PNU geometry 보완은 최선-effort 처리입니다.
     }
+  }
+
+  for (let index = 0; index < pnuList.length; index += chunkSize) {
+    await Promise.all(pnuList.slice(index, index + chunkSize).map(fetchOne));
   }
 
   return Array.from(featuresByPnu.values());

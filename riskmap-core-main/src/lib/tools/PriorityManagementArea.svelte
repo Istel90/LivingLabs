@@ -3,6 +3,7 @@
     import { base } from '$app/paths';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
+    import { markPlatformHandoffStatus, savePlatformHandoff } from '../../../../shared/services/platformHandoffs.js';
 
     export let hazard = 'heatwave';
 
@@ -1035,10 +1036,14 @@
     function focusCandidateOnMap(candidate, index) {
         selectedCandidate = index;
         focusedCandidate = {
+            ...candidate,
             id: candidate.id,
             rank: candidate.rank,
             name: candidate.name,
             bounds: candidate.bounds,
+            center: candidate.center,
+            features: candidate.features || [],
+            pnuList: candidate.pnuList || [],
             requestedAt: Date.now()
         };
     }
@@ -1065,13 +1070,15 @@
             item.name === candidate.name
         );
         if (index < 0) return;
-        selectedCandidate = index;
-        detailCandidateKey = candidateIdentity(candidateList[index]);
+        const matchedCandidate = candidateList[index];
+        focusCandidateOnMap(matchedCandidate, index);
+        detailCandidateKey = candidateIdentity(matchedCandidate);
         schedulePriorityDraftSave();
     }
 
     function summarizeCandidateForHandoff(candidate, alternative, alternativeIndex) {
-        const pnuList = (candidate.pnuList || []).slice(0, 200);
+        const pnuList = Array.from(new Set((candidate.pnuList || []).map((value) => String(value || '').trim()).filter(Boolean)));
+        const parcelCount = Math.max(Number(candidate.parcelCount) || 0, pnuList.length);
         const featureTotal = candidate.featureTotal || candidate.featureLimit || candidate.features?.length || 0;
         const scores = {
             risk: candidate.risk,
@@ -1084,12 +1091,12 @@
             area: candidate.area,
             reason: candidate.reason,
             basis: candidate.basis,
-            parcelCount: candidate.parcelCount,
+            parcelCount,
             hotspotCount: candidate.hotspotCount,
             totalAreaSqm: candidate.totalAreaSqm,
             totalAreaLabel: candidateTotalAreaLabel(candidate),
             pnuList,
-            pnuTotal: candidate.pnuList?.length || 0,
+            pnuTotal: pnuList.length,
             featureLimit: candidate.featureLimit || 0,
             featureTotal,
             geometryMode: 'compact'
@@ -1115,12 +1122,12 @@
             v: candidate.v,
             reason: candidate.reason,
             basis: candidate.basis,
-            parcelCount: candidate.parcelCount,
+            parcelCount,
             hotspotCount: candidate.hotspotCount,
             totalAreaSqm: candidate.totalAreaSqm,
             totalAreaLabel: candidateTotalAreaLabel(candidate),
             pnuList,
-            pnuTotal: candidate.pnuList?.length || 0,
+            pnuTotal: pnuList.length,
             center: candidate.center || null,
             bounds: candidate.bounds || null,
             features: [],
@@ -1243,17 +1250,18 @@
     }
 
     async function saveHandoffToLocalInbox(deliveredPayload) {
+        const supabaseOk = await savePlatformHandoff('priority_to_lead', deliveredPayload, 'requested');
         try {
             const response = await fetch(priorityHandoffInboxUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(deliveredPayload)
             });
-            if (!response.ok) return false;
+            if (!response.ok) return supabaseOk;
             const result = await response.json().catch(() => null);
-            return Boolean(result?.ok);
+            return supabaseOk || Boolean(result?.ok);
         } catch {
-            return false;
+            return supabaseOk;
         }
     }
 
@@ -1349,7 +1357,14 @@
     async function recallDepartmentHandoff(packageRecord = latestHandoffPackage) {
         const recalledPackageId = packageRecord?.packageId;
         clearStoredDepartmentHandoff(recalledPackageId);
-        const relayOk = await relayRecallToLeadDepartment(recalledPackageId);
+        const [relayOk, supabaseOk] = await Promise.all([
+            relayRecallToLeadDepartment(recalledPackageId),
+            markPlatformHandoffStatus('priority_to_lead', {
+                regionCode,
+                packageId: recalledPackageId,
+                status: 'recalled'
+            })
+        ]);
         sentHandoffPackages = recalledPackageId
             ? sentHandoffPackages.filter((item) => item.packageId !== recalledPackageId)
             : [];
@@ -1357,7 +1372,7 @@
         requestListOpen = Boolean(sentHandoffPackages.length && requestListOpen);
         handoffDialog = null;
         handoffMessage = recalledPackageId
-            ? relayOk
+            ? (relayOk || supabaseOk)
                 ? `검토 요청 ${recalledPackageId}을 회수했습니다. 주관부서 화면에서도 요청이 비워집니다.`
                 : `검토 요청 ${recalledPackageId}을 회수했습니다. 주관부서 화면이 열려 있으면 새로고침해 주세요.`
             : '저장된 검토 요청을 비웠습니다. 필요하면 다시 전달하세요.';
@@ -1366,12 +1381,18 @@
 
     async function recallAllDepartmentHandoffs() {
         clearStoredDepartmentHandoff(null);
-        const relayOk = await relayRecallToLeadDepartment(null);
+        const [relayOk, supabaseOk] = await Promise.all([
+            relayRecallToLeadDepartment(null),
+            markPlatformHandoffStatus('priority_to_lead', {
+                regionCode,
+                status: 'recalled'
+            })
+        ]);
         sentHandoffPackages = [];
         latestHandoffPackage = null;
         requestListOpen = false;
         handoffDialog = null;
-        handoffMessage = relayOk
+        handoffMessage = (relayOk || supabaseOk)
             ? '주관부서 지원도구에 남아 있는 검토 요청을 모두 비웠습니다.'
             : '로컬 요청 이력을 비웠습니다. 주관부서 화면이 열려 있으면 새로고침해 주세요.';
         schedulePriorityDraftSave();

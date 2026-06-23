@@ -8,13 +8,13 @@ export default defineConfig({
     assetsInclude: ['**/*.tif'],
     server: {
         host: '127.0.0.1',
-        port: 4175,
+        port: 5175,
         strictPort: true,
         proxy: {
-            '/priority-handoff': 'http://127.0.0.1:4176',
-            '/responsible-handoff': 'http://127.0.0.1:4176',
-            '/responsible-review-response': 'http://127.0.0.1:4176',
-            '/vworld-data': 'http://127.0.0.1:4176'
+            '/priority-handoff': 'http://127.0.0.1:5176',
+            '/responsible-handoff': 'http://127.0.0.1:5176',
+            '/responsible-review-response': 'http://127.0.0.1:5176',
+            '/vworld-data': 'http://127.0.0.1:5176'
         },
         fs: {
             allow: [path.resolve('..')]

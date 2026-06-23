@@ -1,5 +1,6 @@
 import { ExternalLink, Globe, Menu, Search } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
+import { clearPlatformHandoffs } from '../../../shared/services/platformHandoffs.js';
 import { Button } from './ui/button';
 
 const navigation = [
@@ -10,6 +11,14 @@ const navigation = [
 ];
 
 const parentPlatformUrl = import.meta.env.VITE_PARENT_PLATFORM_URL || 'https://livinglab-web.vercel.app/';
+const vworldProxyUrl = import.meta.env.VITE_VWORLD_PROXY_URL || 'http://127.0.0.1:5176/vworld-data';
+
+function createDevResetUrl() {
+  const url = new URL(vworldProxyUrl, window.location.origin);
+  url.pathname = '/dev-reset';
+  url.search = '';
+  return url.toString();
+}
 
 interface HeaderProps {
   variant?: 'default' | 'hero';
@@ -18,6 +27,25 @@ interface HeaderProps {
 export function Header({ variant = 'default' }: HeaderProps) {
   const location = useLocation();
   const isHero = variant === 'hero';
+
+  const resetDevelopmentState = async () => {
+    const ok = window.confirm('개발용 임시 초기화를 실행할까요?\n중점관리구역 요청, 사업 전달, 검토 응답 저장값을 모두 비웁니다.');
+    if (!ok) return;
+
+    try {
+      const [proxyResult, supabaseOk] = await Promise.all([
+        fetch(createDevResetUrl(), { method: 'POST' }).then((response) => response.ok).catch(() => false),
+        clearPlatformHandoffs(),
+      ]);
+      if (!proxyResult && !supabaseOk) throw new Error('reset failed');
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+      window.alert('개발용 저장값을 초기화했습니다. 열린 도구 페이지는 새로고침해 주세요.');
+    } catch (error) {
+      console.error(error);
+      window.alert('초기화에 실패했습니다. VWorld Data Proxy(5176)가 켜져 있는지 확인해 주세요.');
+    }
+  };
 
   return (
     <header className={isHero ? 'relative z-20 text-white' : 'border-b bg-white'}>
@@ -62,6 +90,13 @@ export function Header({ variant = 'default' }: HeaderProps) {
             </div>
             {isHero && (
               <div className="hidden items-center gap-4 text-sm text-white/80 md:flex">
+                <button
+                  type="button"
+                  onClick={resetDevelopmentState}
+                  className="inline-flex items-center rounded-full border border-orange-200/40 bg-orange-500/20 px-3.5 py-2 font-semibold text-orange-50 transition hover:bg-orange-500/35"
+                >
+                  개발 초기화
+                </button>
                 <a
                   href={parentPlatformUrl}
                   className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3.5 py-2 font-semibold text-white transition hover:bg-white/20"
@@ -71,6 +106,15 @@ export function Header({ variant = 'default' }: HeaderProps) {
                 </a>
                 <button className="hover:text-white">Login</button>
               </div>
+            )}
+            {!isHero && (
+              <button
+                type="button"
+                onClick={resetDevelopmentState}
+                className="hidden rounded-full border border-orange-200 bg-orange-50 px-3.5 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-100 md:inline-flex"
+              >
+                개발 초기화
+              </button>
             )}
             <Button variant="ghost" size="icon" className="md:hidden">
               <Menu className="size-5" />

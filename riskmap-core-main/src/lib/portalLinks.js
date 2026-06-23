@@ -2,7 +2,7 @@ const localPortalPorts = {
     4175: '4173',
     5175: '5173'
 };
-const localPortalOrigin = import.meta.env.VITE_PORTAL_ORIGIN || 'http://127.0.0.1:4173';
+const localPortalOrigin = import.meta.env.VITE_PORTAL_ORIGIN || 'http://127.0.0.1:5173';
 
 function portalUrl(path) {
     if (typeof window === 'undefined') return `${localPortalOrigin}${path}`;

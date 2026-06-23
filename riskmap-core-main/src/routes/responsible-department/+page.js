@@ -6,7 +6,10 @@ export async function load({ url, fetch }) {
     try {
         const regionCode = url.searchParams.get('regionCode') || '41110';
         const initialWorkspace = url.searchParams.get('view') === 'workspace' || url.searchParams.get('handoff') === 'lead-department';
-        const inboxUrl = new URL('http://127.0.0.1:4176/responsible-handoff');
+        if (!initialWorkspace) {
+            return { initialResponsibleHandoff: null, initialWorkspace };
+        }
+        const inboxUrl = new URL('http://127.0.0.1:5176/responsible-handoff');
         inboxUrl.searchParams.set('regionCode', regionCode);
         const response = await fetch(inboxUrl.toString(), { cache: 'no-store' });
         if (!response.ok) return { initialResponsibleHandoff: null, initialWorkspace };

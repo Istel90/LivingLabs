@@ -5,18 +5,21 @@ $runtimeDir = Join-Path $root ".runtime-logs"
 $processFile = Join-Path $runtimeDir "platform-processes.json"
 
 $apps = @(
-  @{ Label = "Portal"; Port = 4173; Url = "http://127.0.0.1:4173/" },
-  @{ Label = "Survey"; Port = 4174; Url = "http://127.0.0.1:4174/" },
-  @{ Label = "Internal Tools"; Port = 4175; Url = "http://127.0.0.1:4175/" },
-  @{ Label = "VWorld Data Proxy"; Port = 4176; Url = "http://127.0.0.1:4176/health" }
+  @{ Label = "Portal"; Port = 5173; Url = "http://127.0.0.1:5173/" },
+  @{ Label = "Survey"; Port = 5174; Url = "http://127.0.0.1:5174/" },
+  @{ Label = "Internal Tools"; Port = 5175; Url = "http://127.0.0.1:5175/" },
+  @{ Label = "VWorld Data Proxy"; Port = 5176; Url = "http://127.0.0.1:5176/health" }
 )
 
 function Get-PortProcessId($port) {
-  $lines = netstat -ano | Select-String "^\s*TCP\s+.+:$port\s+.+\s+LISTENING\s+(\d+)\s*$"
-  if (-not $lines) {
-    return $null
+  $lines = netstat -ano | Select-String -Pattern "LISTENING"
+  foreach ($line in $lines) {
+    $parts = ($line.Line -replace "\s+", " ").Trim().Split(" ")
+    if ($parts.Length -ge 5 -and $parts[1] -match ":$port$") {
+      return [int]$parts[4]
+    }
   }
-  return [int]$lines[0].Matches[0].Groups[1].Value
+  return $null
 }
 
 function Test-Url($url) {

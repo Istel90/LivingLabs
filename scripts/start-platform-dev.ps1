@@ -12,45 +12,44 @@ $apps = @(
   @{
     Name = "portal"
     Label = "Portal"
-    Port = 4173
-    Url = "http://127.0.0.1:4173/"
+    Port = 5173
+    Url = "http://127.0.0.1:5173/"
     Cwd = $root
   },
   @{
     Name = "survey"
     Label = "Survey"
-    Port = 4174
-    Url = "http://127.0.0.1:4174/"
+    Port = 5174
+    Url = "http://127.0.0.1:5174/"
     Cwd = Join-Path $root "Survey platform for collaboration"
   },
   @{
     Name = "riskmap"
     Label = "Internal Tools"
-    Port = 4175
-    Url = "http://127.0.0.1:4175/"
+    Port = 5175
+    Url = "http://127.0.0.1:5175/"
     Cwd = Join-Path $root "riskmap-core-main"
   },
   @{
     Name = "vworld-proxy"
     Label = "VWorld Data Proxy"
-    Port = 4176
-    Url = "http://127.0.0.1:4176/health"
+    Port = 5176
+    Url = "http://127.0.0.1:5176/health"
     Cwd = Join-Path $root "riskmap-core-main"
     Command = "node"
-    Args = @("./scripts/vworld-data-proxy.mjs", "--port=4176")
+    Args = @("./scripts/vworld-data-proxy.mjs", "--port=5176")
   }
 )
 
 function Get-PortProcessId($port) {
-  $lines = netstat -ano | Select-String "^\s*TCP\s+.+:$port\s+.+\s+LISTENING\s+(\d+)\s*$"
-  if (-not $lines) {
-    return $null
+  $lines = netstat -ano | Select-String -Pattern "LISTENING"
+  foreach ($line in $lines) {
+    $parts = ($line.Line -replace "\s+", " ").Trim().Split(" ")
+    if ($parts.Length -ge 5 -and $parts[1] -match ":$port$") {
+      return [int]$parts[4]
+    }
   }
-  return [int]$lines[0].Matches[0].Groups[1].Value
-}
-
-function Quote-PSString($value) {
-  return "'" + ($value -replace "'", "''") + "'"
+  return $null
 }
 
 $records = @()
@@ -72,23 +71,21 @@ foreach ($app in $apps) {
     continue
   }
 
-  $combinedLog = Join-Path $runtimeDir "$($app.Name)-$($app.Port).dev.log"
-  $errorLog = Join-Path $runtimeDir "$($app.Name)-$($app.Port).dev.err.log"
-  $nodePath = Join-Path $env:ProgramFiles "nodejs\node.exe"
   if ($app.Command -eq "node") {
-    $nodeArgs = ($app.Args | ForEach-Object { "`"$_`"" }) -join " "
-    $cmdCommand = "set `"CI=true`" && cd /d `"$($app.Cwd)`" && `"$nodePath`" $nodeArgs > `"$combinedLog`" 2> `"$errorLog`""
+    $process = Start-Process `
+      -FilePath "node.exe" `
+      -ArgumentList $app.Args `
+      -WorkingDirectory $app.Cwd `
+      -WindowStyle Normal `
+      -PassThru
   } else {
-    $vitePath = Join-Path $app.Cwd "node_modules\vite\bin\vite.js"
-    $cmdCommand = "set `"CI=true`" && cd /d `"$($app.Cwd)`" && `"$nodePath`" `"$vitePath`" dev --host 0.0.0.0 --port $($app.Port) --strictPort > `"$combinedLog`" 2> `"$errorLog`""
+    $process = Start-Process `
+      -FilePath "npm.cmd" `
+      -ArgumentList @("run", "dev", "--", "--host", "0.0.0.0", "--port", "$($app.Port)", "--strictPort") `
+      -WorkingDirectory $app.Cwd `
+      -WindowStyle Normal `
+      -PassThru
   }
-
-  $process = Start-Process `
-    -FilePath "cmd.exe" `
-    -ArgumentList @("/k", $cmdCommand) `
-    -WorkingDirectory $app.Cwd `
-    -WindowStyle Hidden `
-    -PassThru
 
   Write-Host "Started dev: $($app.Label) $($app.Url) (PID $($process.Id))"
   $records += [pscustomobject]@{

@@ -810,7 +810,7 @@
                 hotspotCount: cluster.hotspotCount,
                 totalAreaSqm: Number(cluster.totalAreaSqm.toFixed(1)),
                 totalAreaLabel: formatAreaSquareMeters(cluster.totalAreaSqm),
-                pnuList: cluster.members.map((item) => item.id).slice(0, 20),
+                pnuList: cluster.members.map((item) => item.id).filter(Boolean),
                 center: cluster.center,
                 bounds: cluster.bounds,
                 features: cluster.members.map((item) => item.feature),
@@ -833,6 +833,9 @@
             hotspotLabel: Number(candidate.hotspotCount || 0).toLocaleString(),
             totalAreaLabel: candidate.totalAreaLabel || formatAreaSquareMeters(candidate.totalAreaSqm),
             bounds: candidate.bounds,
+            center: candidate.center,
+            features: candidate.features || [],
+            pnuList: candidate.pnuList || [],
             isPriority: Number(candidate.rank) <= 3
         }));
         const features = drawableCandidates.flatMap((candidate) =>
@@ -863,7 +866,13 @@
                 onEachFeature: (feature, layer) => {
                     layer.bindTooltip(`${feature.properties?.candidateName || '필지 후보'} · Risk ${feature.properties?.candidateRisk || '--'}`, { sticky: true });
                     layer.on('click', () => {
-                        focusParcelCandidate({
+                        const key = feature.properties?.candidateId || feature.properties?.candidateName || '';
+                        const candidate = legendCandidates.find((item) =>
+                            parcelCandidateKey(item) === String(key) ||
+                            Number(item.rank) === Number(feature.properties?.candidateRank) ||
+                            item.name === feature.properties?.candidateName
+                        );
+                        focusParcelCandidate(candidate || {
                             id: feature.properties?.candidateId,
                             rank: feature.properties?.candidateRank,
                             name: feature.properties?.candidateName

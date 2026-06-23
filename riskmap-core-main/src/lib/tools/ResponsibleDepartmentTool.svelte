@@ -19,6 +19,7 @@
         VWORLD_WMS_LAYERS,
         VWORLD_WMS_URL
     } from '../../../../shared/map/vworld.js';
+    import { getLatestPlatformHandoff, savePlatformHandoff } from '../../../../shared/services/platformHandoffs.js';
     import * as XLSX from 'xlsx';
     import { calculateTemperatureEffect } from '$lib/effects/temperatureEffect.js';
     import 'leaflet/dist/leaflet.css';
@@ -105,6 +106,8 @@
     let handoffNoticeOpen = $state(Boolean(initialWorkspace && initialHandoff));
     let placementEditMode = $state(false);
     let workspaceView = $state(Boolean(initialWorkspace));
+    let entryLoading = $state(!initialWorkspace);
+    let workspaceLoading = $state(Boolean(initialWorkspace));
     let mapReady = $state(false);
     let tempGraph = $state();
     let mapElement = $state();
@@ -197,14 +200,25 @@
     function changeSido(event) {
         selectedSido = event.currentTarget.value;
         selectedRegionCode = regions.find((row) => row.sido === selectedSido)?.code || '';
-        loadResponsibleHandoff();
+        clearIncomingHandoffState();
+        if (workspaceView) loadResponsibleHandoff({ force: true });
         locateRegion();
     }
 
     function changeRegion(event) {
         selectedRegionCode = event.currentTarget.value;
-        loadResponsibleHandoff();
+        clearIncomingHandoffState();
+        if (workspaceView) loadResponsibleHandoff({ force: true });
         locateRegion();
+    }
+
+    function clearIncomingHandoffState() {
+        incomingHandoff = null;
+        incomingHandoffStatus = '';
+        activeHandoffAlternativeId = '';
+        departmentSelection = null;
+        handoffNoticeOpen = false;
+        clearIncomingCandidateLayers();
     }
 
     function requestJson(url, options = {}) {
@@ -241,11 +255,14 @@
     }
 
     async function fetchResponsibleHandoffFromInbox(regionCode) {
+        const supabasePayload = await getLatestPlatformHandoff('lead_to_responsible', regionCode, ['requested', 'reviewing', 'risk_done', 'sent', 'completed']);
+        if (supabasePayload?.schemaVersion === 'lead-to-responsible-handoff/v1') return supabasePayload;
+
         try {
             const urls = [
                 new URL(RESPONSIBLE_HANDOFF_INBOX_URL, window.location.origin),
                 new URL('/responsible-handoff', window.location.origin),
-                new URL('http://127.0.0.1:4176/responsible-handoff')
+                new URL('http://127.0.0.1:5176/responsible-handoff')
             ];
             const uniqueUrls = [...new Map(urls.map((url) => {
                 url.searchParams.set('regionCode', regionCode);
@@ -266,11 +283,20 @@
         }
     }
 
-    async function loadResponsibleHandoff() {
+    async function loadResponsibleHandoff({ force = false, showLoading = true } = {}) {
+        const showEntryLoading = showLoading && !workspaceView;
+        const showWorkspaceLoading = showLoading && workspaceView;
+        if (showEntryLoading) entryLoading = true;
+        if (showWorkspaceLoading) workspaceLoading = true;
         try {
             const params = new URLSearchParams(window.location.search);
             const handoffRequested = params.get('handoff') === 'lead-department';
             const workspaceRequested = params.get('view') === 'workspace';
+            const shouldReadInbox = force || handoffRequested || workspaceRequested || Boolean(initialHandoff?.regionCode === selectedRegionCode);
+            if (!shouldReadInbox) {
+                clearIncomingHandoffState();
+                return null;
+            }
 
             let payload = await fetchResponsibleHandoffFromInbox(selectedRegionCode);
             if (!payload && initialHandoff?.regionCode === selectedRegionCode) {
@@ -285,11 +311,7 @@
                 if (namedPayload?.type === DEPARTMENT_HANDOFF_KEY) payload = namedPayload.payload;
             }
             if (!payload) {
-                incomingHandoff = null;
-                incomingHandoffStatus = '';
-                activeHandoffAlternativeId = '';
-                departmentSelection = null;
-                handoffNoticeOpen = false;
+                clearIncomingHandoffState();
                 return null;
             }
             if (!payload?.alternatives?.some((alternative) => alternative.candidates?.length) && payload?.candidates?.length) {
@@ -304,11 +326,7 @@
 
             const alternatives = (payload?.alternatives || []).filter((alternative) => alternative.candidates?.length);
             if (!alternatives.length) {
-                incomingHandoff = null;
-                incomingHandoffStatus = '';
-                activeHandoffAlternativeId = '';
-                departmentSelection = null;
-                handoffNoticeOpen = false;
+                clearIncomingHandoffState();
                 return null;
             }
 
@@ -327,6 +345,9 @@
             console.error(error);
             incomingHandoffStatus = '전달 대안 패키지를 읽지 못했습니다.';
             return null;
+        } finally {
+            if (showEntryLoading) entryLoading = false;
+            if (showWorkspaceLoading) workspaceLoading = false;
         }
     }
 
@@ -434,7 +455,7 @@
         renderIncomingCandidateLayers(fit);
 
         const entries = [];
-        for (const candidate of missingCandidates.slice(0, 10)) {
+        for (const candidate of missingCandidates) {
             const features = await fetchIncomingCandidateFeaturesByPnu(candidate);
             if (features.length) entries.push([incomingCandidateKey(candidate), features]);
         }
@@ -456,8 +477,10 @@
 
     async function fetchIncomingCandidateFeaturesByPnu(candidate) {
         const featuresByPnu = new Map();
-        const pnuList = incomingCandidatePnuList(candidate).slice(0, 80);
-        for (const pnu of pnuList) {
+        const pnuList = incomingCandidatePnuList(candidate);
+        const chunkSize = 12;
+
+        async function fetchOne(pnu) {
             try {
                 const url = createVWorldDataUrl(VWORLD_DATASETS.cadastral, {
                     attrFilter: `pnu:=:${pnu}`,
@@ -465,7 +488,7 @@
                     page: 1
                 });
                 const response = await fetch(url, { cache: 'no-store' });
-                if (!response.ok) continue;
+                if (!response.ok) return;
                 const payload = await response.json();
                 extractVWorldFeatures(payload).forEach((feature) => {
                     const key = String(feature.properties?.pnu ?? feature.properties?.PNU ?? pnu);
@@ -475,6 +498,11 @@
                 // Best-effort hydration. Bounds remain available as a fallback.
             }
         }
+
+        for (let index = 0; index < pnuList.length; index += chunkSize) {
+            await Promise.all(pnuList.slice(index, index + chunkSize).map(fetchOne));
+        }
+
         return Array.from(featuresByPnu.values());
     }
 
@@ -1144,16 +1172,17 @@
             effectStatus
         };
         try {
+            const supabaseOk = await savePlatformHandoff('responsible_to_lead', payload, 'completed');
             const response = await fetch(RESPONSIBLE_REVIEW_INBOX_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            reviewResponseStatus = response.ok
+            reviewResponseStatus = (supabaseOk || response.ok)
                 ? '사업소관부서 수정·검토 결과를 주관부서 인박스로 회신했습니다.'
-                : '주관부서 인박스 회신에 실패했습니다. 4176 프록시 상태를 확인하세요.';
+                : '주관부서 인박스 회신에 실패했습니다. 5176 프록시 상태를 확인하세요.';
         } catch {
-            reviewResponseStatus = '주관부서 인박스 회신에 실패했습니다. 4176 프록시 상태를 확인하세요.';
+            reviewResponseStatus = '주관부서 인박스 회신에 실패했습니다. 5176 프록시 상태를 확인하세요.';
         }
     }
 
@@ -1201,7 +1230,7 @@
 
     async function enterWorkspace() {
         workspaceView = true;
-        const payload = await loadResponsibleHandoff();
+        const payload = await loadResponsibleHandoff({ force: true, showLoading: false });
         const nextUrl = new URL(window.location.href);
         nextUrl.searchParams.set('regionCode', selectedRegionCode);
         nextUrl.searchParams.set('view', 'workspace');
@@ -1228,7 +1257,7 @@
         const shouldOpenHandoff = params.get('view') === 'workspace' || params.get('handoff') === 'lead-department';
         workspaceView = shouldOpenHandoff;
         (async () => {
-            await loadResponsibleHandoff();
+            await loadResponsibleHandoff({ force: shouldOpenHandoff, showLoading: true });
             if (shouldOpenHandoff && incomingHandoff) {
                 handoffNoticeOpen = true;
             }
@@ -1243,6 +1272,15 @@
 
 {#if !workspaceView}
     <main class="responsible-entry">
+        {#if entryLoading}
+            <div class="entry-loading-backdrop" aria-live="polite">
+                <section class="entry-loading-card">
+                    <span>Loading</span>
+                    <h2>사업소관부서 지원도구를 준비 중입니다</h2>
+                    <p>선택 지역과 주관부서 전달 요청을 확인한 뒤 작업 화면을 엽니다.</p>
+                </section>
+            </div>
+        {/if}
         <header class="entry-header">
             <a class="entry-back" href={portalToolsUrl}>지원도구 페이지로 돌아가기</a>
             <div>
@@ -1255,14 +1293,16 @@
                 <p class="entry-eyebrow">REGION SELECT</p>
                 <h1>실행 지역 선택</h1>
                 <p>사업소관부서가 검토할 지역을 선택합니다. 기본 지역은 경기도 수원시입니다.</p>
-                <label>시도<select value={selectedSido} onchange={changeSido}>{#each sidos as sido}<option>{sido}</option>{/each}</select></label>
-                <label>시군구<select value={selectedRegionCode} onchange={changeRegion}>{#each availableRegions as region}<option value={region.code}>{region.name.replace(`${region.sido} `, '')}</option>{/each}</select></label>
+                <label>시도<select value={selectedSido} onchange={changeSido} disabled={entryLoading}>{#each sidos as sido}<option>{sido}</option>{/each}</select></label>
+                <label>시군구<select value={selectedRegionCode} onchange={changeRegion} disabled={entryLoading}>{#each availableRegions as region}<option value={region.code}>{region.name.replace(`${region.sido} `, '')}</option>{/each}</select></label>
                 <div class="entry-region">
                     <span>선택 지역</span>
                     <strong>{selectedRegion?.name}</strong>
                     <small>행정코드 {selectedRegionCode}</small>
                 </div>
-                <button type="button" class="entry-primary" onclick={enterWorkspace}>사업소관부서 도구 입장</button>
+                <button type="button" class="entry-primary" onclick={enterWorkspace} disabled={entryLoading}>
+                    {entryLoading ? '요청 확인 중...' : '사업소관부서 도구 입장'}
+                </button>
             </article>
             <article class:hasRequest={incomingCandidateCount || incomingPlacementCount} class="entry-card request-card">
                 <p class="entry-eyebrow">LEAD DEPARTMENT REQUEST</p>
@@ -1273,7 +1313,9 @@
                     <div><span>후보지</span><strong>{incomingCandidateCount}</strong></div>
                     <div><span>사업 배치</span><strong>{incomingPlacementCount}</strong></div>
                 </div>
-                {#if incomingHandoff}
+                {#if entryLoading}
+                    <div class="entry-empty">선택 지역의 전달 요청을 확인하는 중입니다.</div>
+                {:else if incomingHandoff}
                     <div class="entry-package">
                         <span>전달 패키지</span>
                         <strong>중점관리구역 및 사업배치 권장사항</strong>
@@ -1286,6 +1328,15 @@
         </section>
     </main>
 {:else}
+{#if workspaceLoading}
+    <div class="entry-loading-backdrop" aria-live="polite">
+        <section class="entry-loading-card">
+            <span>Loading</span>
+            <h2>요청 데이터를 불러오는 중입니다</h2>
+            <p>중점관리구역 대안과 사업배치 정보를 작업 화면에 연결하고 있습니다.</p>
+        </section>
+    </div>
+{/if}
 <div class="tool-shell">
     <aside class="sidebar">
         <h1>사업소관부서 지원도구</h1>
@@ -1549,7 +1600,7 @@
 {/if}
 
 <style>
-    .responsible-entry{min-height:100vh;background:#10233f;color:#0f172a;font-family:Pretendard,Arial,sans-serif}.entry-header{display:flex;align-items:center;gap:14px;min-height:56px;padding:0 20px;background:#233447;color:#fff;box-shadow:0 12px 32px #02061733}.entry-header strong{display:block;font-size:15px}.entry-header span{display:block;margin-top:3px;color:#cbd5e1;font-size:12px}.entry-back{display:inline-flex;align-items:center;border:1px solid #ffffff29;border-radius:999px;background:#ffffff14;color:#f8fafc;padding:8px 13px;font-size:12px;font-weight:900;text-decoration:none}.entry-grid{display:grid;grid-template-columns:420px minmax(0,1fr);gap:20px;max-width:1100px;margin:0 auto;padding:32px 24px}.entry-card{border:1px solid #dbe7ee;border-radius:18px;background:#fff;padding:22px;box-shadow:0 20px 48px #0206172e}.entry-card h1,.entry-card h2{margin:8px 0 10px;color:#0f172a;font-size:26px;line-height:1.18}.entry-card h2{font-size:24px}.entry-card p{margin:0 0 18px;color:#475569;font-size:14px;line-height:1.7}.entry-eyebrow{margin:0!important;color:#0f766e!important;font-size:12px!important;font-weight:900!important;letter-spacing:0!important}.entry-card label{display:grid;gap:6px;margin-top:12px;color:#475569;font-size:12px;font-weight:900}.entry-card select{width:100%;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#10233f;padding:10px 12px;font-size:14px;font-weight:800}.entry-region,.entry-package,.entry-empty{display:grid;gap:5px;margin-top:16px;border-radius:14px;background:#f8fafc;padding:15px}.entry-region span,.entry-package span{color:#64748b;font-size:12px;font-weight:900}.entry-region strong,.entry-package strong{color:#0f172a;font-size:18px}.entry-region small,.entry-package small{color:#64748b;font-size:12px;font-weight:800}.entry-primary{width:100%;margin-top:18px;border:0;border-radius:10px;background:#10233f;color:#fff;padding:13px 16px;font-size:14px;font-weight:900;cursor:pointer}.request-card{background:#ffffff}.request-card.hasRequest{border-color:#fed7aa;background:#fff7ed}.request-card .entry-eyebrow{color:#c2410c!important}.entry-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}.entry-counts div{display:grid;gap:6px;border-radius:14px;background:#f8fafc;padding:16px}.request-card.hasRequest .entry-counts div{background:#fff}.entry-counts span{color:#64748b;font-size:12px;font-weight:900}.entry-counts strong{color:#0f172a;font-size:32px;line-height:1}.entry-empty{color:#64748b;font-size:14px;font-weight:800;line-height:1.6}.entry-package{background:#fff}
+    .responsible-entry{min-height:100vh;background:#10233f;color:#0f172a;font-family:Pretendard,Arial,sans-serif}.entry-loading-backdrop{position:fixed;z-index:5000;inset:0;display:grid;place-items:center;background:#10233fcc;backdrop-filter:blur(8px)}.entry-loading-card{width:min(380px,calc(100vw - 32px));border:1px solid #ffffff2e;border-radius:22px;background:#fff;padding:26px;text-align:center;box-shadow:0 28px 70px #02061766}.entry-loading-card span{display:block;color:#0f766e;font-size:11px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.entry-loading-card h2{margin:9px 0 0;color:#0f172a;font-size:22px;line-height:1.2}.entry-loading-card p{margin:12px 0 0;color:#475569;font-size:13px;line-height:1.7}.entry-header{display:flex;align-items:center;gap:14px;min-height:56px;padding:0 20px;background:#233447;color:#fff;box-shadow:0 12px 32px #02061733}.entry-header strong{display:block;font-size:15px}.entry-header span{display:block;margin-top:3px;color:#cbd5e1;font-size:12px}.entry-back{display:inline-flex;align-items:center;border:1px solid #ffffff29;border-radius:999px;background:#ffffff14;color:#f8fafc;padding:8px 13px;font-size:12px;font-weight:900;text-decoration:none}.entry-grid{display:grid;grid-template-columns:420px minmax(0,1fr);gap:20px;max-width:1100px;margin:0 auto;padding:32px 24px}.entry-card{border:1px solid #dbe7ee;border-radius:18px;background:#fff;padding:22px;box-shadow:0 20px 48px #0206172e}.entry-card h1,.entry-card h2{margin:8px 0 10px;color:#0f172a;font-size:26px;line-height:1.18}.entry-card h2{font-size:24px}.entry-card p{margin:0 0 18px;color:#475569;font-size:14px;line-height:1.7}.entry-eyebrow{margin:0!important;color:#0f766e!important;font-size:12px!important;font-weight:900!important;letter-spacing:0!important}.entry-card label{display:grid;gap:6px;margin-top:12px;color:#475569;font-size:12px;font-weight:900}.entry-card select{width:100%;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#10233f;padding:10px 12px;font-size:14px;font-weight:800}.entry-card select:disabled,.entry-primary:disabled{opacity:.58;cursor:wait}.entry-region,.entry-package,.entry-empty{display:grid;gap:5px;margin-top:16px;border-radius:14px;background:#f8fafc;padding:15px}.entry-region span,.entry-package span{color:#64748b;font-size:12px;font-weight:900}.entry-region strong,.entry-package strong{color:#0f172a;font-size:18px}.entry-region small,.entry-package small{color:#64748b;font-size:12px;font-weight:800}.entry-primary{width:100%;margin-top:18px;border:0;border-radius:10px;background:#10233f;color:#fff;padding:13px 16px;font-size:14px;font-weight:900;cursor:pointer}.request-card{background:#ffffff}.request-card.hasRequest{border-color:#fed7aa;background:#fff7ed}.request-card .entry-eyebrow{color:#c2410c!important}.entry-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}.entry-counts div{display:grid;gap:6px;border-radius:14px;background:#f8fafc;padding:16px}.request-card.hasRequest .entry-counts div{background:#fff}.entry-counts span{color:#64748b;font-size:12px;font-weight:900}.entry-counts strong{color:#0f172a;font-size:32px;line-height:1}.entry-empty{color:#64748b;font-size:14px;font-weight:800;line-height:1.6}.entry-package{background:#fff}
     @media(max-width:900px){.entry-grid{grid-template-columns:1fr}.entry-header{align-items:flex-start;flex-direction:column;padding:12px 16px}}
     :global(body){margin:0}.tool-shell{display:grid;grid-template-columns:280px minmax(400px,1fr) 340px;gap:8px;height:100vh;padding:8px;background:linear-gradient(135deg,#073b52 0%,#064a55 48%,#0f766e 100%);color:#10233f;font-family:Pretendard,Arial,sans-serif;box-sizing:border-box}.sidebar,.dashboard{overflow:auto;border:1px solid #dbe7ee;border-radius:14px;background:#fff;padding:14px;box-shadow:0 18px 40px #0f172a21}.sidebar h1{font-size:18px;margin:0 0 12px}.sidebar section{padding:12px 0;border-top:1px solid #e2e8f0}.sidebar h2,.dashboard h2{font-size:15px;margin:0 0 9px}label{display:grid;gap:4px;margin:7px 0;font-size:12px;font-weight:700}input,select{padding:7px;border:1px solid #cbd5e1;border-radius:5px;background:white;color:#10233f}.selected-region-summary{display:grid;gap:3px;margin:0 0 10px;padding:10px 12px!important;border:1px solid #cbd5e1!important;border-radius:12px;background:#f8fafc!important}.selected-region-summary span{color:#64748b;font-size:11px;font-weight:900}.selected-region-summary strong{color:#0f172a!important;font-size:15px}.selected-region-summary small{color:#64748b;font-size:11px;font-weight:800}.region-selector{position:sticky;z-index:700;top:-12px;margin:0 -4px 10px;padding:14px 12px!important;border:2px solid #0f9f6e!important;border-radius:12px;background:#ecfdf5;box-shadow:0 3px 10px #10233f1f}.region-selector h2{color:#0f766e}.region-selector select{width:100%;border-color:#99f6e4;font-weight:700;cursor:pointer}.region-selector select:hover,.region-selector select:focus{border-color:#0f766e;outline:2px solid #ccfbf1}.region-selector p{margin:9px 0 0;padding:7px;border-radius:5px;background:#fff;font-size:11px;color:#475569}.section-head{display:grid;gap:7px}.section-head button,.apply,.finish,.browse{padding:9px;border:0;border-radius:8px;background:#0f9f6e;color:white;font-weight:700}.project-list{display:grid;gap:6px;margin:9px 0}.project-list button{display:grid;grid-template-columns:24px 1fr;align-items:start;gap:8px;text-align:left;padding:9px;border:1px solid #dbe4ee;border-radius:9px;background:#fff}.project-list button.active{border-color:#0f9f6e;background:#ecfdf5}.project-index{display:grid!important;place-items:center;width:22px;height:22px;border-radius:999px;background:#dff8ef!important;color:#047857!important;font-size:11px!important;font-weight:900}.project-summary{display:grid;gap:3px}.project-list span,.project-list small,.empty{font-size:11px;color:#64748b}.finish{width:100%;background:#2563eb;margin-bottom:6px}.browse{width:100%;margin-bottom:6px;background:#e0f2fe!important;color:#075985!important}.apply{width:100%;background:#10233f}.apply:disabled{opacity:.4}.conditions{margin-top:auto}.conditions dl{display:grid;gap:5px;margin:0;font-size:11px}.conditions dl div{display:flex;justify-content:space-between;gap:8px}.conditions dd{margin:0;text-align:right;font-weight:700}.map-wrap{position:relative;min-width:0}.map{height:100%;border-radius:14px}.map-guide{position:absolute;z-index:600;top:10px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:20px;background:#fff;box-shadow:0 2px 12px #0003;font-size:12px;font-weight:700}.candidate-map-panel{position:absolute;z-index:640;top:58px;left:12px;display:grid;gap:8px;width:min(300px,calc(100% - 24px));max-height:calc(100% - 128px);padding:12px;border:1px solid #fed7aa;border-radius:14px;background:#fffffff0;box-shadow:0 12px 30px #0f172a2e;backdrop-filter:blur(10px)}.candidate-map-head{display:flex;align-items:center;justify-content:space-between}.candidate-map-head strong{color:#7c2d12;font-size:13px}.candidate-map-head span{border-radius:999px;background:#ffedd5;color:#9a3412;padding:3px 8px;font-size:10px;font-weight:900}.candidate-map-list{display:grid;gap:5px;overflow:auto}.candidate-map-list button{display:grid;grid-template-columns:26px minmax(0,1fr);align-items:center;gap:7px;border:1px solid #fed7aa;border-radius:9px;background:#fff7ed;padding:7px;text-align:left}.candidate-map-list button.active{border-color:#dc2626;background:#fee2e2}.candidate-map-list b{display:grid;place-items:center;width:24px;height:24px;border-radius:999px;background:#f97316;color:#fff;font-size:10px}.candidate-map-list span{display:grid;gap:2px;min-width:0}.candidate-map-list strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#7c2d12;font-size:11px}.candidate-map-list small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#92400e;font-size:10px;font-weight:800}.map-edit-panel{position:absolute;z-index:650;left:50%;bottom:18px;display:flex;align-items:center;gap:8px;max-width:calc(100% - 36px);padding:10px 12px;border:1px solid #ffffff99;border-radius:14px;background:#ffffffe6;box-shadow:0 12px 30px #0f172a33;backdrop-filter:blur(10px)}.map-edit-panel div{display:grid;min-width:170px;margin-right:4px}.map-edit-panel b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0f172a;font-size:12px}.map-edit-panel span{color:#475569;font-size:11px}.map-edit-panel button{padding:8px 10px;border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#10233f;font-size:11px;font-weight:800;white-space:nowrap}.map-edit-panel .danger{border-color:#fecaca;background:#fff1f2;color:#be123c}.dashboard h3{margin:0;padding:8px;border-radius:8px;background:#10233f;color:#fff;font-size:14px}.dashboard section{margin-bottom:10px;border:1px solid #dbe4ee;border-radius:10px;padding:6px}.dashboard p,.placeholder{font-size:11px;color:#64748b;padding:8px}.dashboard h4{font-size:12px;margin:7px}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:5px}.metrics div{display:grid;gap:3px;padding:8px;border-radius:6px;background:#fff7ed;font-size:11px}.implementation article{display:grid;gap:5px;padding:9px;border-bottom:1px solid #e2e8f0;font-size:12px}.implementation article span{color:#64748b;font-size:11px}progress{width:100%}.modal-backdrop{position:fixed;z-index:2000;inset:0;display:grid;place-items:center;background:#0f172a99}.modal{width:min(520px,calc(100vw - 32px));max-height:90vh;overflow:auto;padding:22px;border-radius:12px;background:#fff;box-shadow:0 20px 70px #0005}.modal h2{margin-top:0}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.modal-actions button{padding:9px 16px;border:0;border-radius:6px}.modal-actions button:last-child{background:#0f9f6e;color:#fff;font-weight:700}@media(max-width:1000px){.tool-shell{grid-template-columns:240px 1fr}.dashboard{display:none}}
     .sidebar,.dashboard{color:#0f172a;opacity:1}.sidebar h1,.sidebar h2,.dashboard h2,.sidebar label,.dashboard strong{opacity:1;color:#0f172a}.sidebar section,.dashboard section{background:#fff}.sidebar p,.empty,.project-list span,.project-list small,.implementation article span{color:#334155;opacity:1}.dashboard{background:#f8fafc}.dashboard h2{font-size:17px;font-weight:800}.dashboard h3{background:#10233f;color:#fff!important;font-weight:800}.dashboard section{padding:8px;border-color:#cbd5e1;box-shadow:0 1px 3px #0f172a12}.dashboard p,.dashboard .placeholder{margin:8px 0;padding:10px;border:1px solid #dbe4ee;border-radius:6px;background:#fff;color:#1e293b;font-size:12px;font-weight:600;line-height:1.5;opacity:1}.dashboard h4{color:#0f172a;font-weight:800}.metrics span{color:#334155;font-weight:700}.apply:disabled{opacity:1;background:#94a3b8;color:#fff}.modal-backdrop{background:#0f172a26}

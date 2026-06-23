@@ -3,7 +3,7 @@ $ErrorActionPreference = "Continue"
 $root = Split-Path -Parent $PSScriptRoot
 $runtimeDir = Join-Path $root ".runtime-logs"
 $processFile = Join-Path $runtimeDir "platform-processes.json"
-$ports = @(4173, 4174, 4175, 4176)
+$ports = @(5173, 5174, 5175, 5176, 4173, 4174, 4175, 4176)
 
 function Stop-ProcessId($targetPid, $reason) {
   if (-not $targetPid) {
@@ -29,10 +29,13 @@ if (Test-Path $processFile) {
 }
 
 foreach ($port in $ports) {
-  $lines = netstat -ano | Select-String "^\s*TCP\s+.+:$port\s+.+\s+LISTENING\s+(\d+)\s*$"
-  foreach ($line in $lines) {
-    $portPid = [int]$line.Matches[0].Groups[1].Value
-    Stop-ProcessId $portPid "port $port"
+  $connections = netstat -ano | Select-String -Pattern "LISTENING" | Where-Object {
+    $parts = ($_.Line -replace "\s+", " ").Trim().Split(" ")
+    $parts.Length -ge 5 -and $parts[1] -match ":$port$"
+  }
+  foreach ($connection in $connections) {
+    $parts = ($connection.Line -replace "\s+", " ").Trim().Split(" ")
+    Stop-ProcessId ([int]$parts[4]) "port $port"
   }
 }
 

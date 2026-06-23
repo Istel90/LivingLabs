@@ -24,10 +24,10 @@ try {
 }
 
 const apiKey = env.VITE_VWORLD_API_KEY || '';
-const domain = env.VITE_VWORLD_DOMAIN || 'http://127.0.0.1:4175/';
+const domain = env.VITE_VWORLD_DOMAIN || 'http://127.0.0.1:5175/';
 const allowInsecureTls = env.VWORLD_ALLOW_INSECURE_TLS === 'true' || process.env.VWORLD_ALLOW_INSECURE_TLS === 'true';
 const httpsAgent = allowInsecureTls ? new HttpsAgent({ rejectUnauthorized: false }) : undefined;
-const port = Number(process.env.VWORLD_PROXY_PORT || process.argv.find((arg) => arg.startsWith('--port='))?.split('=')[1] || 4176);
+const port = Number(process.env.VWORLD_PROXY_PORT || process.argv.find((arg) => arg.startsWith('--port='))?.split('=')[1] || 5176);
 
 function send(response, status, body, contentType = 'application/json; charset=utf-8') {
   response.writeHead(status, {
@@ -74,6 +74,12 @@ function readHandoffStore(storePath = handoffStorePath) {
 
 function writeHandoffStore(store, storePath = handoffStorePath) {
   writeFileSync(storePath, JSON.stringify(store, null, 2), 'utf8');
+}
+
+function resetDevStores() {
+  writeHandoffStore({}, handoffStorePath);
+  writeHandoffStore({}, responsibleHandoffStorePath);
+  writeHandoffStore({}, responsibleReviewStorePath);
 }
 
 async function handleStoredHandoffRoute(request, response, url, { storePath, schemaVersion }) {
@@ -174,6 +180,25 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://127.0.0.1:${port}`);
   if (url.pathname === '/health') {
     send(response, 200, JSON.stringify({ ok: true, service: 'vworld-data-proxy' }));
+    return;
+  }
+
+  if (url.pathname === '/dev-reset') {
+    if (!['POST', 'DELETE'].includes(request.method)) {
+      send(response, 405, JSON.stringify({ ok: false, error: 'Method not allowed' }));
+      return;
+    }
+
+    resetDevStores();
+    send(response, 200, JSON.stringify({
+      ok: true,
+      reset: [
+        'priority-handoffs',
+        'responsible-handoffs',
+        'responsible-review-responses',
+      ],
+      resetAt: new Date().toISOString(),
+    }));
     return;
   }
 
