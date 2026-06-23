@@ -27,6 +27,8 @@ jobs:
       VITE_VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY || 'F2BE7753-45CF-308D-BFFD-BB85E75F2DF5' }}
       VITE_VWORLD_DOMAIN: https://istel90.github.io/LivingLabs/
       VITE_VWORLD_PROXY_URL: ${{ secrets.VWORLD_PROXY_URL || 'https://ehjygntjhqkddtcnvjdj.supabase.co/functions/v1/vworld-data' }}
+      VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://ehjygntjhqkddtcnvjdj.supabase.co' }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
       VITE_PORTAL_TOOLS_URL: https://istel90.github.io/LivingLabs/tools#adaptation-support-tools
       VITE_LEAD_DEPARTMENT_TOOL_URL: https://istel90.github.io/LivingLabs/lead-department-tool
 

@@ -1190,18 +1190,23 @@
             responsibleProjects: serializableProjects(),
             effectStatus
         };
+        const supabaseOk = await savePlatformHandoff('responsible_to_lead', payload, 'completed');
+        if (supabaseOk) {
+            reviewResponseStatus = '사업소관부서 수정·검토 결과를 주관부서 인박스에 저장했습니다.';
+            return;
+        }
+
         try {
-            const supabaseOk = await savePlatformHandoff('responsible_to_lead', payload, 'completed');
             const response = await fetch(RESPONSIBLE_REVIEW_INBOX_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            reviewResponseStatus = (supabaseOk || response.ok)
+            reviewResponseStatus = response.ok
                 ? '사업소관부서 수정·검토 결과를 주관부서 인박스로 회신했습니다.'
-                : '주관부서 인박스 회신에 실패했습니다. 5176 프록시 상태를 확인하세요.';
+                : '주관부서 회신 저장에 실패했습니다. GitHub Secrets의 SUPABASE_ANON_KEY와 platform_handoffs 권한을 확인하세요.';
         } catch {
-            reviewResponseStatus = '주관부서 인박스 회신에 실패했습니다. 5176 프록시 상태를 확인하세요.';
+            reviewResponseStatus = '주관부서 회신 저장에 실패했습니다. GitHub Secrets의 SUPABASE_ANON_KEY와 platform_handoffs 권한을 확인하세요.';
         }
     }
 
