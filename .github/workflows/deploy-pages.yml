@@ -24,7 +24,10 @@ jobs:
       VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL: /LivingLabs/internal-tools/responsible-department
       VITE_PRIORITY_MANAGEMENT_AREA_TOOL_URL: /LivingLabs/internal-tools/priority-management-area
       VITE_ADAPTATION_PATHWAY_TOOL_URL: /LivingLabs/internal-tools/adaptation-pathway
-      VITE_VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
+      VITE_VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY || 'F2BE7753-45CF-308D-BFFD-BB85E75F2DF5' }}
+      VITE_VWORLD_DOMAIN: https://istel90.github.io/LivingLabs/
+      VITE_PORTAL_TOOLS_URL: https://istel90.github.io/LivingLabs/tools#adaptation-support-tools
+      VITE_LEAD_DEPARTMENT_TOOL_URL: https://istel90.github.io/LivingLabs/lead-department-tool
 
     steps:
       - name: Checkout

@@ -43,6 +43,7 @@ import {
   type LeadDepartmentScenarioPlan,
   type LeadDepartmentSnapshot,
 } from '../lib/adapters/leadDepartmentData';
+import { responsibleDepartmentToolUrl } from '../toolUrls';
 
 type LeafletGlobal = any;
 type LayerVisibility = Record<string, boolean>;
@@ -202,7 +203,6 @@ const LEAD_REVIEW_STATE_KEY = 'livinglabs.leadDepartmentPriorityReviewState';
 const LEAD_REQUEST_LIFECYCLE_KEY = 'livinglabs.leadDepartmentPriorityRequestLifecycle';
 const LEAD_ADAPTATION_PLACEMENT_KEY = 'livinglabs.leadDepartmentAdaptationPlacementDraft';
 const DEFAULT_LEAD_REGION_CODE = '41110';
-const responsibleDepartmentToolUrl = import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || '/responsible-department';
 const initialSearchParams = new URLSearchParams(window.location.search);
 const initialPriorityRegionCode = initialSearchParams.get('regionCode') || DEFAULT_LEAD_REGION_CODE;
 const initialWorkspaceView = initialSearchParams.get('view') === 'workspace';

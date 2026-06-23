@@ -1,7 +1,6 @@
+import { useEffect } from 'react';
 import { useLocation } from 'react-router';
-
-const internalToolsOrigin =
-  import.meta.env.VITE_INTERNAL_TOOLS_ORIGIN || 'http://127.0.0.1:5175';
+import { internalToolsOrigin } from '../toolUrls';
 
 const toolLabels: Record<string, string> = {
   '/priority-management-area': '중점관리구역 선정지원도구',
@@ -19,25 +18,19 @@ export function InternalToolGatewayPage() {
   const toolUrl = `${internalToolsOrigin}${location.pathname}${location.search}${location.hash}`;
   const title = resolveTitle(location.pathname);
 
+  useEffect(() => {
+    window.location.replace(toolUrl);
+  }, [toolUrl]);
+
   return (
-    <main className="fixed inset-0 bg-slate-950 text-white">
-      <div className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full border border-white/15 bg-slate-950/75 px-3 py-2 text-xs font-bold shadow-lg backdrop-blur">
-        <span>{title}</span>
-        <a
-          href={toolUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-full bg-white/10 px-2 py-1 text-[11px] text-slate-100 hover:bg-white/20"
-        >
-          직접 열기
+    <main className="grid min-h-screen place-items-center bg-slate-950 p-6 text-white">
+      <div className="rounded-2xl border border-white/15 bg-white/10 p-6 text-center shadow-xl backdrop-blur">
+        <p className="text-sm font-bold text-slate-300">{title}</p>
+        <h1 className="mt-2 text-xl font-extrabold">지원도구로 이동 중입니다.</h1>
+        <a href={toolUrl} className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-sm font-extrabold text-slate-900">
+          이동이 안 되면 열기
         </a>
       </div>
-      <iframe
-        title={title}
-        src={toolUrl}
-        className="h-full w-full border-0 bg-white"
-        allow="clipboard-read; clipboard-write"
-      />
     </main>
   );
 }

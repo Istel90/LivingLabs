@@ -5,10 +5,7 @@ import { CircularProcess } from '../components/CircularProcess';
 import { RightSidebar } from '../components/RightSidebar';
 import { PlatformContent } from '../components/PlatformContent';
 import { BookOpen, ChevronDown, ChevronRight, Compass, Sparkles } from 'lucide-react';
-
-const leadDepartmentToolUrl = `${import.meta.env.BASE_URL}lead-department-tool`;
-const responsibleDepartmentToolUrl =
-  import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || '/responsible-department';
+import { leadDepartmentToolUrl, responsibleDepartmentToolUrl } from '../toolUrls';
 
 interface TreeNode {
   id: string;
