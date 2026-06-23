@@ -71,19 +71,26 @@ foreach ($app in $apps) {
     continue
   }
 
+  $combinedLog = Join-Path $runtimeDir "$($app.Name)-$($app.Port)-dev.log"
+  $errorLog = Join-Path $runtimeDir "$($app.Name)-$($app.Port)-dev.err.log"
+
   if ($app.Command -eq "node") {
     $process = Start-Process `
       -FilePath "node.exe" `
       -ArgumentList $app.Args `
       -WorkingDirectory $app.Cwd `
-      -WindowStyle Normal `
+      -WindowStyle Hidden `
+      -RedirectStandardOutput $combinedLog `
+      -RedirectStandardError $errorLog `
       -PassThru
   } else {
     $process = Start-Process `
       -FilePath "npm.cmd" `
       -ArgumentList @("run", "dev", "--", "--host", "0.0.0.0", "--port", "$($app.Port)", "--strictPort") `
       -WorkingDirectory $app.Cwd `
-      -WindowStyle Normal `
+      -WindowStyle Hidden `
+      -RedirectStandardOutput $combinedLog `
+      -RedirectStandardError $errorLog `
       -PassThru
   }
 

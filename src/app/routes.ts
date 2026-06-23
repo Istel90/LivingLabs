@@ -9,6 +9,7 @@ import { AnalysisToolsPage } from "./pages/tools/AnalysisToolsPage";
 import { ApplicationsPage } from "./pages/tools/ApplicationsPage";
 import { AboutPage } from "./pages/AboutPage";
 import { LeadDepartmentPrototypePage } from "./pages/LeadDepartmentPrototypePage";
+import { InternalToolGatewayPage } from "./pages/InternalToolGatewayPage";
 
 export const router = createBrowserRouter([
   {
@@ -46,6 +47,18 @@ export const router = createBrowserRouter([
   {
     path: "/lead-department-tool",
     Component: LeadDepartmentPrototypePage,
+  },
+  {
+    path: "/priority-management-area/*",
+    Component: InternalToolGatewayPage,
+  },
+  {
+    path: "/responsible-department/*",
+    Component: InternalToolGatewayPage,
+  },
+  {
+    path: "/adaptation-pathway/*",
+    Component: InternalToolGatewayPage,
   },
   {
     path: "/about",

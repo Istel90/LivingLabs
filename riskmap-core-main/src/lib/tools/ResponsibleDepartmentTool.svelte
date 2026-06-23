@@ -254,9 +254,23 @@
         });
     }
 
+    function withTimeout(promise, timeoutMs = 1800) {
+        return Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs))
+        ]);
+    }
+
     async function fetchResponsibleHandoffFromInbox(regionCode) {
-        const supabasePayload = await getLatestPlatformHandoff('lead_to_responsible', regionCode, ['requested', 'reviewing', 'risk_done', 'sent', 'completed']);
-        if (supabasePayload?.schemaVersion === 'lead-to-responsible-handoff/v1') return supabasePayload;
+        try {
+            const supabasePayload = await withTimeout(
+                getLatestPlatformHandoff('lead_to_responsible', regionCode, ['requested', 'reviewing', 'risk_done', 'sent', 'completed']),
+                1800
+            );
+            if (supabasePayload?.schemaVersion === 'lead-to-responsible-handoff/v1') return supabasePayload;
+        } catch {
+            // Local demo inbox remains the reliable fallback during disconnected previews.
+        }
 
         try {
             const urls = [
@@ -817,6 +831,8 @@
     function createPointLayer(project, latlng) {
         if (project.item === '가로수') {
             return L.marker(latlng, {
+                pane: 'projectPlacementMarker',
+                zIndexOffset: 3000,
                 icon: L.divIcon({
                     className: 'tree-marker',
                     html: '<span class="tree-canopy"></span><span class="tree-trunk"></span>',
@@ -825,7 +841,7 @@
                 })
             }).addTo(projectLayers);
         }
-        return L.circleMarker(latlng, { radius: 7, color: '#fff', weight: 2, fillColor: project.color, fillOpacity: 1 }).addTo(projectLayers);
+        return L.circleMarker(latlng, { pane: 'projectPlacementMarker', radius: 7, color: '#fff', weight: 2, fillColor: project.color, fillOpacity: 1 }).addTo(projectLayers);
     }
 
     function addPointFeature(project, latlng, source = {}) {
@@ -849,9 +865,9 @@
         if (!L || !projectLayers || !points.length) return null;
         if (project.geometryType === 'point') return createPointLayer(project, points[0]);
         if (points.length < 2) return createPointLayer(project, points[0]);
-        if (project.geometryType === 'line') return L.polyline(points, { color: project.color, weight: 5 }).addTo(projectLayers);
+        if (project.geometryType === 'line') return L.polyline(points, { pane: 'projectPlacement', color: project.color, weight: 5 }).addTo(projectLayers);
         if (project.geometryType === 'polygon' && points.length >= 3) {
-            return L.polygon(points, { color: project.color, fillOpacity: .25 }).addTo(projectLayers);
+            return L.polygon(points, { pane: 'projectPlacement', color: project.color, fillOpacity: .25 }).addTo(projectLayers);
         }
         return null;
     }
@@ -865,6 +881,7 @@
                 feature.layer = createRestoredFeatureLayer(project, points);
             });
         });
+        projectLayers?.bringToFront?.();
         projects = [...projects];
     }
 
@@ -1072,6 +1089,8 @@
 
     function addFeature(project, feature) {
         project.features.push(feature);
+        feature.layer?.bringToFront?.();
+        projectLayers?.bringToFront?.();
         updateQuantity(project);
         projects = [...projects];
     }
@@ -1087,8 +1106,8 @@
         drawingVertices = [...drawingVertices, event.latlng];
         drawingLayer?.remove();
         drawingLayer = project.geometryType === 'line'
-            ? L.polyline(drawingVertices, { color: project.color, weight: 5 }).addTo(map)
-            : L.polygon(drawingVertices, { color: project.color, fillOpacity: .25 }).addTo(map);
+            ? L.polyline(drawingVertices, { pane: 'projectPlacement', color: project.color, weight: 5 }).addTo(map)
+            : L.polygon(drawingVertices, { pane: 'projectPlacement', color: project.color, fillOpacity: .25 }).addTo(map);
     }
 
     function finishGeometry() {
@@ -1097,8 +1116,8 @@
         if (!project || project.geometryType === 'point' || drawingVertices.length < (project.geometryType === 'line' ? 2 : 3)) return;
         const vertices = [...drawingVertices];
         const layer = project.geometryType === 'line'
-            ? L.polyline(vertices, { color: project.color, weight: 5 }).addTo(projectLayers)
-            : L.polygon(vertices, { color: project.color, fillOpacity: .25 }).addTo(projectLayers);
+            ? L.polyline(vertices, { pane: 'projectPlacement', color: project.color, weight: 5 }).addTo(projectLayers)
+            : L.polygon(vertices, { pane: 'projectPlacement', color: project.color, fillOpacity: .25 }).addTo(projectLayers);
         const measure = project.geometryType === 'line' ? measureLine(vertices) : measurePolygon(vertices);
         drawingLayer?.remove();
         drawingLayer = null;
@@ -1212,6 +1231,10 @@
         map.getPane('handoffCandidate').style.zIndex = 430;
         map.createPane('handoffCandidateHighlight');
         map.getPane('handoffCandidateHighlight').style.zIndex = 470;
+        map.createPane('projectPlacement');
+        map.getPane('projectPlacement').style.zIndex = 760;
+        map.createPane('projectPlacementMarker');
+        map.getPane('projectPlacementMarker').style.zIndex = 940;
         selectedBoundaryLayer = L.geoJSON(null, {
             pane: 'selectedBoundary',
             interactive: false,
@@ -1256,11 +1279,23 @@
         }
         const shouldOpenHandoff = params.get('view') === 'workspace' || params.get('handoff') === 'lead-department';
         workspaceView = shouldOpenHandoff;
+        if (shouldOpenHandoff) {
+            workspaceLoading = true;
+            setTimeout(async () => {
+                if (!workspaceLoading) return;
+                workspaceLoading = false;
+                if (workspaceView && !mapReady) {
+                    await tick();
+                    initializeMap();
+                }
+            }, 2500);
+        }
         (async () => {
-            await loadResponsibleHandoff({ force: shouldOpenHandoff, showLoading: true });
+            await loadResponsibleHandoff({ force: shouldOpenHandoff, showLoading: !shouldOpenHandoff });
             if (shouldOpenHandoff && incomingHandoff) {
                 handoffNoticeOpen = true;
             }
+            workspaceLoading = false;
             if (workspaceView) {
                 await tick();
                 initializeMap();

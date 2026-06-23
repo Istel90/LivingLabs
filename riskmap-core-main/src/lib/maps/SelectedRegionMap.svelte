@@ -932,22 +932,106 @@
         };
     }
 
-    function fitCandidateBounds(candidate) {
-        if (!map || !window.L || !candidate?.bounds) return false;
-        const south = Number(candidate.bounds.south);
-        const west = Number(candidate.bounds.west);
-        const north = Number(candidate.bounds.north);
-        const east = Number(candidate.bounds.east);
+    function boundsLikeToLatLngBounds(boundsLike) {
+        if (!window.L || !boundsLike) return null;
+        let south;
+        let west;
+        let north;
+        let east;
+
+        if (Array.isArray(boundsLike)) {
+            if (Array.isArray(boundsLike[0]) && Array.isArray(boundsLike[1])) {
+                south = Number(boundsLike[0][0]);
+                west = Number(boundsLike[0][1]);
+                north = Number(boundsLike[1][0]);
+                east = Number(boundsLike[1][1]);
+            } else if (boundsLike.length >= 4) {
+                west = Number(boundsLike[0]);
+                south = Number(boundsLike[1]);
+                east = Number(boundsLike[2]);
+                north = Number(boundsLike[3]);
+            }
+        } else {
+            const southWest = boundsLike._southWest || boundsLike.southWest || boundsLike.sw;
+            const northEast = boundsLike._northEast || boundsLike.northEast || boundsLike.ne;
+            if (southWest && northEast) {
+                south = Number(southWest.lat ?? southWest[0]);
+                west = Number(southWest.lng ?? southWest.lon ?? southWest[1]);
+                north = Number(northEast.lat ?? northEast[0]);
+                east = Number(northEast.lng ?? northEast.lon ?? northEast[1]);
+            } else {
+                south = Number(boundsLike.south ?? boundsLike.minLat ?? boundsLike.ymin ?? boundsLike.minY);
+                west = Number(boundsLike.west ?? boundsLike.minLng ?? boundsLike.minLon ?? boundsLike.xmin ?? boundsLike.minX);
+                north = Number(boundsLike.north ?? boundsLike.maxLat ?? boundsLike.ymax ?? boundsLike.maxY);
+                east = Number(boundsLike.east ?? boundsLike.maxLng ?? boundsLike.maxLon ?? boundsLike.xmax ?? boundsLike.maxX);
+            }
+        }
+
         if (![south, west, north, east].every(Number.isFinite)) return false;
-        const bounds = window.L.latLngBounds([[south, west], [north, east]]);
+        const bounds = window.L.latLngBounds([
+            [Math.min(south, north), Math.min(west, east)],
+            [Math.max(south, north), Math.max(west, east)]
+        ]);
         if (!bounds.isValid()) return false;
-        map.fitBounds(bounds, {
+        return bounds;
+    }
+
+    function candidateFeatureBounds(candidate) {
+        const featureBoundsList = (candidate?.features || [])
+            .map((feature) => featureBounds(feature))
+            .filter((bounds) =>
+                bounds &&
+                [bounds.minLng, bounds.minLat, bounds.maxLng, bounds.maxLat].every(Number.isFinite)
+            );
+        if (!featureBoundsList.length) return null;
+        return boundsLikeToLatLngBounds({
+            south: Math.min(...featureBoundsList.map((bounds) => bounds.minLat)),
+            west: Math.min(...featureBoundsList.map((bounds) => bounds.minLng)),
+            north: Math.max(...featureBoundsList.map((bounds) => bounds.maxLat)),
+            east: Math.max(...featureBoundsList.map((bounds) => bounds.maxLng))
+        });
+    }
+
+    function candidateCenterLatLng(candidate) {
+        const center = candidate?.center;
+        if (!center) return null;
+        const lat = Number(center.lat ?? center[0]);
+        const lng = Number(center.lng ?? center.lon ?? center[1]);
+        if (![lat, lng].every(Number.isFinite)) return null;
+        return [lat, lng];
+    }
+
+    function moveMapToCandidateBounds(bounds) {
+        if (!map || !bounds?.isValid?.()) return false;
+        map.invalidateSize?.({ pan: false });
+        const options = {
             paddingTopLeft: [320, 70],
             paddingBottomRight: [70, 150],
             maxZoom: 17,
             animate: true,
             duration: 0.65
-        });
+        };
+        if (typeof map.flyToBounds === 'function') {
+            map.flyToBounds(bounds, options);
+        } else {
+            map.fitBounds(bounds, options);
+        }
+        return true;
+    }
+
+    function fitCandidateBounds(candidate) {
+        if (!map || !window.L || !candidate) return false;
+        const bounds = boundsLikeToLatLngBounds(candidate.bounds) || candidateFeatureBounds(candidate);
+        if (bounds && moveMapToCandidateBounds(bounds)) return true;
+
+        const center = candidateCenterLatLng(candidate);
+        if (!center) return false;
+        map.invalidateSize?.({ pan: false });
+        if (typeof map.flyTo === 'function') {
+            map.flyTo(center, 17, { animate: true, duration: 0.65 });
+        } else {
+            map.setView(center, 17);
+        }
         return true;
     }
 
@@ -977,15 +1061,13 @@
 
         const group = window.L.featureGroup(layers);
         const bounds = group.getBounds();
-        if (!bounds.isValid()) return;
+        if (!bounds.isValid()) {
+            fitCandidateBounds(candidate);
+            return;
+        }
 
-        map.fitBounds(bounds, {
-            paddingTopLeft: [320, 70],
-            paddingBottomRight: [70, 150],
-            maxZoom: 17,
-            animate: true,
-            duration: 0.65
-        });
+        moveMapToCandidateBounds(bounds);
+        layers.forEach((layer) => layer.bringToFront?.());
         layers[0]?.openTooltip?.();
     }
 

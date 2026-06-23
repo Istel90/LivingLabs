@@ -202,7 +202,7 @@ const LEAD_REVIEW_STATE_KEY = 'livinglabs.leadDepartmentPriorityReviewState';
 const LEAD_REQUEST_LIFECYCLE_KEY = 'livinglabs.leadDepartmentPriorityRequestLifecycle';
 const LEAD_ADAPTATION_PLACEMENT_KEY = 'livinglabs.leadDepartmentAdaptationPlacementDraft';
 const DEFAULT_LEAD_REGION_CODE = '41110';
-const responsibleDepartmentToolUrl = import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || 'http://127.0.0.1:5175/responsible-department';
+const responsibleDepartmentToolUrl = import.meta.env.VITE_RESPONSIBLE_DEPARTMENT_TOOL_URL || '/responsible-department';
 const initialSearchParams = new URLSearchParams(window.location.search);
 const initialPriorityRegionCode = initialSearchParams.get('regionCode') || DEFAULT_LEAD_REGION_CODE;
 const initialWorkspaceView = initialSearchParams.get('view') === 'workspace';
@@ -262,6 +262,72 @@ const defaultAdaptationProjectDraft = (): AdaptationProjectDraft => ({
   goal: 30,
 });
 
+function responseProjectToPlan(project: any): AdaptationProjectPlan | null {
+  if (!project?.id) return null;
+  const geometryType = ['point', 'line', 'polygon'].includes(project.geometryType)
+    ? project.geometryType
+    : 'point';
+  return {
+    id: String(project.id),
+    title: String(project.title || project.name || project.id),
+    part: String(project.part || '건강'),
+    item: String(project.item || project.title || project.id),
+    geometryType,
+    goal: Number(project.goal || project.quantity || 0),
+  };
+}
+
+function normalizeResponsePoint(point: any): { lat: number; lng: number } | null {
+  if (Array.isArray(point) && point.length >= 2) {
+    let lat = Number(point[0]);
+    let lng = Number(point[1]);
+    if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) {
+      [lat, lng] = [lng, lat];
+    }
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  }
+  const lat = Number(point?.lat);
+  const lng = Number(point?.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
+function responsibleResponseKey(payload: any): string {
+  return String(payload?.packageId || payload?.reviewedAt || payload?.originalPackageId || '');
+}
+
+function responseProjectsToPlacements(payload: any): AdaptationPlacement[] {
+  const responseKey = responsibleResponseKey(payload) || 'latest';
+  const projects = Array.isArray(payload?.responsibleProjects) ? payload.responsibleProjects : [];
+  return projects.flatMap((project: any) => {
+    const plan = responseProjectToPlan(project);
+    if (!plan) return [];
+    const features = Array.isArray(project.features) ? project.features : [];
+    return features.flatMap((feature: any, featureIndex: number) => {
+      const rawPoints = Array.isArray(feature?.coordinates) ? feature.coordinates : [];
+      const points = rawPoints.map(normalizeResponsePoint).filter(Boolean) as Array<{ lat: number; lng: number }>;
+      if (!points.length) return [];
+      const sourceId = feature?.source?.leadPlacementId || feature?.source?.id;
+      return [{
+        id: sourceId ? String(sourceId) : `responsible-review-${responseKey}-${plan.id}-${featureIndex}`,
+        projectId: plan.id,
+        projectTitle: plan.title,
+        item: plan.item,
+        geometryType: plan.geometryType,
+        points,
+        createdAt: String(payload?.reviewedAt || new Date().toISOString()),
+      }];
+    });
+  });
+}
+
+function mergeAdaptationProjects(current: AdaptationProjectPlan[], incoming: AdaptationProjectPlan[]) {
+  const merged = new Map(current.map((project) => [project.id, project]));
+  incoming.forEach((project) => {
+    merged.set(project.id, { ...(merged.get(project.id) ?? {}), ...project });
+  });
+  return Array.from(merged.values());
+}
+
 const scenarioList = ['기준연도', '2030 저성장', '2030 기준성장', '2030 고성장'];
 const scenarioUpList = ['2026년도 증가', '2027년도 증가', '2028년도 증가', '2029년도 증가', '2030년도 증가'];
 const yearList = ['2026', '2027', '2028', '2029', '2030'];
@@ -317,6 +383,7 @@ export function LeadDepartmentPrototypePage() {
   const [placementDraftMessage, setPlacementDraftMessage] = useState('지도에 배치한 사업 공간배치 제안을 저장하거나 불러올 수 있습니다.');
   const [workspaceView, setWorkspaceView] = useState(initialWorkspaceView);
   const noticeShownRef = useRef(false);
+  const appliedResponsibleResponseKeyRef = useRef('');
 
   useEffect(() => {
     gateway.getSnapshot(selectedSgg).then((result) => {
@@ -510,6 +577,32 @@ export function LeadDepartmentPrototypePage() {
       window.clearInterval(timer);
     };
   }, [selectedSgg]);
+
+  useEffect(() => {
+    if (!responsibleReviewResponse) return;
+    const responseKey = responsibleResponseKey(responsibleReviewResponse);
+    if (!responseKey || appliedResponsibleResponseKeyRef.current === responseKey) return;
+
+    const incomingProjects = (Array.isArray(responsibleReviewResponse.responsibleProjects)
+      ? responsibleReviewResponse.responsibleProjects
+      : [])
+      .map(responseProjectToPlan)
+      .filter(Boolean) as AdaptationProjectPlan[];
+    const incomingPlacements = responseProjectsToPlacements(responsibleReviewResponse);
+
+    if (!incomingProjects.length && !incomingPlacements.length) return;
+
+    setAdaptationProjects((current) => mergeAdaptationProjects(current, incomingProjects));
+    setAdaptationPlacements((current) => {
+      const incomingIds = new Set(incomingPlacements.map((placement) => placement.id));
+      return current.filter((placement) => !incomingIds.has(placement.id)).concat(incomingPlacements);
+    });
+    if (incomingProjects[0]) {
+      setActiveAdaptationProjectId(incomingProjects[0].id);
+    }
+    setPlacementDraftMessage(`사업소관부서 회신의 공간배치 ${incomingPlacements.length.toLocaleString()}건을 지도에 반영했습니다.`);
+    appliedResponsibleResponseKeyRef.current = responseKey;
+  }, [responsibleReviewResponse]);
 
   const availableSidos = useMemo(() => {
     if (!snapshot) return [];
@@ -1025,7 +1118,11 @@ export function LeadDepartmentPrototypePage() {
             <button
               className={`mt-1.5 flex w-full items-center gap-2 rounded-lg border px-2 py-2 text-left ${responsibleReviewResponse ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : 'border-slate-100 bg-slate-50 text-slate-500'}`}
               disabled={!responsibleReviewResponse}
-              onClick={() => setEvaluationPanelOpen(true)}
+              onClick={() => {
+                if (priorityCandidateCount) startPriorityReview();
+                setEvaluationPanelOpen(true);
+                setRightMode('execution');
+              }}
             >
               <span className={`grid size-7 shrink-0 place-items-center rounded-lg ${responsibleReviewResponse ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
                 <Route className="size-3.5" />
