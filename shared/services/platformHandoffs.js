@@ -1,4 +1,6 @@
 const TABLE_NAME = 'platform_handoffs';
+const DEFAULT_SUPABASE_URL = 'https://ehjygntjhqkddtcnvjdj.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoanlnbnRqaHFrZGR0Y252amRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxOTI1MzUsImV4cCI6MjA5Nzc2ODUzNX0.FiVXQDoxivCu72eheahCaBLVmpfjikT7HLu4tvdrP9k';
 
 function normalizeSupabaseUrl(rawUrl) {
   if (!rawUrl) return '';
@@ -14,8 +16,8 @@ function getEnvValue(key) {
 }
 
 export function getPlatformHandoffConfig() {
-  const url = normalizeSupabaseUrl(getEnvValue('VITE_SUPABASE_URL'));
-  const key = getEnvValue('VITE_SUPABASE_ANON_KEY') || getEnvValue('VITE_SUPABASE_PUBLISHABLE_KEY');
+  const url = normalizeSupabaseUrl(getEnvValue('VITE_SUPABASE_URL') || DEFAULT_SUPABASE_URL);
+  const key = getEnvValue('VITE_SUPABASE_ANON_KEY') || getEnvValue('VITE_SUPABASE_PUBLISHABLE_KEY') || DEFAULT_SUPABASE_ANON_KEY;
   return { url, key, enabled: Boolean(url && key) };
 }
 

@@ -11,9 +11,10 @@ const navigation = [
 ];
 
 const parentPlatformUrl = import.meta.env.VITE_PARENT_PLATFORM_URL || 'https://livinglab-web.vercel.app/';
-const vworldProxyUrl = import.meta.env.VITE_VWORLD_PROXY_URL || 'http://127.0.0.1:5176/vworld-data';
+const vworldProxyUrl = import.meta.env.VITE_VWORLD_PROXY_URL || '';
 
 function createDevResetUrl() {
+  if (!vworldProxyUrl) return '';
   const url = new URL(vworldProxyUrl, window.location.origin);
   url.pathname = '/dev-reset';
   url.search = '';
@@ -32,18 +33,20 @@ export function Header({ variant = 'default' }: HeaderProps) {
     const ok = window.confirm('개발용 임시 초기화를 실행할까요?\n중점관리구역 요청, 사업 전달, 검토 응답 저장값을 모두 비웁니다.');
     if (!ok) return;
 
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+
     try {
+      const devResetUrl = createDevResetUrl();
       const [proxyResult, supabaseOk] = await Promise.all([
-        fetch(createDevResetUrl(), { method: 'POST' }).then((response) => response.ok).catch(() => false),
+        devResetUrl ? fetch(devResetUrl, { method: 'POST' }).then((response) => response.ok).catch(() => false) : Promise.resolve(false),
         clearPlatformHandoffs(),
       ]);
       if (!proxyResult && !supabaseOk) throw new Error('reset failed');
-      window.localStorage.clear();
-      window.sessionStorage.clear();
       window.alert('개발용 저장값을 초기화했습니다. 열린 도구 페이지는 새로고침해 주세요.');
     } catch (error) {
       console.error(error);
-      window.alert('초기화에 실패했습니다. VWorld Data Proxy(5176)가 켜져 있는지 확인해 주세요.');
+      window.alert('이 브라우저의 개발용 저장값은 초기화했습니다. 다만 Supabase 공용 인박스 초기화는 실패했으니 배포 환경변수를 확인해 주세요.');
     }
   };
 
