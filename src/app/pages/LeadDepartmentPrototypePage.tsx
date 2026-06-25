@@ -34,6 +34,7 @@ import {
   VWORLD_WMS_URL,
 } from '../../../shared/map/vworld.js';
 import { getLatestPlatformHandoff, savePlatformHandoff } from '../../../shared/services/platformHandoffs.js';
+import { getLatestPriorityAreaHandoffPayload } from '../../../shared/services/livinglabWorkflowData.js';
 import SIGUNGU_BOUNDARY_GEOJSON from '../../../shared/data/administrative-regions/boundaries/sigungu.geojson?raw';
 import DOWNLOADS_SIGUNGU_BOUNDARIES from '../../../shared/data/administrative-regions/boundaries/downloads-sigungu-boundaries.json?raw';
 import {
@@ -3091,6 +3092,14 @@ function persistPriorityHandoffPayload(payload: PriorityHandoffPayload) {
 }
 
 async function fetchPriorityHandoffFromInbox(regionCode: string): Promise<PriorityHandoffPayload | null> {
+  try {
+    const workflowPayload = await getLatestPriorityAreaHandoffPayload(regionCode);
+    const parsedWorkflowPayload = priorityPayloadFromMessage(workflowPayload);
+    if (parsedWorkflowPayload) return parsedWorkflowPayload;
+  } catch (error) {
+    console.warn('[LeadDepartment] workflow priority inbox read failed', error);
+  }
+
   const supabasePayload = await getLatestPlatformHandoff('priority_to_lead', regionCode, ['requested', 'reviewing', 'risk_done', 'sent', 'completed']);
   const parsedSupabasePayload = priorityPayloadFromMessage(supabasePayload);
   if (parsedSupabasePayload) return parsedSupabasePayload;

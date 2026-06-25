@@ -40,4 +40,13 @@ export function createAdaptationPlacement(placement: Record<string, any>): Promi
 export function createProjectReviewPackage(options: Record<string, any>): Promise<Record<string, any>>;
 export function createResponsibleRevisionReply(options: Record<string, any>): Promise<Record<string, any> | null>;
 export function addReviewEvent(event: Record<string, any>): Promise<Record<string, any> | null>;
+export function savePriorityAreaHandoffPayload(payload: Record<string, any>): Promise<{
+  areaSet: Record<string, any>;
+  options: Array<Record<string, any>>;
+  parcelCandidates: Array<Record<string, any>>;
+  candidateParcels: Array<Record<string, any>>;
+  request: Record<string, any> | null;
+} | null>;
+export function getLatestPriorityAreaHandoffPayload(regionCode: string): Promise<Record<string, any> | null>;
+export function recallPriorityAreaReviewRequests(options?: { regionCode?: string; packageId?: string }): Promise<number>;
 export function clearDemoWorkflowData(options?: { regionCode?: string }): Promise<boolean>;

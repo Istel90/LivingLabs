@@ -1,5 +1,6 @@
 import { ExternalLink, Globe, Menu, Search } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
+import { clearDemoWorkflowData } from '../../../shared/services/livinglabWorkflowData.js';
 import { clearPlatformHandoffs } from '../../../shared/services/platformHandoffs.js';
 import { Button } from './ui/button';
 
@@ -38,11 +39,15 @@ export function Header({ variant = 'default' }: HeaderProps) {
 
     try {
       const devResetUrl = createDevResetUrl();
-      const [proxyResult, supabaseOk] = await Promise.all([
+      const [proxyResult, legacyHandoffOk, workflowOk] = await Promise.all([
         devResetUrl ? fetch(devResetUrl, { method: 'POST' }).then((response) => response.ok).catch(() => false) : Promise.resolve(false),
         clearPlatformHandoffs(),
+        clearDemoWorkflowData().then(() => true).catch((error) => {
+          console.warn('[Header] workflow reset failed', error);
+          return false;
+        }),
       ]);
-      if (!proxyResult && !supabaseOk) throw new Error('reset failed');
+      if (!proxyResult && !legacyHandoffOk && !workflowOk) throw new Error('reset failed');
       window.alert('개발용 저장값을 초기화했습니다. 열린 도구 페이지는 새로고침해 주세요.');
     } catch (error) {
       console.error(error);

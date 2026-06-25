@@ -4,6 +4,7 @@
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
     import { markPlatformHandoffStatus, savePlatformHandoff } from '../../../../shared/services/platformHandoffs.js';
+    import { recallPriorityAreaReviewRequests, savePriorityAreaHandoffPayload } from '../../../../shared/services/livinglabWorkflowData.js';
 
     export let hazard = 'heatwave';
 
@@ -1250,6 +1251,17 @@
     }
 
     async function saveHandoffToLocalInbox(deliveredPayload) {
+        let workflowOk = false;
+        try {
+            const workflowResult = await savePriorityAreaHandoffPayload(deliveredPayload);
+            if (workflowResult?.request?.id) {
+                deliveredPayload.workflowRequestId = workflowResult.request.id;
+                deliveredPayload.areaSetId = workflowResult.areaSet?.id;
+                workflowOk = true;
+            }
+        } catch (error) {
+            console.warn('[PriorityManagementArea] workflow handoff save failed', error);
+        }
         const supabaseOk = await savePlatformHandoff('priority_to_lead', deliveredPayload, 'requested');
         try {
             const response = await fetch(priorityHandoffInboxUrl, {
@@ -1257,11 +1269,11 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(deliveredPayload)
             });
-            if (!response.ok) return supabaseOk;
+            if (!response.ok) return workflowOk || supabaseOk;
             const result = await response.json().catch(() => null);
-            return supabaseOk || Boolean(result?.ok);
+            return workflowOk || supabaseOk || Boolean(result?.ok);
         } catch {
-            return supabaseOk;
+            return workflowOk || supabaseOk;
         }
     }
 
@@ -1359,11 +1371,17 @@
         clearStoredDepartmentHandoff(recalledPackageId);
         const [relayOk, supabaseOk] = await Promise.all([
             relayRecallToLeadDepartment(recalledPackageId),
-            markPlatformHandoffStatus('priority_to_lead', {
-                regionCode,
-                packageId: recalledPackageId,
-                status: 'recalled'
-            })
+            Promise.all([
+                markPlatformHandoffStatus('priority_to_lead', {
+                    regionCode,
+                    packageId: recalledPackageId,
+                    status: 'recalled'
+                }),
+                recallPriorityAreaReviewRequests({
+                    regionCode,
+                    packageId: recalledPackageId
+                }).then((count) => count > 0).catch(() => false)
+            ]).then((results) => results.some(Boolean))
         ]);
         sentHandoffPackages = recalledPackageId
             ? sentHandoffPackages.filter((item) => item.packageId !== recalledPackageId)
@@ -1383,10 +1401,13 @@
         clearStoredDepartmentHandoff(null);
         const [relayOk, supabaseOk] = await Promise.all([
             relayRecallToLeadDepartment(null),
-            markPlatformHandoffStatus('priority_to_lead', {
-                regionCode,
-                status: 'recalled'
-            })
+            Promise.all([
+                markPlatformHandoffStatus('priority_to_lead', {
+                    regionCode,
+                    status: 'recalled'
+                }),
+                recallPriorityAreaReviewRequests({ regionCode }).then((count) => count > 0).catch(() => false)
+            ]).then((results) => results.some(Boolean))
         ]);
         sentHandoffPackages = [];
         latestHandoffPackage = null;

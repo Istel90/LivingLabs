@@ -380,6 +380,339 @@ export async function addReviewEvent(event) {
   return insertRow(LIVINGLAB_TABLES.reviewEvents, event);
 }
 
+function numericValue(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function candidateKey(candidate, index) {
+  return String(candidate.id || candidate.name || candidate.rank || index + 1);
+}
+
+function candidateGeometry(candidate = {}) {
+  const geometry = candidate.geometry && typeof candidate.geometry === 'object'
+    ? candidate.geometry
+    : {};
+  return {
+    ...geometry,
+    center: geometry.center ?? candidate.center ?? null,
+    bounds: geometry.bounds ?? candidate.bounds ?? null,
+    features: Array.isArray(geometry.features)
+      ? geometry.features
+      : (Array.isArray(candidate.features) ? candidate.features : [])
+  };
+}
+
+function graphCandidateToPayload(candidate, parcels = [], option = {}) {
+  const pnuList = parcels.map((parcel) => parcel.pnu).filter(Boolean);
+  const attributes = candidate.attributes || {};
+  const geometry = candidate.geometry || {};
+  const center = geometry.center || candidate.centroid || null;
+  const bounds = geometry.bounds || null;
+  const features = Array.isArray(geometry.features) ? geometry.features : [];
+  const risk = numericValue(candidate.risk_score, attributes.risk, attributes.scores?.risk);
+  const h = numericValue(candidate.h_score, attributes.h, attributes.scores?.h);
+  const e = numericValue(candidate.e_score, attributes.e, attributes.scores?.e);
+  const v = numericValue(candidate.v_score, attributes.v, attributes.scores?.v);
+
+  return {
+    id: candidate.id,
+    sourceCandidateKey: attributes.sourceCandidateKey || candidate.id,
+    alternativeId: option.id,
+    alternativeName: option.option_name,
+    rank: candidate.rank,
+    name: candidate.candidate_name || `필지 후보 ${String(candidate.rank || 0).padStart(2, '0')}`,
+    risk,
+    h,
+    e,
+    v,
+    score: risk,
+    reason: attributes.reason || attributes.legacyCandidate?.reason || null,
+    basis: attributes.basis || attributes.legacyCandidate?.basis || null,
+    parcelCount: candidate.parcel_count ?? pnuList.length,
+    hotspotCount: attributes.hotspotCount ?? attributes.legacyCandidate?.hotspotCount ?? null,
+    totalAreaSqm: numericValue(candidate.area_m2, attributes.totalAreaSqm),
+    totalAreaLabel: attributes.totalAreaLabel || null,
+    pnuList,
+    pnuTotal: pnuList.length,
+    center,
+    bounds,
+    features,
+    scores: { risk, h, e, v, score: risk },
+    attributes: {
+      ...attributes,
+      pnuList,
+      parcelCount: candidate.parcel_count ?? pnuList.length,
+      featureTotal: attributes.featureTotal ?? features.length
+    },
+    geometry,
+    geometryMode: attributes.geometryMode || 'compact'
+  };
+}
+
+function graphToPriorityPayload({ areaSet, request, options, parcelCandidates, candidateParcels }) {
+  if (!areaSet) return null;
+
+  const parcelsByCandidate = new Map();
+  candidateParcels.forEach((parcel) => {
+    const key = parcel.parcel_candidate_id;
+    if (!parcelsByCandidate.has(key)) parcelsByCandidate.set(key, []);
+    parcelsByCandidate.get(key).push(parcel);
+  });
+
+  const candidatesByOption = new Map();
+  parcelCandidates.forEach((candidate) => {
+    const key = candidate.option_id;
+    if (!candidatesByOption.has(key)) candidatesByOption.set(key, []);
+    candidatesByOption.get(key).push(candidate);
+  });
+
+  const alternatives = options.map((option) => {
+    const candidates = (candidatesByOption.get(option.id) || [])
+      .sort((a, b) => (a.rank || 0) - (b.rank || 0))
+      .map((candidate) => graphCandidateToPayload(candidate, parcelsByCandidate.get(candidate.id) || [], option));
+    const riskValues = candidates.map((candidate) => Number(candidate.scores?.risk ?? candidate.risk)).filter(Number.isFinite);
+    return {
+      id: option.id,
+      sourceAlternativeId: option.attributes?.sourceAlternativeId || option.id,
+      name: option.option_name,
+      status: option.status,
+      description: option.summary,
+      gridUnit: option.attributes?.gridUnit,
+      analysisMessage: option.attributes?.analysisMessage,
+      summary: {
+        candidateCount: candidates.length,
+        averageRisk: riskValues.length ? riskValues.reduce((sum, value) => sum + value, 0) / riskValues.length : null,
+        maxRisk: riskValues.length ? Math.max(...riskValues) : null
+      },
+      candidates
+    };
+  });
+  const candidates = alternatives.flatMap((alternative) => alternative.candidates);
+
+  return {
+    packageId: request?.id || areaSet.id,
+    sourcePackageId: request?.payload_summary?.source_package_id || areaSet.source_job_id || null,
+    workflowRequestId: request?.id || null,
+    areaSetId: areaSet.id,
+    schemaVersion: 'priority-management-handoff/v1',
+    source: 'priority-management-area',
+    target: 'lead-department-tool',
+    createdAt: areaSet.created_at,
+    deliveredToLeadAt: request?.created_at || areaSet.submitted_at || areaSet.created_at,
+    deliveryStatus: 'sent-to-lead',
+    projectName: areaSet.set_name,
+    hazard: areaSet.hazard_type,
+    hazardLabel: request?.payload_summary?.hazard_label || areaSet.analysis_conditions?.hazardLabel || areaSet.hazard_type,
+    region: request?.payload_summary?.region_name || areaSet.analysis_conditions?.regionName || areaSet.region_code,
+    regionCode: areaSet.region_code,
+    formula: areaSet.analysis_conditions?.formula || null,
+    dimensionWeights: areaSet.analysis_conditions?.dimensionWeights || null,
+    commonDataItems: areaSet.analysis_conditions?.commonDataItems || [],
+    alternatives,
+    candidates,
+    candidateBundle: {
+      model: 'area_set > options > parcel_candidates > candidate_parcels',
+      alternativeCount: alternatives.filter((alternative) => alternative.candidates.length).length,
+      candidateCount: candidates.length
+    }
+  };
+}
+
+export async function savePriorityAreaHandoffPayload(payload) {
+  if (!payload?.regionCode || !Array.isArray(payload.alternatives)) return null;
+
+  await ensureRegion({
+    region_code: payload.regionCode,
+    region_name: payload.region || payload.regionName || payload.regionCode,
+    sigungu_name: payload.region || payload.regionName || null
+  });
+
+  const areaSet = await createPriorityAreaSet({
+    region_code: payload.regionCode,
+    set_name: payload.projectName || `${payload.region || payload.regionCode} 중점관리구역 분석`,
+    hazard_type: payload.hazard || payload.hazardLabel || 'unknown',
+    scenario_name: payload.scenarioName || null,
+    analysis_version: payload.schemaVersion || 'priority-management-handoff/v1',
+    analysis_conditions: {
+      formula: payload.formula || null,
+      dimensionWeights: payload.dimensionWeights || null,
+      commonDataItems: payload.commonDataItems || [],
+      hazardLabel: payload.hazardLabel || null,
+      regionName: payload.region || null
+    },
+    source_job_id: payload.packageId || null,
+    status: 'requested',
+    submitted_at: payload.deliveredToLeadAt || new Date().toISOString(),
+    description: payload.candidateBundle?.model || null
+  });
+  if (!areaSet?.id) throw new Error('Failed to create priority_area_sets row');
+
+  const savedOptions = [];
+  const savedCandidates = [];
+  const savedParcels = [];
+
+  for (const [optionIndex, alternative] of payload.alternatives.entries()) {
+    const candidates = Array.isArray(alternative.candidates) ? alternative.candidates : [];
+    if (!candidates.length) continue;
+    const riskValues = candidates.map((candidate) => Number(candidate.scores?.risk ?? candidate.risk)).filter(Number.isFinite);
+    const option = await createPriorityAreaOption({
+      area_set_id: areaSet.id,
+      option_no: optionIndex + 1,
+      option_name: alternative.name || `대안 ${optionIndex + 1}`,
+      rank: optionIndex + 1,
+      summary: alternative.description || alternative.analysisMessage || null,
+      risk_score: numericValue(alternative.summary?.averageRisk, riskValues.length ? riskValues.reduce((sum, value) => sum + value, 0) / riskValues.length : null),
+      hotspot_threshold: alternative.hotspotThreshold || null,
+      geometry: alternative.geometry || {},
+      attributes: {
+        sourceAlternativeId: alternative.id || null,
+        gridUnit: alternative.gridUnit || null,
+        analysisMessage: alternative.analysisMessage || null,
+        summary: alternative.summary || null
+      },
+      status: 'requested'
+    });
+    if (!option?.id) continue;
+    savedOptions.push(option);
+
+    for (const [candidateIndex, candidate] of candidates.entries()) {
+      const rank = Number(candidate.rank || candidateIndex + 1);
+      const pnuList = Array.from(new Set((Array.isArray(candidate.pnuList)
+        ? candidate.pnuList
+        : (Array.isArray(candidate.attributes?.pnuList) ? candidate.attributes.pnuList : []))
+        .map((pnu) => String(pnu || '').trim())
+        .filter(Boolean)));
+      const parcelCandidate = await createParcelCandidate({
+        option_id: option.id,
+        rank,
+        candidate_name: candidate.name || `필지 후보 ${String(rank).padStart(2, '0')}`,
+        risk_score: numericValue(candidate.scores?.risk, candidate.risk, candidate.score),
+        h_score: numericValue(candidate.scores?.h, candidate.h),
+        e_score: numericValue(candidate.scores?.e, candidate.e),
+        v_score: numericValue(candidate.scores?.v, candidate.v),
+        area_m2: numericValue(candidate.totalAreaSqm, candidate.attributes?.totalAreaSqm),
+        geometry: candidateGeometry(candidate),
+        centroid: candidate.center || candidate.geometry?.center || null,
+        parcel_count: numericValue(candidate.parcelCount, candidate.attributes?.parcelCount, pnuList.length),
+        address_summary: candidate.area || candidate.attributes?.area || null,
+        attributes: {
+          ...candidate.attributes,
+          sourceCandidateKey: candidateKey(candidate, candidateIndex),
+          alternativeId: alternative.id || null,
+          alternativeName: alternative.name || null,
+          reason: candidate.reason || candidate.attributes?.reason || null,
+          basis: candidate.basis || candidate.attributes?.basis || null,
+          hotspotCount: candidate.hotspotCount ?? candidate.attributes?.hotspotCount ?? null,
+          totalAreaLabel: candidate.totalAreaLabel || candidate.attributes?.totalAreaLabel || null,
+          geometryMode: candidate.geometryMode || candidate.attributes?.geometryMode || 'compact'
+        },
+        status: 'requested'
+      });
+      if (!parcelCandidate?.id) continue;
+      savedCandidates.push(parcelCandidate);
+
+      const parcelRows = pnuList.map((pnu) => ({
+        parcel_candidate_id: parcelCandidate.id,
+        pnu: String(pnu),
+        geometry: {},
+        attributes: {
+          sourceCandidateKey: candidateKey(candidate, candidateIndex),
+          candidateRank: rank,
+          candidateName: candidate.name || null
+        },
+        source: 'priority-management-handoff'
+      }));
+      const parcels = await createCandidateParcels(parcelRows);
+      savedParcels.push(...parcels);
+    }
+  }
+
+  const request = await createPriorityAreaReviewRequest({
+    areaSetId: areaSet.id,
+    regionCode: payload.regionCode,
+    title: payload.projectName || `${payload.region || payload.regionCode} 중점관리구역 검토`,
+    memo: `${savedOptions.length}개 대안 · ${savedCandidates.length}개 후보`,
+    payloadSummary: {
+      schema_version: 'priority-management-handoff/v1',
+      source_package_id: payload.packageId || null,
+      hazard_label: payload.hazardLabel || null,
+      region_name: payload.region || null,
+      option_count: savedOptions.length,
+      candidate_count: savedCandidates.length,
+      parcel_count: savedParcels.length,
+      source_payload: {
+        ...payload,
+        workflowAreaSetId: areaSet.id
+      }
+    }
+  });
+
+  return { areaSet, options: savedOptions, parcelCandidates: savedCandidates, candidateParcels: savedParcels, request };
+}
+
+export async function getLatestPriorityAreaHandoffPayload(regionCode) {
+  const requests = await listHandoffRequests({
+    toTool: 'lead_department_tool',
+    fromTool: 'priority_area_tool',
+    regionCode,
+    requestType: 'priority_area_review',
+    statuses: ['requested', 'opened', 'in_review', 'returned'],
+    limit: 1
+  });
+  const request = requests[0];
+  if (!request?.area_set_id) return null;
+
+  const sourcePayload = request.payload_summary?.source_payload;
+  if (sourcePayload?.schemaVersion === 'priority-management-handoff/v1') {
+    return {
+      ...sourcePayload,
+      packageId: request.id,
+      sourcePackageId: sourcePayload.packageId,
+      workflowRequestId: request.id,
+      areaSetId: request.area_set_id,
+      deliveredToLeadAt: request.created_at || sourcePayload.deliveredToLeadAt,
+      deliveryStatus: 'sent-to-lead'
+    };
+  }
+
+  const graph = await getPriorityAreaSetGraph(request.area_set_id);
+  return graphToPriorityPayload({ ...graph, request });
+}
+
+export async function recallPriorityAreaReviewRequests({ regionCode, packageId } = {}) {
+  const requests = await listHandoffRequests({
+    toTool: 'lead_department_tool',
+    fromTool: 'priority_area_tool',
+    regionCode,
+    requestType: 'priority_area_review',
+    statuses: ['requested', 'opened', 'in_review', 'returned'],
+    limit: 50
+  });
+
+  const targets = packageId
+    ? requests.filter((request) => (
+        request.id === packageId ||
+        request.payload_summary?.source_package_id === packageId ||
+        request.payload_summary?.source_payload?.packageId === packageId
+      ))
+    : requests;
+
+  await Promise.all(targets.map((request) => (
+    updateRows(
+      LIVINGLAB_TABLES.handoffRequests,
+      { id: request.id },
+      { status: 'closed', resolved_at: new Date().toISOString() },
+      { returning: 'minimal' }
+    )
+  )));
+
+  return targets.length;
+}
+
 export async function clearDemoWorkflowData({ regionCode } = {}) {
   const filters = regionCode ? { region_code: regionCode, is_demo: true } : { is_demo: true };
 
