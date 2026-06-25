@@ -34,7 +34,11 @@ import {
   VWORLD_WMS_URL,
 } from '../../../shared/map/vworld.js';
 import { getLatestPlatformHandoff, savePlatformHandoff } from '../../../shared/services/platformHandoffs.js';
-import { getLatestPriorityAreaHandoffPayload } from '../../../shared/services/livinglabWorkflowData.js';
+import {
+  getLatestPriorityAreaHandoffPayload,
+  getLatestResponsibleReviewResponsePayload,
+  saveLeadToResponsibleHandoffPayload,
+} from '../../../shared/services/livinglabWorkflowData.js';
 import SIGUNGU_BOUNDARY_GEOJSON from '../../../shared/data/administrative-regions/boundaries/sigungu.geojson?raw';
 import DOWNLOADS_SIGUNGU_BOUNDARIES from '../../../shared/data/administrative-regions/boundaries/downloads-sigungu-boundaries.json?raw';
 import {
@@ -3117,6 +3121,20 @@ async function fetchPriorityHandoffFromInbox(regionCode: string): Promise<Priori
 }
 
 async function saveResponsibleHandoffToInbox(payload: Record<string, any>) {
+  let workflowOk = false;
+  try {
+    const workflowResult = await saveLeadToResponsibleHandoffPayload(payload);
+    const workflowRequestId = workflowResult?.handoff?.id;
+    if (workflowRequestId) {
+      payload.workflowRequestId = workflowRequestId;
+      payload.workflowLeadToResponsibleRequestId = workflowRequestId;
+      payload.deliveryStatus = 'sent-to-responsible';
+      workflowOk = true;
+    }
+  } catch (error) {
+    console.warn('[LeadDepartment] workflow responsible inbox save failed', error);
+  }
+
   const supabaseOk = await savePlatformHandoff('lead_to_responsible', payload, 'requested');
   try {
     const response = await fetch(RESPONSIBLE_HANDOFF_INBOX_URL, {
@@ -3124,13 +3142,20 @@ async function saveResponsibleHandoffToInbox(payload: Record<string, any>) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    return supabaseOk || response.ok;
+    return workflowOk || supabaseOk || response.ok;
   } catch {
-    return supabaseOk;
+    return workflowOk || supabaseOk;
   }
 }
 
 async function fetchResponsibleReviewResponse(regionCode: string) {
+  try {
+    const workflowPayload = await getLatestResponsibleReviewResponsePayload(regionCode);
+    if (workflowPayload?.schemaVersion === 'responsible-to-lead-review/v1') return workflowPayload;
+  } catch (error) {
+    console.warn('[LeadDepartment] workflow responsible review read failed', error);
+  }
+
   const supabasePayload = await getLatestPlatformHandoff('responsible_to_lead', regionCode, ['completed']);
   if (supabasePayload?.schemaVersion === 'responsible-to-lead-review/v1') return supabasePayload;
 

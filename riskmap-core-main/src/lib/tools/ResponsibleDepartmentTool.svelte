@@ -20,6 +20,10 @@
         VWORLD_WMS_URL
     } from '../../../../shared/map/vworld.js';
     import { getLatestPlatformHandoff, savePlatformHandoff } from '../../../../shared/services/platformHandoffs.js';
+    import {
+        getLatestLeadToResponsibleHandoffPayload,
+        saveResponsibleReviewResponsePayload
+    } from '../../../../shared/services/livinglabWorkflowData.js';
     import * as XLSX from 'xlsx';
     import { calculateTemperatureEffect } from '$lib/effects/temperatureEffect.js';
     import 'leaflet/dist/leaflet.css';
@@ -262,6 +266,16 @@
     }
 
     async function fetchResponsibleHandoffFromInbox(regionCode) {
+        try {
+            const workflowPayload = await withTimeout(
+                getLatestLeadToResponsibleHandoffPayload(regionCode),
+                1800
+            );
+            if (workflowPayload?.schemaVersion === 'lead-to-responsible-handoff/v1') return workflowPayload;
+        } catch {
+            // Legacy inboxes remain available when the normalized workflow tables are not configured.
+        }
+
         try {
             const supabasePayload = await withTimeout(
                 getLatestPlatformHandoff('lead_to_responsible', regionCode, ['requested', 'reviewing', 'risk_done', 'sent', 'completed']),
@@ -1182,6 +1196,8 @@
             regionCode: incomingHandoff.regionCode || selectedRegionCode,
             region: incomingHandoff.region || selectedRegion?.name,
             originalPackageId: incomingHandoff.packageId,
+            originalWorkflowRequestId: incomingHandoff.workflowRequestId || incomingHandoff.workflowLeadToResponsibleRequestId || null,
+            workflowProjectReviewPackageId: incomingHandoff.workflowProjectReviewPackageId || null,
             reviewedAt: new Date().toISOString(),
             departmentSelection,
             alternatives: incomingHandoff.alternatives || [],
@@ -1190,6 +1206,17 @@
             responsibleProjects: serializableProjects(),
             effectStatus
         };
+        try {
+            const workflowReply = await saveResponsibleReviewResponsePayload(payload);
+            if (workflowReply?.id) {
+                reviewResponseStatus = '사업소관부서의 수정·검토 결과를 주관부서 인박스에 저장했습니다.';
+                await savePlatformHandoff('responsible_to_lead', payload, 'completed');
+                return;
+            }
+        } catch (error) {
+            console.warn('[ResponsibleDepartment] workflow review response save failed', error);
+        }
+
         const supabaseOk = await savePlatformHandoff('responsible_to_lead', payload, 'completed');
         if (supabaseOk) {
             reviewResponseStatus = '사업소관부서 수정·검토 결과를 주관부서 인박스에 저장했습니다.';

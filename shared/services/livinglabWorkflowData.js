@@ -388,6 +388,40 @@ function numericValue(...values) {
   return null;
 }
 
+function uuidOrNull(value) {
+  if (typeof value !== 'string') return null;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    ? value
+    : null;
+}
+
+function normalizeGeometryType(value) {
+  return ['point', 'line', 'polygon', 'none'].includes(value) ? value : 'point';
+}
+
+function placementGeometry(placement = {}) {
+  const points = Array.isArray(placement.points) ? placement.points : [];
+  return {
+    type: 'placement',
+    points,
+    source: placement.source || null
+  };
+}
+
+function placementQuantity(project = {}, placement = {}) {
+  if (Number.isFinite(Number(placement.measure))) return Number(placement.measure);
+  const points = Array.isArray(placement.points) ? placement.points.length : 0;
+  if (project.geometryType === 'point' || project.default_geometry_type === 'point') return points;
+  return numericValue(placement.quantity, points);
+}
+
+function projectTargetUnit(project = {}) {
+  if (project.unit) return project.unit;
+  if (project.geometryType === 'line') return 'm';
+  if (project.geometryType === 'polygon') return 'sqm';
+  return 'count';
+}
+
 function candidateKey(candidate, index) {
   return String(candidate.id || candidate.name || candidate.rank || index + 1);
 }
@@ -681,6 +715,221 @@ export async function getLatestPriorityAreaHandoffPayload(regionCode) {
 
   const graph = await getPriorityAreaSetGraph(request.area_set_id);
   return graphToPriorityPayload({ ...graph, request });
+}
+
+async function saveLeadProjectsAndPlacements(payload, areaSetId) {
+  const projects = Array.isArray(payload?.adaptationProjects) ? payload.adaptationProjects : [];
+  const placements = Array.isArray(payload?.adaptationPlacements) ? payload.adaptationPlacements : [];
+  if (!projects.length && !placements.length) return { projects: [], placements: [] };
+
+  const projectMap = new Map(projects.map((project) => [project.id, project]));
+  placements.forEach((placement) => {
+    if (!projectMap.has(placement.projectId)) {
+      projectMap.set(placement.projectId, {
+        id: placement.projectId,
+        title: placement.projectTitle || placement.item || 'Adaptation placement',
+        part: payload.hazardLabel || payload.hazard || 'adaptation',
+        item: placement.item || placement.projectTitle || 'placement',
+        geometryType: placement.geometryType || 'point',
+        goal: null
+      });
+    }
+  });
+
+  const savedProjects = [];
+  const savedPlacements = [];
+  const savedProjectBySourceId = new Map();
+
+  for (const project of projectMap.values()) {
+    const row = await createAdaptationProject({
+      region_code: payload.regionCode,
+      sector: project.part || project.sector || payload.hazardLabel || payload.hazard || 'adaptation',
+      hazard_type: payload.hazard || payload.hazardLabel || 'unknown',
+      project_type: project.item || project.projectType || 'adaptation_project',
+      project_name: project.title || project.projectName || project.item || 'Adaptation project',
+      description: project.description || null,
+      default_geometry_type: normalizeGeometryType(project.geometryType || project.default_geometry_type),
+      target_quantity: numericValue(project.goal, project.targetQuantity),
+      target_unit: projectTargetUnit(project),
+      effect_metric: project.effectMetric || null,
+      default_effect_params: project.effectSpec || project.defaultEffectParams || {},
+      status: 'active',
+      created_by_tool: 'lead_department_tool'
+    });
+    if (row?.id) {
+      savedProjects.push(row);
+      savedProjectBySourceId.set(project.id, row);
+    }
+  }
+
+  for (const placement of placements) {
+    const sourceProject = projectMap.get(placement.projectId) || {};
+    const project = savedProjectBySourceId.get(placement.projectId);
+    if (!project?.id) continue;
+    const row = await createAdaptationPlacement({
+      project_id: project.id,
+      area_set_id: areaSetId || null,
+      geometry: placementGeometry(placement),
+      geometry_type: normalizeGeometryType(placement.geometryType || sourceProject.geometryType),
+      quantity: placementQuantity(sourceProject, placement),
+      unit: projectTargetUnit(sourceProject),
+      proposed_by_tool: 'lead_department_tool',
+      status: 'sent_to_responsible',
+      memo: placement.projectTitle || placement.item || null,
+      effect_summary: placement.effectSummary || null
+    });
+    if (row?.id) savedPlacements.push(row);
+  }
+
+  return { projects: savedProjects, placements: savedPlacements };
+}
+
+export async function saveLeadToResponsibleHandoffPayload(payload) {
+  if (!payload?.regionCode) return null;
+
+  await ensureRegion({
+    region_code: payload.regionCode,
+    region_name: payload.region || payload.regionName || payload.regionCode,
+    sigungu_name: payload.region || payload.regionName || null
+  });
+
+  const areaSetId = uuidOrNull(payload.areaSetId || payload.workflowAreaSetId);
+  let savedProjects = [];
+  let savedPlacements = [];
+  try {
+    const saved = await saveLeadProjectsAndPlacements(payload, areaSetId);
+    savedProjects = saved.projects;
+    savedPlacements = saved.placements;
+  } catch (error) {
+    console.warn('[livinglabWorkflowData] project placement mirror failed', error);
+  }
+
+  const alternatives = Array.isArray(payload.alternatives) ? payload.alternatives : [];
+  const candidateCount = alternatives.reduce((sum, alternative) => (
+    sum + (Array.isArray(alternative.candidates) ? alternative.candidates.length : 0)
+  ), 0);
+  const payloadSummary = {
+    schema_version: 'lead-to-responsible-handoff/v1',
+    source_package_id: payload.packageId || null,
+    priority_workflow_request_id: uuidOrNull(payload.workflowRequestId) || null,
+    area_set_id: areaSetId,
+    alternative_count: alternatives.length,
+    candidate_count: candidateCount,
+    project_count: Array.isArray(payload.adaptationProjects) ? payload.adaptationProjects.length : 0,
+    placement_count: Array.isArray(payload.adaptationPlacements) ? payload.adaptationPlacements.length : 0,
+    mirrored_project_count: savedProjects.length,
+    mirrored_placement_count: savedPlacements.length,
+    source_payload: {
+      ...payload,
+      priorityWorkflowRequestId: payload.workflowRequestId || null,
+      workflowAreaSetId: areaSetId,
+      workflowProjectIds: savedProjects.map((project) => project.id),
+      workflowPlacementIds: savedPlacements.map((placement) => placement.id)
+    }
+  };
+
+  const handoff = await insertRow(LIVINGLAB_TABLES.handoffRequests, {
+    request_type: 'project_review',
+    from_tool: 'lead_department_tool',
+    to_tool: 'responsible_department_tool',
+    region_code: payload.regionCode,
+    area_set_id: areaSetId,
+    title: payload.projectName || `${payload.region || payload.regionCode} project review`,
+    memo: `${alternatives.length} alternatives, ${candidateCount} candidates, ${payloadSummary.placement_count} placements`,
+    status: 'requested',
+    payload_summary: payloadSummary,
+    created_by_tool: 'lead_department_tool'
+  });
+
+  if (handoff?.id) {
+    await addReviewEvent({
+      handoff_id: handoff.id,
+      actor_tool: 'lead_department_tool',
+      action: 'sent_to_responsible_department',
+      payload_snapshot: payloadSummary
+    });
+  }
+
+  return { handoff, projects: savedProjects, placements: savedPlacements };
+}
+
+export async function getLatestLeadToResponsibleHandoffPayload(regionCode) {
+  const requests = await listHandoffRequests({
+    toTool: 'responsible_department_tool',
+    fromTool: 'lead_department_tool',
+    regionCode,
+    requestType: 'project_review',
+    statuses: ['requested', 'opened', 'in_review', 'returned'],
+    limit: 1
+  });
+  const request = requests[0];
+  const sourcePayload = request?.payload_summary?.source_payload;
+  if (sourcePayload?.schemaVersion !== 'lead-to-responsible-handoff/v1') return null;
+
+  return {
+    ...sourcePayload,
+    packageId: request.id,
+    sourcePackageId: sourcePayload.packageId,
+    workflowRequestId: request.id,
+    workflowLeadToResponsibleRequestId: request.id,
+    priorityWorkflowRequestId: sourcePayload.priorityWorkflowRequestId || request.payload_summary?.priority_workflow_request_id || null,
+    areaSetId: request.area_set_id || sourcePayload.areaSetId || sourcePayload.workflowAreaSetId || null,
+    deliveredToResponsibleAt: request.created_at || sourcePayload.leadReviewedAt,
+    deliveryStatus: 'sent-to-responsible'
+  };
+}
+
+export async function saveResponsibleReviewResponsePayload(payload) {
+  if (!payload?.regionCode) return null;
+
+  await ensureRegion({
+    region_code: payload.regionCode,
+    region_name: payload.region || payload.regionName || payload.regionCode,
+    sigungu_name: payload.region || payload.regionName || null
+  });
+
+  const summary = {
+    schema_version: 'responsible-to-lead-review/v1',
+    source_package_id: payload.packageId || null,
+    original_package_id: payload.originalPackageId || null,
+    project_count: Array.isArray(payload.responsibleProjects) ? payload.responsibleProjects.length : 0,
+    placement_count: Array.isArray(payload.responsibleProjects)
+      ? payload.responsibleProjects.reduce((sum, project) => sum + (Array.isArray(project.features) ? project.features.length : 0), 0)
+      : 0,
+    source_payload: payload
+  };
+
+  return createResponsibleRevisionReply({
+    parentHandoffId: uuidOrNull(payload.originalWorkflowRequestId || payload.workflowLeadToResponsibleRequestId || payload.workflowRequestId),
+    reviewPackageId: uuidOrNull(payload.workflowProjectReviewPackageId),
+    regionCode: payload.regionCode,
+    title: payload.projectName || `${payload.region || payload.regionCode} responsible review reply`,
+    memo: `${summary.project_count} projects, ${summary.placement_count} placements`,
+    payloadSummary: summary
+  });
+}
+
+export async function getLatestResponsibleReviewResponsePayload(regionCode) {
+  const requests = await listHandoffRequests({
+    toTool: 'lead_department_tool',
+    fromTool: 'responsible_department_tool',
+    regionCode,
+    requestType: 'revision_reply',
+    statuses: ['returned', 'requested', 'opened', 'in_review'],
+    limit: 1
+  });
+  const request = requests[0];
+  const sourcePayload = request?.payload_summary?.source_payload;
+  if (sourcePayload?.schemaVersion !== 'responsible-to-lead-review/v1') return null;
+
+  return {
+    ...sourcePayload,
+    packageId: request.id,
+    sourcePackageId: sourcePayload.packageId,
+    workflowRequestId: request.id,
+    returnedToLeadAt: request.created_at || sourcePayload.reviewedAt,
+    reviewStatus: 'returned'
+  };
 }
 
 export async function recallPriorityAreaReviewRequests({ regionCode, packageId } = {}) {

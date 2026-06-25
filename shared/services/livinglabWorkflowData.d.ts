@@ -48,5 +48,13 @@ export function savePriorityAreaHandoffPayload(payload: Record<string, any>): Pr
   request: Record<string, any> | null;
 } | null>;
 export function getLatestPriorityAreaHandoffPayload(regionCode: string): Promise<Record<string, any> | null>;
+export function saveLeadToResponsibleHandoffPayload(payload: Record<string, any>): Promise<{
+  handoff: Record<string, any> | null;
+  projects: Array<Record<string, any>>;
+  placements: Array<Record<string, any>>;
+} | null>;
+export function getLatestLeadToResponsibleHandoffPayload(regionCode: string): Promise<Record<string, any> | null>;
+export function saveResponsibleReviewResponsePayload(payload: Record<string, any>): Promise<Record<string, any> | null>;
+export function getLatestResponsibleReviewResponsePayload(regionCode: string): Promise<Record<string, any> | null>;
 export function recallPriorityAreaReviewRequests(options?: { regionCode?: string; packageId?: string }): Promise<number>;
 export function clearDemoWorkflowData(options?: { regionCode?: string }): Promise<boolean>;
