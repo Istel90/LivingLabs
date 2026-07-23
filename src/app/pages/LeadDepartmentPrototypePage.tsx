@@ -950,7 +950,7 @@ export function LeadDepartmentPrototypePage() {
 
   const handoffToResponsibleDepartment = async () => {
     if (!activeRegionHandoff || !priorityAlternatives.length) {
-      setResponsibleHandoffMessage('사업소관부서로 전달할 중점관리구역 대안이 없습니다.');
+      setResponsibleHandoffMessage('사업소관부서로 전달할 기후적응실천권역 대안이 없습니다.');
       return;
     }
 
@@ -1105,7 +1105,7 @@ export function LeadDepartmentPrototypePage() {
                 <ClipboardList className="size-3.5" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-extrabold">중점관리구역 요청</span>
+                <span className="block truncate text-xs font-extrabold">기후적응실천권역 요청</span>
                 <span className="block truncate text-[11px] font-bold opacity-80">
                   {priorityCandidateCount ? `${priorityAlternatives.length}개 대안 · ${priorityCandidateCount}개 후보` : '대기 요청 없음'}
                 </span>
@@ -1145,7 +1145,7 @@ export function LeadDepartmentPrototypePage() {
                 <ClipboardList className="size-4" />
               </div>
               <div>
-                <h2 className="text-xs font-extrabold text-slate-900">중점관리구역 검토</h2>
+                <h2 className="text-xs font-extrabold text-slate-900">기후적응실천권역 검토</h2>
                 <p className="mt-1 text-xs leading-5 text-slate-600">
                   {priorityCandidateCount
                     ? `${priorityAlternatives.length}개 대안 · ${priorityCandidateCount}개 후보`
@@ -1155,7 +1155,7 @@ export function LeadDepartmentPrototypePage() {
             </div>
             {activeRegionHandoff && (
               <p className="mt-2 rounded-lg bg-white/80 p-2 text-[11px] font-bold leading-4 text-orange-900">
-                {activeRegionHandoff.projectName ?? '중점관리구역 선정지원도구'} · {activeRegionHandoff.hazardLabel ?? '재해'} · {activeRegionHandoff.region ?? selectedRegionName}
+                {activeRegionHandoff.projectName ?? '기후적응실천권역 선정지원도구'} · {activeRegionHandoff.hazardLabel ?? '재해'} · {activeRegionHandoff.region ?? selectedRegionName}
               </p>
             )}
             <button
@@ -1327,7 +1327,7 @@ export function LeadDepartmentPrototypePage() {
                       </span>
                     </div>
                     <p className="mt-2 rounded-lg bg-white px-2 py-2 text-[11px] font-bold leading-4 text-slate-600">
-                      현재 배치 {activeAdaptationPlacementScore.total.toLocaleString()}개 · 설치/중점관리구역 점수는 오른쪽 평가 패널의 이행평가에서 계산합니다.
+                      현재 배치 {activeAdaptationPlacementScore.total.toLocaleString()}개 · 설치/기후적응실천권역 점수는 오른쪽 평가 패널의 이행평가에서 계산합니다.
                     </p>
                   </div>
                 )}
@@ -1666,7 +1666,7 @@ function LeadDepartmentEntryPage({
         </div>
         <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 md:flex">
           <ClipboardList className="size-4 text-emerald-200" />
-          중점관리구역 검토 요청
+          기후적응실천권역 검토 요청
         </div>
       </header>
 
@@ -1675,7 +1675,7 @@ function LeadDepartmentEntryPage({
           <p className="text-xs font-extrabold text-emerald-700">REGION SELECT</p>
           <h1 className="mt-2 text-2xl font-black text-slate-950">검토 지역 선택</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            지역을 선택하면 중점관리구역 선정지원도구에서 전달된 검토 요청 건수를 확인할 수 있습니다.
+            지역을 선택하면 기후적응실천권역 선정지원도구에서 전달된 검토 요청 건수를 확인할 수 있습니다.
           </p>
 
           <label className="mt-5 block text-xs font-bold text-slate-600">
@@ -1705,10 +1705,10 @@ function LeadDepartmentEntryPage({
         <div className={`rounded-2xl border p-5 shadow-xl ${candidateCount ? 'border-orange-200 bg-orange-50' : 'border-white/10 bg-white'}`}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-extrabold text-orange-700">중점관리구역 검토 요청</p>
+              <p className="text-xs font-extrabold text-orange-700">기후적응실천권역 검토 요청</p>
               <h2 className="mt-2 text-2xl font-black text-slate-950">요청 건수</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                중점관리구역 선정지원도구에서 주관부서 지원도구로 전달한 요청만 표시합니다.
+                기후적응실천권역 선정지원도구에서 주관부서 지원도구로 전달한 요청만 표시합니다.
               </p>
             </div>
             <div className={`grid size-14 place-items-center rounded-2xl ${candidateCount ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
@@ -1730,7 +1730,7 @@ function LeadDepartmentEntryPage({
           {handoff ? (
             <div className="mt-4 rounded-xl bg-white p-4">
               <p className="text-xs font-bold text-slate-500">전달 패키지</p>
-              <strong className="mt-1 block text-slate-950">{handoff.projectName ?? '중점관리구역 선정지원도구'}</strong>
+              <strong className="mt-1 block text-slate-950">{handoff.projectName ?? '기후적응실천권역 선정지원도구'}</strong>
               <span className="mt-1 block text-xs font-bold text-slate-500">
                 {handoff.hazardLabel ?? '재해'} · {handoff.region ?? selectedRegionName}
               </span>
@@ -1740,7 +1740,7 @@ function LeadDepartmentEntryPage({
             </div>
           ) : (
             <div className="mt-4 rounded-xl bg-white p-4 text-sm font-bold text-slate-500">
-              선택 지역에 전달된 중점관리구역 대안이 없습니다.
+              선택 지역에 전달된 기후적응실천권역 대안이 없습니다.
             </div>
           )}
 
@@ -2265,7 +2265,7 @@ function PriorityReviewNotice({
               <Bell className="size-5" />
             </div>
             <div>
-              <h2 className="text-xl font-extrabold text-slate-950">검토할 중점관리구역 대안이 있습니다</h2>
+              <h2 className="text-xl font-extrabold text-slate-950">검토할 기후적응실천권역 대안이 있습니다</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 {handoff.region ?? '선택 지역'} 기준으로 {alternativeCount}개 대안, {candidateCount}개 후보지가 전달되었습니다.
               </p>
@@ -2274,7 +2274,7 @@ function PriorityReviewNotice({
           <button className="rounded-full bg-slate-100 p-2" onClick={onClose}><X className="size-5" /></button>
         </div>
         <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50 p-4 text-sm text-orange-950">
-          <b className="block">{handoff.projectName ?? '중점관리구역 선정지원도구'}</b>
+          <b className="block">{handoff.projectName ?? '기후적응실천권역 선정지원도구'}</b>
           <span className="mt-1 block text-xs font-bold text-orange-800">
             {handoff.hazardLabel ?? '재해'} · 패키지 {handoff.packageId ?? handoff.createdAt ?? 'local'}
           </span>
@@ -2338,14 +2338,14 @@ function PriorityReviewRequestSection({
             <ClipboardList className="size-3.5" />
           </div>
           <div className="min-w-0">
-            <p className={`text-xs font-extrabold ${hasRequest ? 'text-orange-700' : 'text-slate-500'}`}>중점관리구역 검토 요청</p>
+            <p className={`text-xs font-extrabold ${hasRequest ? 'text-orange-700' : 'text-slate-500'}`}>기후적응실천권역 검토 요청</p>
             <h2 className="truncate text-sm font-extrabold text-slate-950">
               {hasRequest ? `${regionName || '선택 지역'} 대안 검토` : '검토 요청 없음'}
             </h2>
             <p className="text-[11px] font-bold leading-4 text-slate-600">
               {hasRequest
                 ? `${alternativeCount}개 대안 · ${candidateCount}개 후보`
-                : '전달된 중점관리구역 대안 요청이 없습니다.'}
+                : '전달된 기후적응실천권역 대안 요청이 없습니다.'}
             </p>
           </div>
         </div>
@@ -2363,12 +2363,12 @@ function PriorityReviewRequestSection({
 
       {hasRequest ? (
         <div className="mt-2 rounded-lg bg-white/70 px-3 py-2 text-[11px] font-bold leading-4 text-orange-900">
-          <span className="block truncate">{projectName ?? '중점관리구역 선정지원도구'}</span>
+          <span className="block truncate">{projectName ?? '기후적응실천권역 선정지원도구'}</span>
           <span className="block truncate text-orange-700">{hazardLabel ?? '재해'} · {regionName || '선택 지역'}</span>
         </div>
       ) : (
         <div className="mt-2 rounded-lg bg-white px-3 py-2 text-[11px] font-bold leading-4 text-slate-500">
-          중점관리구역 선정지원도구에서 대안을 전달하면 이 영역이 열리고 후보지 검토를 시작할 수 있습니다.
+          기후적응실천권역 선정지원도구에서 대안을 전달하면 이 영역이 열리고 후보지 검토를 시작할 수 있습니다.
         </div>
       )}
 
@@ -2459,7 +2459,7 @@ function PriorityAlternativeReviewPanel({
     <section className="mt-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-extrabold text-orange-700">중점관리구역 대안 패키지</p>
+          <p className="text-xs font-extrabold text-orange-700">기후적응실천권역 대안 패키지</p>
           <h2 className="mt-1 text-base font-extrabold text-slate-950">{handoff.region ?? '선택 지역'} 후보 검토</h2>
           <p className="mt-1 text-xs font-bold leading-5 text-orange-900">
             대안 → 후보지 → 점수/속성/필지자료 구조로 전달된 데이터 묶음입니다.
@@ -2739,7 +2739,7 @@ function ExecutionPanel({
     <section className="mt-4 rounded-xl border border-slate-200 p-4">
       <h2 className="text-lg font-extrabold">사업 이행평가</h2>
       <p className="mt-2 text-sm leading-6 text-slate-600">
-        선택한 사업의 목표 물량 대비 지도에 실제 배치된 물량을 이행점수로 계산합니다. 중점관리구역 내부 설치 비율은 시민 친화 이행점수로 별도 평가합니다.
+        선택한 사업의 목표 물량 대비 지도에 실제 배치된 물량을 이행점수로 계산합니다. 기후적응실천권역 내부 설치 비율은 시민 친화 이행점수로 별도 평가합니다.
       </p>
       <div className="mt-4 grid gap-3">
         <div className="rounded-xl bg-slate-50 p-4">
@@ -2778,9 +2778,9 @@ function ExecutionPanel({
             <span>시민 친화 이행점수</span>
             <span>{score.citizenScore.toFixed(2)} / 1.00</span>
           </div>
-          <MetricBar label="목표 대비 중점관리구역 내부 설치 비율" value={citizenPercent} />
+          <MetricBar label="목표 대비 기후적응실천권역 내부 설치 비율" value={citizenPercent} />
           <p className="mt-2 text-xs font-bold leading-5 text-sky-800">
-            중점관리구역 후보 필지 내부에 배치된 사업 물량만 별도로 계산합니다.
+            기후적응실천권역 후보 필지 내부에 배치된 사업 물량만 별도로 계산합니다.
           </p>
         </div>
         {placements.length ? (

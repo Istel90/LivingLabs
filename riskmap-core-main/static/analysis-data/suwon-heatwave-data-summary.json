@@ -3,7 +3,7 @@
   "regionName": "경기도 수원시",
   "hazard": "heatwave",
   "mode": "demo",
-  "title": "수원시 폭염 중점관리구역 시연 원자료",
+  "title": "수원시 폭염 기후적응실천권역 시연 원자료",
   "description": "수원시 시연용 원자료 묶음에서 현재 확인 가능한 요약 통계를 먼저 사용합니다. GeoTIFF, 건물 원자료, 필지 추출은 API 또는 서버 단계에서 연결합니다.",
   "sourceZip": [
     "수원시_rawdata (1).zip",

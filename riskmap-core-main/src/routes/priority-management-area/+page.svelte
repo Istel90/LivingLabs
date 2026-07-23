@@ -33,7 +33,7 @@
 </script>
 
 <svelte:head>
-    <title>중점관리구역 선정 지원도구</title>
+    <title>기후적응실천권역 선정 지원도구</title>
 </svelte:head>
 
 <main>
@@ -47,10 +47,10 @@
             <div class="hero-grid">
                 <div class="hero-copy">
                     <span class="eyebrow">공간 분석 기반 의사결정</span>
-                    <h1>중점관리구역 선정<br />지원도구</h1>
+                    <h1>기후적응실천권역 선정<br />지원도구</h1>
                     <p>
                         분석할 지자체와 재해 유형을 선택하면 공통 행정경계 데이터와 연결해
-                        대상지역을 확인하고, 폭염과 홍수 등 재해별 중점관리구역 분석으로 이동합니다.
+                        대상지역을 확인하고, 폭염과 홍수 등 재해별 기후적응실천권역 분석으로 이동합니다.
                     </p>
                 </div>
 
@@ -111,7 +111,7 @@
                     <SelectedRegionMap
                         regionCode={selectedRegion?.code}
                         regionName={selectedRegion?.fullName}
-                        height="430px"
+                        height="100%"
                         showCadastral={false}
                         locked={true}
                     />
@@ -123,7 +123,7 @@
                     <span class="icon">☀</span>
                     <small>현재 샘플 제공</small>
                     <h2>폭염</h2>
-                    <p>기후위험, 노출, 취약성 지표를 결합해 폭염 중점관리구역을 선정합니다.</p>
+                    <p>기후위험, 노출, 취약성 지표를 결합해 폭염 기후적응실천권역을 선정합니다.</p>
                     <strong>폭염 분석 시작 →</strong>
                 </a>
                 <a class="hazard flood" href={toolUrl('flood')}>
@@ -393,6 +393,7 @@
     }
 
     .decision-layout .map-panel {
+        display: flex;
         margin-top: 0;
         min-width: 0;
     }
@@ -429,10 +430,16 @@
     }
 
     .map-wrap {
+        flex: 1;
+        min-height: 42rem;
         overflow: hidden;
         border: 1px solid #dbe7ee;
         border-radius: 1.25rem;
         background: #eaf5f6;
+    }
+
+    .map-wrap :global(.region-map-wrap) {
+        height: 100%;
     }
 
     .hazards {

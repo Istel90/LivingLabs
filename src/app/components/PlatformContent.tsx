@@ -62,7 +62,7 @@ const supportTools: ToolNode[] = [
   },
   {
     id: 'priority-area',
-    title: '중점관리구역 선정 지원도구',
+    title: '기후적응실천권역 선정 지원도구',
     subtitle: '리스크 격자 분석, 대안 후보지, 필지 후보 도출',
     href: priorityManagementAreaToolUrl,
     icon: MapPin,
@@ -266,7 +266,7 @@ export function PlatformContent({ selectedItem }: PlatformContentProps) {
         <p className="text-sm font-extrabold text-emerald-200">CORE ADAPTATION TOOLS</p>
         <h2 className="mt-2 text-3xl font-extrabold">적응대책 지원도구</h2>
         <p className="mt-4 max-w-4xl leading-7 text-slate-100">
-          시민 데이터 수집, 공통 현황 데이터, 중점관리구역 선정, 주관부서 계획 수립,
+          시민 데이터 수집, 공통 현황 데이터, 기후적응실천권역 선정, 주관부서 계획 수립,
           사업소관부서 공간배치까지 이어지는 적응대책 의사결정 흐름입니다.
         </p>
       </div>
@@ -276,7 +276,7 @@ export function PlatformContent({ selectedItem }: PlatformContentProps) {
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-extrabold tracking-wide text-[#12647c]">WORKFLOW MAP</p>
-              <h3 className="mt-1 text-xl font-extrabold text-slate-900">중점관리구역 기반의 기후위기 적응계획 수립 지원 체계</h3>
+              <h3 className="mt-1 text-xl font-extrabold text-slate-900">기후적응실천권역 기반의 기후위기 적응계획 수립 지원 체계</h3>
             </div>
             <LinkBadge href={leadDepartmentToolUrl}>주관부서 중심 검토</LinkBadge>
           </div>
