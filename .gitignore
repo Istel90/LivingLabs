@@ -8,3 +8,6 @@ build/
 .runtime-logs/
 pages-dist/
 riskmap-core-main.zip
+.tools/
+.codex/
+outputs/

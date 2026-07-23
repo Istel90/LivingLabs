@@ -37,7 +37,7 @@ const tools = [
   },
   {
     eyebrow: '공간 분석',
-    title: '중점관리구역 선정',
+    title: '기후적응실천권역 선정',
     description: '행정경계와 공간지표를 결합하여 우선 관리가 필요한 지역을 찾습니다.',
     icon: MapPin,
     color: 'from-[#087f72] to-[#10a37f]',
@@ -92,7 +92,7 @@ export function HomePage() {
                 실행 가능한 <span className="text-emerald-300">적응사업</span>을 설계합니다
               </h1>
               <p className="mt-6 max-w-3xl text-base leading-7 text-slate-200 md:text-lg">
-                지방자치단체의 적응대책 수립부터 중점관리구역 선정, 사업 디자인과 효과평가까지
+                지방자치단체의 적응대책 수립부터 기후적응실천권역 선정, 사업 디자인과 효과평가까지
                 하나의 흐름으로 연결하는 의사결정 지원 플랫폼입니다.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">

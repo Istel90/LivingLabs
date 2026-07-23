@@ -1,6 +1,7 @@
 import { ExternalLink, Globe, Menu, Search } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 import { clearPlatformHandoffs } from '../../../shared/services/platformHandoffs.js';
+import { clearPriorityAreaDrafts } from '../../../shared/services/priorityAreaDrafts.js';
 import { Button } from './ui/button';
 
 const navigation = [
@@ -30,7 +31,7 @@ export function Header({ variant = 'default' }: HeaderProps) {
   const isHero = variant === 'hero';
 
   const resetDevelopmentState = async () => {
-    const ok = window.confirm('개발용 임시 초기화를 실행할까요?\n중점관리구역 요청, 사업 전달, 검토 응답 저장값을 모두 비웁니다.');
+    const ok = window.confirm('개발 초기화를 실행할까요?\nSupabase의 개발용 대안 저장 이력, 기후적응실천권역 요청, 사업 전달, 검토 응답을 모두 삭제하고 열린 기후적응실천권역 화면을 대안1로 초기화합니다.');
     if (!ok) return;
 
     window.localStorage.clear();
@@ -38,12 +39,13 @@ export function Header({ variant = 'default' }: HeaderProps) {
 
     try {
       const devResetUrl = createDevResetUrl();
-      const [proxyResult, supabaseOk] = await Promise.all([
+      const [proxyResult, handoffResetOk, priorityDraftResetOk] = await Promise.all([
         devResetUrl ? fetch(devResetUrl, { method: 'POST' }).then((response) => response.ok).catch(() => false) : Promise.resolve(false),
         clearPlatformHandoffs(),
+        clearPriorityAreaDrafts(),
       ]);
-      if (!proxyResult && !supabaseOk) throw new Error('reset failed');
-      window.alert('개발용 저장값을 초기화했습니다. 열린 도구 페이지는 새로고침해 주세요.');
+      if (!proxyResult && !handoffResetOk && !priorityDraftResetOk) throw new Error('reset failed');
+      window.alert('개발용 저장값과 열린 도구의 대안 목록을 초기화했습니다.');
     } catch (error) {
       console.error(error);
       window.alert('이 브라우저의 개발용 저장값은 초기화했습니다. 다만 Supabase 공용 인박스 초기화는 실패했으니 배포 환경변수를 확인해 주세요.');

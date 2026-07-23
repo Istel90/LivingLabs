@@ -1,8 +1,16 @@
+const localInternalToolsOrigin = import.meta.env.DEV
+  ? 'http://127.0.0.1:5175'
+  : 'http://127.0.0.1:4175';
+
+const localSurveyPlatformUrl = import.meta.env.DEV
+  ? 'http://127.0.0.1:5174/'
+  : 'http://127.0.0.1:4174/';
+
 export const internalToolsOrigin =
-  import.meta.env.VITE_INTERNAL_TOOLS_ORIGIN || 'http://127.0.0.1:5175';
+  import.meta.env.VITE_INTERNAL_TOOLS_ORIGIN || localInternalToolsOrigin;
 
 export const surveyPlatformUrl =
-  import.meta.env.VITE_SURVEY_PLATFORM_URL || 'http://127.0.0.1:5174/';
+  import.meta.env.VITE_SURVEY_PLATFORM_URL || localSurveyPlatformUrl;
 
 export const citizenSciencePlatformUrl = 'https://livinglab.mangosystem.com/';
 

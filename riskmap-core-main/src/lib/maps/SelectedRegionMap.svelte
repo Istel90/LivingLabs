@@ -30,6 +30,7 @@
         onParcelCandidateFocus = () => {},
         parcelCandidates = [],
         candidateContextKey = '',
+        mapResetKey = 0,
         showAnalysisLegend = false,
         focusedCandidate = null,
         locked = false
@@ -47,8 +48,10 @@
 
     let mapElement;
     let map;
+    let mapLoading = $state(true);
     let marker;
     let selectedBoundaryLayer;
+    let regionViewBounds;
     let sidoLayer;
     let sggLayer;
     let cadastralLayer;
@@ -69,6 +72,8 @@
     let focusedParcelCandidateKey = $state('');
     let renderedParcelCandidateScope = $state('');
     let parcelCandidateRunId = 0;
+    let parcelCandidateHydrationScope = '';
+    let appliedMapResetKey;
 
     function groupsForGridLayer(layer) {
         if (layer === 'H') return ['기후위험'];
@@ -884,6 +889,75 @@
         parcelCandidateLayer.bringToFront?.();
     }
 
+    function clearParcelCandidateState() {
+        parcelCandidateRunId += 1;
+        parcelCandidateRunning = false;
+        parcelCandidateLayer?.remove();
+        parcelCandidateLayer = null;
+        parcelCandidateLegend = [];
+        focusedParcelCandidateKey = '';
+        renderedParcelCandidateScope = '';
+        parcelCandidateHydrationScope = '';
+    }
+
+    function candidateRequestBox(candidate) {
+        const bounds = boundsLikeToLatLngBounds(candidate?.bounds) || candidateFeatureBounds(candidate);
+        if (!bounds?.isValid?.()) return null;
+        const southWest = bounds.getSouthWest();
+        const northEast = bounds.getNorthEast();
+        return {
+            minLng: southWest.lng - 0.00025,
+            minLat: southWest.lat - 0.00025,
+            maxLng: northEast.lng + 0.00025,
+            maxLat: northEast.lat + 0.00025
+        };
+    }
+
+    async function hydrateStoredParcelCandidates(candidates, scope) {
+        const missingGeometry = candidates.filter((candidate) =>
+            !(candidate.features || []).length &&
+            (candidate.pnuList || []).length &&
+            candidate.bounds
+        );
+        if (!missingGeometry.length || !hasVWorldApiKey()) return;
+
+        const requestBoxes = missingGeometry.map(candidateRequestBox).filter(Boolean);
+        if (!requestBoxes.length) return;
+
+        const runId = ++parcelCandidateRunId;
+        parcelCandidateRunning = true;
+        parcelCandidateStatus = `저장된 필지 도형 복원 중 · ${missingGeometry.length}개 후보`;
+
+        try {
+            const fetchedFeatures = await fetchVWorldCadastralFeatures(requestBoxes, { timeoutMs: 45000 });
+            if (parcelCandidateRunId !== runId || parcelCandidateLayerScope(parcelCandidates) !== scope) return;
+
+            const featureById = new Map(fetchedFeatures.map((feature) => [String(featureId(feature)), feature]));
+            const hydratedCandidates = candidates.map((candidate) => {
+                if ((candidate.features || []).length) return candidate;
+                const features = (candidate.pnuList || [])
+                    .map((pnu) => featureById.get(String(pnu)))
+                    .filter(Boolean);
+                return { ...candidate, features };
+            });
+            const restoredCount = hydratedCandidates.reduce((sum, candidate) => sum + (candidate.features?.length || 0), 0);
+
+            renderedParcelCandidateScope = parcelCandidateLayerScope(hydratedCandidates);
+            renderParcelCandidateLayer(hydratedCandidates);
+            parcelCandidateStatus = restoredCount
+                ? `저장된 필지 도형 ${restoredCount.toLocaleString()}개 복원 완료`
+                : '저장된 필지의 PNU는 확인했지만 도형을 찾지 못했습니다.';
+            onParcelCandidatesChange(hydratedCandidates, parcelCandidateStatus, candidateContextKey);
+        } catch (error) {
+            if (parcelCandidateRunId !== runId) return;
+            parcelCandidateStatus = error?.message === 'request-timeout'
+                ? '필지 도형 복원 시간이 초과되었습니다. 잠시 후 저장본을 다시 불러오세요.'
+                : `필지 도형 복원 실패 · ${error?.message || 'VWorld 조회 오류'}`;
+        } finally {
+            if (parcelCandidateRunId === runId) parcelCandidateRunning = false;
+        }
+    }
+
     function parcelCandidateKey(candidate) {
         if (!candidate) return '';
         return String(candidate.id || candidate.name || `parcel-candidate-${candidate.rank || ''}`);
@@ -908,6 +982,14 @@
         renderedParcelCandidateScope = nextScope;
         focusedParcelCandidateKey = '';
         renderParcelCandidateLayer(candidates);
+
+        const needsHydration = candidates.some((candidate) =>
+            !(candidate.features || []).length && (candidate.pnuList || []).length && candidate.bounds
+        );
+        if (needsHydration && parcelCandidateHydrationScope !== nextScope) {
+            parcelCandidateHydrationScope = nextScope;
+            void hydrateStoredParcelCandidates(candidates, nextScope);
+        }
 
         if (parcelCandidateRunning) return;
         if (candidates.length) {
@@ -1405,6 +1487,41 @@
         selectedBoundaryLayer = null;
     }
 
+    function applyRegionMinimumZoom(bounds) {
+        if (!map || !bounds?.isValid?.()) return;
+
+        regionViewBounds = bounds;
+        map.setMaxBounds(null);
+        map.setMinZoom(7);
+    }
+
+    function regionReturnLabel() {
+        const selectedRegion = getRegionByCode(regionCode);
+        const shortName = selectedRegion?.sigungu || regionName?.split(' ').at(-1) || '선택 지역';
+        return `${shortName}로 복귀`;
+    }
+
+    function returnToSelectedRegion() {
+        if (!map) return;
+
+        if (regionViewBounds?.isValid?.()) {
+            map.stop();
+            map.setMinZoom(7);
+            map.invalidateSize?.({ pan: false });
+            const padding = locked ? [18, 18] : [28, 28];
+            const overviewZoom = map.getBoundsZoom(regionViewBounds, false, padding);
+            if (Number.isFinite(overviewZoom)) map.setMinZoom(overviewZoom);
+            map.fitBounds(regionViewBounds, {
+                padding,
+                animate: true,
+                duration: 0.55
+            });
+            return;
+        }
+
+        locateRegion();
+    }
+
     function locateRegion() {
         if (!map || !window.L || !regionCode) return;
 
@@ -1433,9 +1550,14 @@
             const bounds = selectedBoundaryLayer.getBounds();
             toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
             if (bounds.isValid()) {
+                applyRegionMinimumZoom(bounds);
+                const padding = locked ? [6, 6] : [28, 28];
+                const maxOverviewZoom = locked ? regionZoom(region) + 2 : regionZoom(region) + 1;
+                const overviewZoom = Math.min(maxOverviewZoom, map.getBoundsZoom(bounds, false, padding));
+                if (Number.isFinite(overviewZoom)) map.setMinZoom(overviewZoom);
                 map.fitBounds(bounds, {
-                    padding: locked ? [18, 18] : [28, 28],
-                    maxZoom: locked ? regionZoom(region) + 2 : regionZoom(region) + 1,
+                    padding,
+                    maxZoom: maxOverviewZoom,
                     animate: true,
                     duration: 0.65
                 });
@@ -1446,6 +1568,9 @@
 
         const center = getRegionCenter(regionCode);
         if (center) {
+            map.setMaxBounds(null);
+            map.setMinZoom(9);
+            regionViewBounds = null;
             map.setView(center, regionZoom(region));
             marker = L.marker(center).bindTooltip(label, { permanent: true, direction: 'top' }).addTo(map);
         }
@@ -1479,6 +1604,7 @@
     }
 
     function initializeMap(L) {
+        mapLoading = true;
         map = L.map(mapElement, {
             attributionControl: true,
             zoomControl: false,
@@ -1489,7 +1615,9 @@
             keyboard: !locked,
             touchZoom: !locked,
             minZoom: 7,
-            maxZoom: 18
+            maxZoom: 18,
+            zoomSnap: locked ? 0.25 : 1,
+            zoomDelta: locked ? 0.25 : 1
         });
 
         if (!locked) {
@@ -1527,6 +1655,15 @@
             renderAnalysisLayers();
             renderRiskGridLayer();
             syncParcelCandidateLayerFromProps();
+        }
+        map.invalidateSize?.({ pan: false });
+        mapLoading = false;
+        if (focusedCandidate) {
+            window.setTimeout(() => {
+                syncParcelCandidateLayerFromProps();
+                focusParcelCandidate(focusedCandidate);
+            }, 120);
+            window.setTimeout(() => focusParcelCandidate(focusedCandidate), 420);
         }
     }
 
@@ -1576,6 +1713,16 @@
         parcelCandidates;
         candidateContextKey;
         syncParcelCandidateLayerFromProps();
+        map?.invalidateSize?.({ pan: false });
+    });
+
+    $effect(() => {
+        mapResetKey;
+        if (!map || appliedMapResetKey === mapResetKey) return;
+        appliedMapResetKey = mapResetKey;
+        clearParcelCandidateState();
+        renderRiskGridLayer();
+        window.setTimeout(() => returnToSelectedRegion(), 0);
     });
 
     $effect(() => {
@@ -1588,6 +1735,15 @@
     $effect(() => {
         focusedCandidate;
         focusParcelCandidate(focusedCandidate);
+        if (focusedCandidate && map) {
+            const requestedCandidate = focusedCandidate;
+            window.setTimeout(() => {
+                if (focusedCandidate?.requestedAt === requestedCandidate?.requestedAt) {
+                    syncParcelCandidateLayerFromProps();
+                    focusParcelCandidate(requestedCandidate);
+                }
+            }, 140);
+        }
     });
 </script>
 
@@ -1598,6 +1754,13 @@
 
 <div class="region-map-wrap">
     <div class:locked-map={locked} class="region-map" bind:this={mapElement} style={`height:${height}`}></div>
+    {#if mapLoading}
+        <div class="map-refresh-loading" role="status" aria-live="polite">
+            <span></span>
+            <strong>지도 준비 중</strong>
+            <small>선택 지역의 배경지도와 분석 레이어를 준비하고 있습니다.</small>
+        </div>
+    {/if}
     {#if showAnalysisLegend}
         <div class="analysis-overlay-stack">
             <div class="analysis-legend" aria-label="분석 범례">
@@ -1721,6 +1884,12 @@
         {:else}
             <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
         {/if}
+        {#if !locked}
+            <button class="return-region-button" type="button" onclick={returnToSelectedRegion} title={`${regionName || '선택 지역'} 전체 보기`}>
+                <span aria-hidden="true">⌖</span>
+                {regionReturnLabel()}
+            </button>
+        {/if}
     </div>
 </div>
 
@@ -1737,12 +1906,67 @@
         background: #e8f3f5;
     }
 
+    .map-refresh-loading {
+        position: absolute;
+        z-index: 1200;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: .45rem;
+        border-radius: 1rem;
+        background: rgb(241 250 248 / 86%);
+        color: #0f3f3a;
+        text-align: center;
+        backdrop-filter: blur(3px);
+    }
+
+    .map-refresh-loading span {
+        width: 1.8rem;
+        height: 1.8rem;
+        border: 3px solid #99f6e4;
+        border-top-color: #0f766e;
+        border-radius: 999px;
+        animation: map-refresh-spin .7s linear infinite;
+    }
+
+    .map-refresh-loading strong { font-size: .85rem; }
+    .map-refresh-loading small { color: #64748b; font-size: .7rem; }
+    @keyframes map-refresh-spin { to { transform: rotate(360deg); } }
+
     .locked-map {
         cursor: default;
     }
 
     .locked-map :global(.leaflet-control-attribution) {
         font-size: .65rem;
+    }
+
+    .return-region-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: .35rem;
+        width: 100%;
+        margin-top: .3rem;
+        border: 1px solid rgb(15 118 110 / 26%);
+        border-radius: .65rem;
+        background: #ecfdf5;
+        color: #0f766e;
+        padding: .52rem .72rem;
+        font-size: .72rem;
+        font-weight: 900;
+        cursor: pointer;
+    }
+
+    .return-region-button:hover {
+        border-color: #0f766e;
+        background: #ecfdf5;
+    }
+
+    .return-region-button span {
+        font-size: 1rem;
+        line-height: 1;
     }
 
     .layer-panel {

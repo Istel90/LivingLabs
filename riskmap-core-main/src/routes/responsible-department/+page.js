@@ -9,7 +9,8 @@ export async function load({ url, fetch }) {
         if (!initialWorkspace) {
             return { initialResponsibleHandoff: null, initialWorkspace };
         }
-        const inboxUrl = new URL('http://127.0.0.1:5176/responsible-handoff');
+        const proxyPort = url.port === '4175' ? '4176' : '5176';
+        const inboxUrl = new URL(`${url.protocol}//${url.hostname}:${proxyPort}/responsible-handoff`);
         inboxUrl.searchParams.set('regionCode', regionCode);
         const response = await fetch(inboxUrl.toString(), { cache: 'no-store' });
         if (!response.ok) return { initialResponsibleHandoff: null, initialWorkspace };

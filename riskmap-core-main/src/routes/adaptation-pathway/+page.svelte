@@ -16,7 +16,7 @@
             기후위기 시나리오와 사업 성과를 바탕으로 단계별 적응경로를 구성하는 내부 도구입니다.
         </p>
         <p>공통 베이스맵, 행정경계, 인구 및 격자 데이터를 연계할 예정입니다.</p>
-        <a class="primary-link" href={`${base}/priority-management-area/`}>중점관리구역 선정 지원도구로 이동</a>
+        <a class="primary-link" href={`${base}/priority-management-area/`}>기후적응실천권역 선정 지원도구로 이동</a>
     </section>
 </main>
 

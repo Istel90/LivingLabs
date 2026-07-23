@@ -9,6 +9,7 @@ const workspaceRoot = resolve(root, '..');
 const handoffStorePath = resolve(workspaceRoot, '.runtime-logs', 'priority-handoffs.json');
 const responsibleHandoffStorePath = resolve(workspaceRoot, '.runtime-logs', 'responsible-handoffs.json');
 const responsibleReviewStorePath = resolve(workspaceRoot, '.runtime-logs', 'responsible-review-responses.json');
+const devResetStatePath = resolve(workspaceRoot, '.runtime-logs', 'dev-reset-state.json');
 const envPath = resolve(root, '.env.local');
 const env = {};
 
@@ -80,6 +81,7 @@ function resetDevStores() {
   writeHandoffStore({}, handoffStorePath);
   writeHandoffStore({}, responsibleHandoffStorePath);
   writeHandoffStore({}, responsibleReviewStorePath);
+  writeHandoffStore({ resetAt: new Date().toISOString() }, devResetStatePath);
 }
 
 async function handleStoredHandoffRoute(request, response, url, { storePath, schemaVersion }) {
@@ -184,6 +186,10 @@ const server = createServer(async (request, response) => {
   }
 
   if (url.pathname === '/dev-reset') {
+    if (request.method === 'GET') {
+      send(response, 200, JSON.stringify({ ok: true, ...readHandoffStore(devResetStatePath) }));
+      return;
+    }
     if (!['POST', 'DELETE'].includes(request.method)) {
       send(response, 405, JSON.stringify({ ok: false, error: 'Method not allowed' }));
       return;
@@ -197,7 +203,7 @@ const server = createServer(async (request, response) => {
         'responsible-handoffs',
         'responsible-review-responses',
       ],
-      resetAt: new Date().toISOString(),
+      ...readHandoffStore(devResetStatePath),
     }));
     return;
   }

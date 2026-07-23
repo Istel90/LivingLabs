@@ -276,7 +276,7 @@
             const urls = [
                 new URL(RESPONSIBLE_HANDOFF_INBOX_URL, window.location.origin),
                 new URL('/responsible-handoff', window.location.origin),
-                new URL('http://127.0.0.1:5176/responsible-handoff')
+                new URL(`http://${window.location.hostname}:${window.location.port === '4175' ? '4176' : '5176'}/responsible-handoff`)
             ];
             const uniqueUrls = [...new Map(urls.map((url) => {
                 url.searchParams.set('regionCode', regionCode);
@@ -1346,7 +1346,7 @@
             </article>
             <article class:hasRequest={incomingCandidateCount || incomingPlacementCount} class="entry-card request-card">
                 <p class="entry-eyebrow">LEAD DEPARTMENT REQUEST</p>
-                <h2>중점관리구역 및 사업배치 권장사항</h2>
+                <h2>기후적응실천권역 및 사업배치 권장사항</h2>
                 <p>주관부서 적응대책 지원도구에서 전달한 대안, 후보지, 권장 사업 배치 묶음을 검토합니다.</p>
                 <div class="entry-counts">
                     <div><span>대안</span><strong>{incomingAlternatives.length}</strong></div>
@@ -1358,8 +1358,8 @@
                 {:else if incomingHandoff}
                     <div class="entry-package">
                         <span>전달 패키지</span>
-                        <strong>중점관리구역 및 사업배치 권장사항</strong>
-                        <small>{incomingHandoff.projectName || '중점관리구역 후보 검토'} · {incomingHandoff.hazardLabel || '재해'} · {incomingHandoff.region || selectedRegion?.name}</small>
+                        <strong>기후적응실천권역 및 사업배치 권장사항</strong>
+                        <small>{incomingHandoff.projectName || '기후적응실천권역 후보 검토'} · {incomingHandoff.hazardLabel || '재해'} · {incomingHandoff.region || selectedRegion?.name}</small>
                     </div>
                 {:else}
                     <div class="entry-empty">현재 선택 지역에 주관부서에서 전달한 대안이 없습니다.</div>
@@ -1373,7 +1373,7 @@
         <section class="entry-loading-card">
             <span>Loading</span>
             <h2>요청 데이터를 불러오는 중입니다</h2>
-            <p>중점관리구역 대안과 사업배치 정보를 작업 화면에 연결하고 있습니다.</p>
+            <p>기후적응실천권역 대안과 사업배치 정보를 작업 화면에 연결하고 있습니다.</p>
         </section>
     </div>
 {/if}
@@ -1400,14 +1400,14 @@
                 >
                     <span class="notice-icon">!</span>
                     <span class="notice-body">
-                        <strong>중점관리구역 및 사업배치 권장사항</strong>
+                        <strong>기후적응실천권역 및 사업배치 권장사항</strong>
                         <small>{incomingAlternatives.length}개 대안 · {incomingCandidateCount}개 후보지 · {incomingPlacementCount}개 사업배치</small>
                     </span>
                     <span class="notice-action">{handoffNoticeOpen ? '접기' : '열기'}</span>
                 </button>
                 {#if handoffNoticeOpen}
                     <section class="handoff-section inline-handoff-section">
-                        <h2>중점관리구역 및 사업배치 권장사항</h2>
+                        <h2>기후적응실천권역 및 사업배치 권장사항</h2>
                         <p>{incomingHandoffStatus}</p>
                         <div class="handoff-counts">
                             <span>대안 <b>{incomingAlternatives.length}</b></span>
@@ -1459,7 +1459,7 @@
         </section>
         {#if false && incomingHandoff && handoffNoticeOpen}
             <section class="handoff-section">
-                <h2>중점관리구역 및 사업배치 권장사항</h2>
+                <h2>기후적응실천권역 및 사업배치 권장사항</h2>
                 <p>{incomingHandoffStatus}</p>
                 <div class="handoff-counts">
                     <span>대안 <b>{incomingAlternatives.length}</b></span>

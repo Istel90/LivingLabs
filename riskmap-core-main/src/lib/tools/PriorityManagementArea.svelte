@@ -1,9 +1,14 @@
 <script>
-    import { onMount } from 'svelte';
+    import { onDestroy, onMount } from 'svelte';
     import { base } from '$app/paths';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
     import { markPlatformHandoffStatus, savePlatformHandoff } from '../../../../shared/services/platformHandoffs.js';
+    import {
+        draftPayloadFromRow,
+        listPriorityAreaDrafts,
+        savePriorityAreaDraft
+    } from '../../../../shared/services/priorityAreaDrafts.js';
 
     export let hazard = 'heatwave';
 
@@ -14,9 +19,13 @@
     const asset = (path) => `${base}${path}`;
     const DEPARTMENT_HANDOFF_KEY = 'livinglabs.priorityManagementHandoff';
     const priorityHandoffInboxUrl = import.meta.env.VITE_PRIORITY_HANDOFF_INBOX_URL || '/priority-handoff';
+    const vworldProxyUrl = import.meta.env.VITE_VWORLD_PROXY_URL || '';
+    const devResetSignalUrl = vworldProxyUrl
+        ? new URL('/dev-reset', vworldProxyUrl).toString()
+        : '';
     const PRIORITY_DRAFT_DB_NAME = 'livinglabs-priority-management';
     const PRIORITY_DRAFT_STORE_NAME = 'priority-management-sessions';
-    const PRIORITY_DRAFT_SCHEMA_VERSION = 'priority-management-draft/v1';
+    const PRIORITY_DRAFT_SCHEMA_VERSION = 'priority-management-draft/v2';
 
     const hazardConfigs = {
         heatwave: {
@@ -189,6 +198,7 @@
     let analysisResult = null;
     let parcelCandidateMessage = 'Risk 분석 후 지도에서 필지 후보를 도출하세요.';
     let focusedCandidate = null;
+    let mapResetKey = 0;
     let detailCandidateKey = null;
     let handoffMessage = '필지 후보를 도출하면 주관부서 지원도구로 전달할 수 있습니다.';
     let handoffDialog = null;
@@ -198,6 +208,14 @@
     let draftStorageStatus = '임시 저장 준비 중';
     let draftLoadComplete = false;
     let draftSaveTimer = null;
+    let operatorName = '관리자';
+    let supabaseDrafts = [];
+    let supabaseHistoryOpen = false;
+    let supabaseBusy = false;
+    let supabaseStatus = 'Supabase 저장 준비';
+    let supabaseSaveDialog = null;
+    let devResetPollTimer = null;
+    let lastDevResetAt = '';
 
     let alternatives = config.alternatives.map((item, index) => ({
         ...item,
@@ -400,15 +418,151 @@
         draftSaveTimer = window.setTimeout(savePriorityDraft, 450);
     }
 
+    async function clearPriorityDraftStore() {
+        const db = await openPriorityDraftDb();
+        try {
+            const transaction = db.transaction(PRIORITY_DRAFT_STORE_NAME, 'readwrite');
+            await requestToPromise(transaction.objectStore(PRIORITY_DRAFT_STORE_NAME).clear());
+        } finally {
+            db.close();
+        }
+    }
+
+    async function refreshSupabaseDrafts() {
+        supabaseBusy = true;
+        try {
+            supabaseDrafts = await listPriorityAreaDrafts({
+                regionCode,
+                hazardType: hazard,
+                limit: 30
+            });
+            supabaseStatus = supabaseDrafts.length
+                ? `Supabase 저장 이력 ${supabaseDrafts.length}건`
+                : 'Supabase 저장 이력이 없습니다.';
+        } catch (error) {
+            console.warn(error);
+            supabaseStatus = error?.message || 'Supabase 이력 조회 실패';
+        } finally {
+            supabaseBusy = false;
+        }
+    }
+
+    async function saveCurrentDraftToSupabase() {
+        const actorUser = operatorName.trim();
+        if (!actorUser) {
+            supabaseStatus = '작업자 이름을 먼저 입력하세요.';
+            supabaseSaveDialog = {
+                state: 'error',
+                title: '저장할 수 없습니다',
+                message: '작업자 이름 또는 부서를 먼저 입력해 주세요.'
+            };
+            return;
+        }
+
+        supabaseBusy = true;
+        supabaseSaveDialog = {
+            state: 'saving',
+            title: '대안 저장 중',
+            message: '분석 결과를 정리해 Supabase에 새 버전으로 저장하고 있습니다.'
+        };
+        persistAlternative(activeAlternative);
+        const payload = buildSupabaseDraftPayload();
+        try {
+            window.localStorage.setItem('livinglabs.priorityAreaOperator', actorUser);
+            const saved = await savePriorityAreaDraft({
+                regionCode,
+                regionName: region,
+                hazardType: hazard,
+                projectName,
+                actorUser,
+                draftPayload: payload
+            });
+            supabaseStatus = `${saved?.analysis_version || '새 버전'} 저장 완료 · ${actorUser}`;
+            supabaseSaveDialog = {
+                state: 'success',
+                title: '대안 저장 완료',
+                message: `${saved?.set_name || saved?.analysis_version || '새 저장본'}을 ${actorUser} 작업 이력으로 저장했습니다.`
+            };
+            await refreshSupabaseDrafts();
+            supabaseHistoryOpen = false;
+        } catch (error) {
+            console.warn(error);
+            const timedOut = String(error?.message || '').includes('57014')
+                || String(error?.message || '').toLowerCase().includes('statement timeout');
+            supabaseStatus = timedOut
+                ? '저장 데이터 처리 시간이 초과되었습니다. 다시 시도해 주세요.'
+                : error?.message || 'Supabase 저장 실패';
+            supabaseSaveDialog = {
+                state: 'error',
+                title: '대안 저장 실패',
+                message: timedOut
+                    ? '저장할 데이터 처리 시간이 초과되었습니다. 데이터 크기를 줄인 저장 방식으로 다시 시도해 주세요.'
+                    : supabaseStatus
+            };
+        } finally {
+            supabaseBusy = false;
+        }
+    }
+
+    function loadSupabaseDraft(row) {
+        const payload = draftPayloadFromRow(row);
+        if (!restorePriorityDraftPayload(payload)) {
+            supabaseStatus = '현재 지역·재해유형과 맞지 않는 저장본입니다.';
+            return;
+        }
+        supabaseStatus = `${row.analysis_version || '저장본'} 불러오기 완료 · ${row.created_by_user || '작업자 미기록'}`;
+        supabaseHistoryOpen = false;
+        schedulePriorityDraftSave();
+    }
+
+    async function toggleSupabaseHistory() {
+        supabaseHistoryOpen = !supabaseHistoryOpen;
+        if (supabaseHistoryOpen) await refreshSupabaseDrafts();
+    }
+
+    async function readDevelopmentResetSignal() {
+        if (!devResetSignalUrl) return '';
+        try {
+            const response = await fetch(devResetSignalUrl, { cache: 'no-store' });
+            if (!response.ok) return '';
+            const state = await response.json();
+            return state?.resetAt || '';
+        } catch {
+            return '';
+        }
+    }
+
+    async function applyDevelopmentReset() {
+        draftLoadComplete = false;
+        window.clearTimeout(draftSaveTimer);
+        resetAllAlternatives();
+        try {
+            await clearPriorityDraftStore();
+        } catch (error) {
+            console.warn(error);
+        }
+        supabaseDrafts = [];
+        supabaseHistoryOpen = false;
+        supabaseStatus = '개발 초기화 완료 · Supabase 저장 이력 삭제됨';
+        draftStorageStatus = '개발 초기화 완료 · 새 대안1';
+        draftLoadComplete = true;
+    }
+
     onMount(async () => {
         const params = new URLSearchParams(window.location.search);
         region = params.get('regionName') || region;
         regionCode = params.get('regionCode') || regionCode;
+        operatorName = window.localStorage.getItem('livinglabs.priorityAreaOperator') || operatorName;
+        const resumeDraft = params.get('resumeDraft') === '1';
 
         try {
-            const restored = restorePriorityDraftPayload(await readPriorityDraft());
             draftLoadComplete = true;
-            if (!restored) draftStorageStatus = '임시 저장 준비됨';
+            if (resumeDraft) {
+                const restored = restorePriorityDraftPayload(await readPriorityDraft());
+                if (!restored) draftStorageStatus = '복원할 임시 저장이 없어 새 작업으로 시작합니다.';
+            } else {
+                draftStorageStatus = '새 작업 세션 · 이전 초안 자동 복원 안 함';
+            }
         } catch (error) {
             console.warn(error);
             draftLoadComplete = true;
@@ -427,9 +581,26 @@
 
         if (!analysisResult?.gridResult) mapSource = config.mapSource;
 
+        lastDevResetAt = await readDevelopmentResetSignal();
+        devResetPollTimer = window.setInterval(async () => {
+            const resetAt = await readDevelopmentResetSignal();
+            if (resetAt && lastDevResetAt && resetAt !== lastDevResetAt) {
+                lastDevResetAt = resetAt;
+                await applyDevelopmentReset();
+            } else if (resetAt && !lastDevResetAt) {
+                lastDevResetAt = resetAt;
+            }
+        }, 1500);
+
         return () => {
             window.clearTimeout(draftSaveTimer);
         };
+    });
+
+    onDestroy(() => {
+        if (typeof window === 'undefined') return;
+        window.clearTimeout(draftSaveTimer);
+        window.clearInterval(devResetPollTimer);
     });
 
     function cloneIndicatorsForAlternative(sourceIndicators = indicators) {
@@ -485,6 +656,7 @@
         detailCandidateKey = alternative.detailCandidateKey ||
             (analysisResult?.parcelCandidates?.[0] ? candidateIdentity(analysisResult.parcelCandidates[0]) : null);
         focusedCandidate = null;
+        mapResetKey += 1;
         activeLayer = alternative.activeLayer || 'Risk';
         activeStep = analysisDone ? 4 : Math.min(activeStep, 2);
     }
@@ -995,7 +1167,8 @@
             ? `${nextCandidates.length}개 필지 후보 클러스터 도출`
             : '필지 후보가 아직 없습니다.');
         const targetIndex = alternatives.findIndex((alternative) => alternative.id === sourceAlternativeId);
-        const safeTargetIndex = targetIndex >= 0 ? targetIndex : activeAlternative;
+        if (targetIndex < 0) return;
+        const safeTargetIndex = targetIndex;
         const targetAlternative = alternatives[safeTargetIndex];
         const targetAnalysisResult = safeTargetIndex === activeAlternative
             ? analysisResult
@@ -1045,6 +1218,69 @@
             features: candidate.features || [],
             pnuList: candidate.pnuList || [],
             requestedAt: Date.now()
+        };
+    }
+
+    function compactCandidateForSupabase(candidate) {
+        if (!candidate) return candidate;
+        const { features, ...compactCandidate } = candidate;
+        return compactCandidate;
+    }
+
+    function compactAnalysisResultForSupabase(result) {
+        if (!result) return null;
+        const grid = result.gridResult;
+        return {
+            ...result,
+            gridResult: grid ? {
+                ...grid,
+                hValues: undefined,
+                eValues: undefined,
+                sensitivityValues: undefined,
+                adaptiveCapacityValues: undefined,
+                vValues: undefined
+            } : null,
+            parcelCandidates: (result.parcelCandidates || []).map(compactCandidateForSupabase)
+        };
+    }
+
+    function buildSupabaseDraftPayload() {
+        const fullPayload = buildPriorityDraftPayload();
+        return {
+            ...fullPayload,
+            analysisResult: undefined,
+            indicators: undefined,
+            appliedIndicators: undefined,
+            alternatives: fullPayload.alternatives.map((alternative) => ({
+                ...alternative,
+                analysisResult: compactAnalysisResultForSupabase(alternative.analysisResult),
+                appliedIndicators: (alternative.appliedIndicators || []).map(stripIndicatorForResult),
+                settings: alternative.settings ? {
+                    ...alternative.settings,
+                    indicators: (alternative.settings.indicators || []).map(stripIndicatorForResult)
+                } : null
+            }))
+        };
+    }
+
+    function createDefaultAlternative(index = 0) {
+        const configured = config.alternatives[index] || {
+            name: `대안${index + 1}`,
+            status: '검토중',
+            description: '새 기후적응실천권역 대안'
+        };
+        return {
+            ...configured,
+            id: `alternative-${Date.now()}-${index}`,
+            settings: null,
+            analysisResult: null,
+            appliedIndicators: [],
+            analysisDone: false,
+            analysisMessage: null,
+            parcelCandidateMessage: null,
+            selectedCandidate: 0,
+            detailCandidateKey: null,
+            activeLayer: 'Risk'
         };
     }
 
@@ -1409,10 +1645,12 @@
         selectedCandidate = 0;
         detailCandidateKey = null;
         focusedCandidate = null;
+        mapResetKey += 1;
         activeLayer = 'Risk';
         activeStep = Math.min(activeStep, 2);
 
         persistAlternative(activeAlternative, {
+            id: `alternative-${Date.now()}-${activeAlternative}`,
             status: '검토중'
         });
         handoffMessage = latestHandoffPackage
@@ -1435,9 +1673,15 @@
         };
         alternatives = [baseAlternative];
         loadAlternative(0);
-        handoffMessage = sentHandoffPackages.length
-            ? '전체 대안을 초기화했습니다. 기존 검토 요청은 보낸 요청 관리에서 회수할 수 있습니다.'
-            : '전체 대안을 초기화했습니다. 새 대안을 구성한 뒤 다시 전달할 수 있습니다.';
+        if (sentHandoffPackages.length || latestHandoffPackage) {
+            void recallAllDepartmentHandoffs();
+        } else {
+            clearStoredDepartmentHandoff(null);
+        }
+        sentHandoffPackages = [];
+        latestHandoffPackage = null;
+        requestListOpen = false;
+        handoffMessage = '전체 대안과 로컬 검토 요청 상태를 초기화했습니다. 새 대안을 구성한 뒤 다시 전달할 수 있습니다.';
         schedulePriorityDraftSave();
     }
 
@@ -1514,10 +1758,15 @@
     function addAlternative() {
         persistAlternative(activeAlternative);
         const nextIndex = alternatives.length;
+        const nextOptionNumber = alternatives.reduce((largestNumber, alternative) => {
+            const matchedNumber = String(alternative?.name || '').match(/대안\s*(\d+)/);
+            const optionNumber = matchedNumber ? Number(matchedNumber[1]) : 0;
+            return Math.max(largestNumber, optionNumber);
+        }, 0) + 1;
         const nextAlternative = {
-            name: `대안${nextIndex + 1}`,
+            name: `대안${nextOptionNumber}`,
             status: '검토중',
-            description: '새 중점관리구역 대안',
+            description: '새 기후적응실천권역 대안',
             id: `alternative-${Date.now()}`,
             settings: {
                 gridUnit,
@@ -1544,8 +1793,20 @@
 
     function deleteActiveAlternative() {
         if (alternatives.length <= 1) {
-            resetActiveAlternative();
-            handoffMessage = '마지막 대안은 삭제하지 않고 내용만 초기화했습니다.';
+            const replacementAlternative = {
+                ...createDefaultAlternative(0),
+                settings: {
+                    gridUnit,
+                    dimensionWeights: { ...dimensionWeights },
+                    indicators: cloneIndicatorsForAlternative(indicators)
+                },
+                analysisMessage: '마지막 대안을 삭제하고 새로운 대안1을 만들었습니다.'
+            };
+            alternatives = [replacementAlternative];
+            activeAlternative = 0;
+            loadAlternative(0);
+            handoffMessage = '마지막 대안을 삭제하고 새로운 대안1을 만들었습니다.';
+            schedulePriorityDraftSave();
             return;
         }
 
@@ -1741,24 +2002,37 @@
                         <div class="panel-head map-head">
                             <div><h2>{alternatives[activeAlternative]?.name} 분석 지도</h2><p>{alternatives[activeAlternative]?.description} · {region} · 행정구역 코드 {regionCode}</p></div>
                             <div class="map-toolbar">
+                                <div class="database-actions">
+                                    <label>
+                                        <span>작업자</span>
+                                        <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="Supabase 저장 작업자" />
+                                    </label>
+                                    <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy}>
+                                        {supabaseBusy ? '처리 중' : '저장'}
+                                    </button>
+                                    <button class="db-load-action" onclick={toggleSupabaseHistory} disabled={supabaseBusy}>
+                                        {supabaseHistoryOpen ? '목록닫기' : '불러오기'}
+                                    </button>
+                                    <span>{supabaseStatus}</span>
+                                </div>
                                 <div class="handoff-actions">
                                     <div class="handoff-button-row">
-                                        <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 전달</button>
+                                        <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
                                         <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 회수</button>
                                         <button class="secondary-action muted" onclick={resetAllAlternatives}>전체 대안 초기화</button>
                                     </div>
                                     <span class="handoff-note">{handoffStatusText}</span>
                                 </div>
-                                <div class="alternative-tabs" aria-label="중점관리구역 대안">
+                                <div class="alternative-tabs" aria-label="기후적응실천권역 대안">
+                                    <button class="reset-alt" onclick={resetActiveAlternative} title="현재 대안 초기화">초기화</button>
+                                    <button class="delete-alt" onclick={deleteActiveAlternative} title="현재 대안 삭제">삭제</button>
+                                    <button class="add-alt" onclick={addAlternative} title="대안 추가">대안추가</button>
                                     {#each alternatives as alternative, index}
                                         <button class:active={activeAlternative === index} onclick={() => switchAlternative(index)}>
                                             <span>{alternative.name}</span>
                                             <small>{alternativeStatusLabel(alternative)}</small>
                                         </button>
                                     {/each}
-                                    <button class="add-alt" onclick={addAlternative}>+</button>
-                                    <button class="reset-alt" onclick={resetActiveAlternative} title="현재 대안 초기화">초기화</button>
-                                    <button class="delete-alt" onclick={deleteActiveAlternative} title="현재 대안 삭제">삭제</button>
                                 </div>
                             </div>
                         </div>
@@ -1775,6 +2049,7 @@
                                 showAnalysisLegend={analysisDone}
                                 parcelCandidates={analysisResult?.parcelCandidates || []}
                                 candidateContextKey={activeAlternativeId}
+                                {mapResetKey}
                                 {focusedCandidate}
                                 onParcelCandidatesChange={handleParcelCandidates}
                                 onParcelCandidateFocus={handleMapParcelCandidateFocus}
@@ -1833,23 +2108,114 @@
                 {/if}
             </section>
 
-            <section class="decision-panel">
-                <div class="decision-title pending-title">
+            <section class="decision-panel decision-transfer-summary" id="decision-transfer-summary">
+                <div class="decision-title">
                     <span class="section-number">04</span>
                     <div>
-                        <h2>후보 전달 브리프 · 미구현</h2>
-                        <p>04 단계는 아직 설계/구현 전입니다. 현재 후보 검토는 02 우선관리 후보지와 지도 범례를 기준으로 진행하세요.</p>
+                        <h2>검토 요청 전 최종 확인 및 전달 요약</h2>
+                        <p>현재 분석 결과와 저장 이력을 확인한 뒤 주관부서 지원도구로 검토를 요청합니다.</p>
                     </div>
-                    <span class="pending-badge">미구현</span>
+                    <span class="summary-ready-badge">{handoffCandidateCount ? '전달 준비' : '분석 대기'}</span>
                 </div>
-                <div class="pending-brief">
-                    <strong>04 단계 준비 중</strong>
-                    <span>후보지별 전달 브리프, 평가 항목, 다운로드 양식은 추후 구현 예정입니다.</span>
+                <div class="transfer-summary-grid">
+                    <article>
+                        <span>대상 지역·재해</span>
+                        <strong>{region} · {config.label}</strong>
+                        <small>행정구역 코드 {regionCode}</small>
+                    </article>
+                    <article>
+                        <span>현재 대안</span>
+                        <strong>{alternatives[activeAlternative]?.name}</strong>
+                        <small>{alternatives[activeAlternative]?.status || '검토중'} · 후보 {candidateList.length}개</small>
+                    </article>
+                    <article>
+                        <span>전체 전달 범위</span>
+                        <strong>{handoffAlternativeCount}개 대안 · {handoffCandidateCount}개 후보</strong>
+                        <small>{analysisDone ? `Risk ${formatScore(resultRiskScore)}` : 'Risk 분석 실행 전'}</small>
+                    </article>
+                    <article>
+                        <span>검토 요청 상태</span>
+                        <strong>{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '후보 도출 필요'}</strong>
+                        <small>{handoffStatusText}</small>
+                    </article>
+                </div>
+                <div class="transfer-final-action">
+                    <div>
+                        <strong>최종 확인</strong>
+                        <span>선정 대안, 필지 후보와 분석 조건이 검토 요청 패키지에 함께 기록됩니다.</span>
+                    </div>
+                    <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>
+                        주관부서 지원도구로 검토 요청
+                    </button>
                 </div>
             </section>
         </main>
     </div>
 </div>
+
+{#if supabaseSaveDialog}
+    <div class="save-progress-modal-backdrop" role="presentation">
+        <div class="save-progress-modal" role="dialog" aria-modal="true" aria-labelledby="save-progress-title">
+            <span class:running={supabaseSaveDialog.state === 'saving'} class:success={supabaseSaveDialog.state === 'success'} class:error={supabaseSaveDialog.state === 'error'} class="save-progress-mark">
+                {supabaseSaveDialog.state === 'saving' ? '' : supabaseSaveDialog.state === 'success' ? '✓' : '!'}
+            </span>
+            <h2 id="save-progress-title">{supabaseSaveDialog.title}</h2>
+            <p>{supabaseSaveDialog.message}</p>
+            {#if supabaseSaveDialog.state === 'saving'}
+                <div class="save-progress-bar"><i></i></div>
+                <small>창을 닫지 말고 잠시 기다려 주세요.</small>
+            {:else}
+                <button type="button" onclick={() => supabaseSaveDialog = null}>확인</button>
+            {/if}
+        </div>
+    </div>
+{/if}
+
+{#if supabaseHistoryOpen}
+    <div class="saved-draft-modal-backdrop" role="presentation" onclick={(event) => {
+        if (event.currentTarget === event.target) supabaseHistoryOpen = false;
+    }}>
+        <div class="saved-draft-modal" role="dialog" aria-modal="true" aria-labelledby="saved-draft-modal-title">
+            <header>
+                <div>
+                    <span>SUPABASE HISTORY</span>
+                    <h2 id="saved-draft-modal-title">저장본 불러오기</h2>
+                    <p>{region} · {config.label} 작업 이력</p>
+                </div>
+                <button type="button" class="saved-draft-close" aria-label="저장 이력 닫기" onclick={() => supabaseHistoryOpen = false}>×</button>
+            </header>
+            <div class="saved-draft-table-head" aria-hidden="true">
+                <span>제목</span>
+                <span>작성자</span>
+                <span>날짜</span>
+            </div>
+            <div class="saved-draft-rows" aria-label="Supabase 저장 이력">
+                {#if supabaseBusy}
+                    <p class="saved-draft-empty">저장 이력을 불러오는 중입니다.</p>
+                {:else if supabaseDrafts.length}
+                    {#each supabaseDrafts as savedDraft}
+                        <button type="button" class="saved-draft-row" onclick={() => loadSupabaseDraft(savedDraft)}>
+                            <span>
+                                <strong>{savedDraft.set_name || savedDraft.analysis_version || '제목 없는 저장본'}</strong>
+                                <small>{savedDraft.analysis_version || '버전 미기록'}</small>
+                            </span>
+                            <span>{savedDraft.created_by_user || '작업자 미기록'}</span>
+                            <time>{new Date(savedDraft.created_at).toLocaleString('ko-KR')}</time>
+                        </button>
+                    {/each}
+                {:else}
+                    <p class="saved-draft-empty">불러올 Supabase 저장본이 없습니다.</p>
+                {/if}
+            </div>
+            <footer>
+                <span>{supabaseStatus}</span>
+                <button type="button" onclick={refreshSupabaseDrafts} disabled={supabaseBusy}>
+                    {supabaseBusy ? '조회 중' : '새로고침'}
+                </button>
+            </footer>
+        </div>
+    </div>
+{/if}
 
 {#if handoffDialog}
     <div class="handoff-modal-backdrop" role="dialog" aria-modal="true" aria-label="주관부서 전달 완료">
@@ -1858,9 +2224,9 @@
             <h2>{handoffDialog.relayOk ? '주관부서 지원도구로 전달했습니다' : '전달 패키지를 저장했습니다'}</h2>
             <p>
                 {#if handoffDialog.relayOk}
-                    {handoffDialog.region} {handoffDialog.hazardLabel} 중점관리구역 검토 요청이 주관부서 인박스에 등록되었습니다.
+                    {handoffDialog.region} {handoffDialog.hazardLabel} 기후적응실천권역 검토 요청이 주관부서 인박스에 등록되었습니다.
                 {:else}
-                    {handoffDialog.region} {handoffDialog.hazardLabel} 중점관리구역 검토 요청을 현재 도구에 저장했습니다. 주관부서 페이지를 새로고침한 뒤 다시 전달해 주세요.
+                    {handoffDialog.region} {handoffDialog.hazardLabel} 기후적응실천권역 검토 요청을 현재 도구에 저장했습니다. 주관부서 페이지를 새로고침한 뒤 다시 전달해 주세요.
                 {/if}
                 이 화면은 그대로 유지됩니다.
             </p>

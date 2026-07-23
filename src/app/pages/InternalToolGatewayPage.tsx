@@ -3,7 +3,7 @@ import { useLocation } from 'react-router';
 import { internalToolsOrigin } from '../toolUrls';
 
 const toolLabels: Record<string, string> = {
-  '/priority-management-area': '중점관리구역 선정지원도구',
+  '/priority-management-area': '기후적응실천권역 선정지원도구',
   '/responsible-department': '사업소관부서 지원도구',
   '/adaptation-pathway': '사업 적응경로 지원도구',
 };

@@ -38,7 +38,7 @@ const treeData: TreeNode[] = [
           { id: '3-3-3', label: '(3) 국가 리스크 목록 검토' },
           { id: '3-3-4', label: '(4) 지역 취약성 평가' },
           { id: '3-3-5', label: '(5) 지역리스크 도출' },
-          { id: '3-3-6', label: '(6) 중점관리구역 선정' }
+          { id: '3-3-6', label: '(6) 기후적응실천권역 선정' }
         ]
       },
       { id: '3-4', label: '4) 제3차 적응대책 추진 방향 설정 및 분문별 세부이행과제 수립' },
@@ -617,14 +617,14 @@ function AdaptationContent({ selectedItem, onSelectItem }: { selectedItem: strin
       )
     },
     '3-3-6': {
-      title: '(6) 중점관리구역 선정',
+      title: '(6) 기후적응실천권역 선정',
       content: (
         <div className="space-y-4">
           <p className="text-gray-700 leading-relaxed">
-            지역리스크와 취약성 평가 결과를 종합하여 우선적으로 관리하고 지원할 중점관리구역을 선정합니다.
+            지역리스크와 취약성 평가 결과를 종합하여 우선적으로 관리하고 지원할 기후적응실천권역을 선정합니다.
           </p>
           <div className="bg-white border rounded-lg p-5">
-            <h4 className="font-semibold mb-3">중점관리구역 선정 기준</h4>
+            <h4 className="font-semibold mb-3">기후적응실천권역 선정 기준</h4>
             <ul className="space-y-2 text-sm text-gray-700">
               <li className="flex gap-2">
                 <span className="text-[#004494]">•</span>

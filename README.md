@@ -39,7 +39,7 @@ npm.cmd run dev:internal-tools
 내부 도구 경로:
 
 - 지역 리스크 우선순위 설문조사: `http://127.0.0.1:4174/`
-- 중점관리구역 선정: `http://127.0.0.1:4175/priority-management-area`
+- 기후적응실천권역 선정: `http://127.0.0.1:4175/priority-management-area`
 - 사업소관부서 지원도구: `http://127.0.0.1:4175/responsible-department`
 - 사업 적응경로 지원도구: `http://127.0.0.1:4175/adaptation-pathway`
 
