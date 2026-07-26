@@ -10,6 +10,7 @@ import { ApplicationsPage } from "./pages/tools/ApplicationsPage";
 import { AboutPage } from "./pages/AboutPage";
 import { LeadDepartmentPrototypePage } from "./pages/LeadDepartmentPrototypePage";
 import { InternalToolGatewayPage } from "./pages/InternalToolGatewayPage";
+import { WeatherAnalysisPage } from "./pages/WeatherAnalysisPage";
 
 export const router = createBrowserRouter([
   {
@@ -27,6 +28,10 @@ export const router = createBrowserRouter([
   {
     path: "/tools",
     Component: ToolsPage,
+  },
+  {
+    path: "/weather-analysis",
+    Component: WeatherAnalysisPage,
   },
   {
     path: "/tools/maps-data",

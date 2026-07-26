@@ -1,4 +1,4 @@
-import { ExternalLink, FlaskConical, Wrench } from 'lucide-react';
+import { CloudSun, ExternalLink, FlaskConical, Wrench } from 'lucide-react';
 import { Link } from 'react-router';
 
 interface RightSidebarProps {
@@ -27,6 +27,13 @@ const sidebarItems = [
     description: '기후적응 리빙랩 실행 자료 모음',
     externalUrl: 'https://livinglab-web.vercel.app/toolkit',
     icon: Wrench,
+  },
+  {
+    id: 'weather-analysis',
+    label: '기상데이터 분석',
+    description: '기상청·VWorld 데이터 분석 실험실',
+    internalUrl: '/weather-analysis',
+    icon: CloudSun,
   },
 ];
 

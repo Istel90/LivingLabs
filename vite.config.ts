@@ -14,6 +14,8 @@ export default defineConfig({
       '/responsible-handoff': 'http://127.0.0.1:5176',
       '/responsible-review-response': 'http://127.0.0.1:5176',
       '/vworld-data': 'http://127.0.0.1:5176',
+      '/kma-observation': 'http://127.0.0.1:5176',
+      '/kma-network': 'http://127.0.0.1:5176',
     },
     watch: {
       ignored: [
