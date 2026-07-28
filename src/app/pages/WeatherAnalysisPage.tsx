@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CalendarDays, Droplets, Flame, MapPin, RefreshCw, ThermometerSun, Wind } from 'lucide-react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, CalendarDays, CloudSun, Database, Droplets, Flame, MapPin, RefreshCw, Satellite, ThermometerSun, Wind } from 'lucide-react';
 import { Link } from 'react-router';
-import { Footer } from '../components/Footer';
-import { Header } from '../components/Header';
 
 type NetworkType = 'asos' | 'aws';
 type ViewMode = 'stations' | 'heatmap';
@@ -42,9 +40,52 @@ type ArchiveAvailability = {
   availableDates: string[];
   hours: number[];
 };
+type LstCheck = {
+  ok: boolean;
+  date: string;
+  statusCode: number;
+  contentType?: string;
+  contentLength?: number;
+  disposition?: string;
+};
+type LstVerificationRecord = {
+  dateKst: string;
+  checkedAt: string;
+  items: LstCheck[];
+};
+type LstGridCell = { latitude: number; longitude: number; temperatureC: number };
+type LstGrid = {
+  ok: boolean;
+  date: string;
+  gridSizeMeters: number;
+  cells: LstGridCell[];
+  minC: number;
+  maxC: number;
+  count: number;
+};
+type LstCatalogRecord = Omit<LstGrid, 'cells' | 'count'> & {
+  dateKst: string;
+  timeKst: string;
+  file: string;
+  totalCells: number;
+  cloudCells: number;
+  clearCells: number;
+  unknownCells: number;
+  cloudPercent: number;
+  clearPercent: number;
+  lstValidCells: number;
+  lstCoveragePercent: number;
+};
+type LstCatalog = {
+  generatedAt: string;
+  count: number;
+  records: LstCatalogRecord[];
+};
 
 const LEAFLET_CSS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 const LEAFLET_JS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+const KMA_PROXY_URL = 'http://127.0.0.1:4176';
+const LST_RECORD_KEY = 'livinglabs.weatherAnalysis.lstVerification.v1';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
@@ -103,6 +144,263 @@ function formatObservedAt(value?: string) {
 
 function numberText(value: number | null | undefined, unit: string) {
   return value == null ? '—' : `${value.toFixed(1)}${unit}`;
+}
+
+function currentKstDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function kstSlotToUtc(dateKst: string, hour: number, minute: number) {
+  const date = new Date(`${dateKst}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+09:00`);
+  return date.toISOString().slice(0, 16).replace(/[-T:]/g, '');
+}
+
+function lstKstLabel(utcDate: string) {
+  const date = new Date(Date.UTC(
+    Number(utcDate.slice(0, 4)),
+    Number(utcDate.slice(4, 6)) - 1,
+    Number(utcDate.slice(6, 8)),
+    Number(utcDate.slice(8, 10)),
+    Number(utcDate.slice(10, 12)),
+  ));
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
+function fileNameFromDisposition(disposition?: string) {
+  return disposition?.match(/filename="([^"]+)"/)?.[1] || '';
+}
+
+function WeatherDataSourceCard({ children }: { children: ReactNode }) {
+  return <section className="rounded-xl border border-sky-200 bg-white px-4 py-3 shadow-sm">{children}</section>;
+}
+
+function LstVerificationPanel({ onGridChange }: { onGridChange: (grid: LstGrid | null, loading: boolean, error?: string) => void }) {
+  const [dateKst, setDateKst] = useState(currentKstDate);
+  const [selectedTime, setSelectedTime] = useState('all');
+  const [record, setRecord] = useState<LstVerificationRecord | null>(() => {
+    try {
+      const stored = window.localStorage.getItem(LST_RECORD_KEY);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [checking, setChecking] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const selectLstTime = async (value: string) => {
+    setSelectedTime(value);
+    if (value === 'all') {
+      onGridChange(null, false);
+      setMessage('');
+      return;
+    }
+    onGridChange(null, true);
+    setMessage('선택한 LST를 지도에 표시하는 중입니다.');
+    try {
+      const response = await fetch(`${KMA_PROXY_URL}/kma-lst-grid?date=${value}`);
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || `LST 격자 변환 실패 (${response.status})`);
+      onGridChange(result as LstGrid, false);
+      setMessage(`${lstKstLabel(value)} LST ${Number(result.count).toLocaleString()}개 격자를 지도에 표시했습니다.`);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'LST 지도 레이어를 불러오지 못했습니다.';
+      onGridChange(null, false, text);
+      setMessage(text);
+    }
+  };
+
+  const verify = async () => {
+    setChecking(true);
+    setMessage('');
+    try {
+      const slots = Array.from({ length: 13 }, (_, index) => {
+        const totalMinutes = 12 * 60 + index * 10;
+        return kstSlotToUtc(dateKst, Math.floor(totalMinutes / 60), totalMinutes % 60);
+      });
+      const items = await Promise.all(slots.map(async (date) => {
+        const response = await fetch(`${KMA_PROXY_URL}/kma-lst-check?date=${date}`);
+        const result = await response.json();
+        return {
+          ok: Boolean(response.ok && result.ok),
+          date,
+          statusCode: Number(result.statusCode || response.status),
+          contentType: result.contentType,
+          contentLength: result.contentLength,
+          disposition: result.disposition,
+        } as LstCheck;
+      }));
+      const nextRecord = { dateKst, checkedAt: new Date().toISOString(), items };
+      setRecord(nextRecord);
+      window.localStorage.setItem(LST_RECORD_KEY, JSON.stringify(nextRecord));
+      setMessage(`${items.filter((item) => item.ok).length}/${items.length}개 시각의 LST 원본을 확인했습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'LST 자료를 확인하지 못했습니다.');
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const displayItems = record?.dateKst === dateKst ? record.items : Array.from({ length: 13 }, (_, index) => {
+    const totalMinutes = 12 * 60 + index * 10;
+    return {
+      ok: false,
+      date: kstSlotToUtc(dateKst, Math.floor(totalMinutes / 60), totalMinutes % 60),
+      statusCode: 0,
+    };
+  });
+  const availableCount = displayItems.filter((item) => item.ok).length;
+  const totalBytes = displayItems.reduce((sum, item) => sum + (item.ok ? Number(item.contentLength || 0) : 0), 0);
+  const selectedItem = selectedTime === 'all'
+    ? null
+    : displayItems.find((item) => item.date === selectedTime) || null;
+
+  return (
+    <WeatherDataSourceCard>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-sky-600 text-white"><Satellite className="size-4" /></span>
+        <div className="mr-auto min-w-[220px]">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <h2 className="text-sm font-extrabold text-slate-950">천리안 2A LST 확보 기록</h2>
+            <span className="text-[10px] font-bold text-slate-500">12:00~14:00 · 10분 · 2km NetCDF · 경기도 · 원본</span>
+          </div>
+          <p className="mt-0.5 text-[10px] text-slate-500">
+            {record ? `최근 확인 ${new Date(record.checkedAt).toLocaleString('ko-KR')}` : '확인 기록 없음'}
+          </p>
+        </div>
+
+        <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500">
+          날짜
+          <input type="date" value={dateKst} onChange={(event) => { setDateKst(event.target.value); setSelectedTime('all'); }} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-800" />
+        </label>
+        <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500">
+          시각
+          <select value={selectedTime} onChange={(event) => void selectLstTime(event.target.value)} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-800">
+            <option value="all">전체 요약</option>
+            {displayItems.map((item) => <option key={item.date} value={item.date}>{lstKstLabel(item.date)}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={() => void verify()} disabled={checking} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-sky-700 px-3 text-xs font-extrabold text-white hover:bg-sky-800 disabled:cursor-wait disabled:opacity-60">
+          <RefreshCw className={`size-3.5 ${checking ? 'animate-spin' : ''}`} />
+          {checking ? '확인 중' : '확인'}
+        </button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-100 pt-3 text-xs">
+        {selectedItem ? (
+          <>
+            <strong className="text-slate-950">{lstKstLabel(selectedItem.date)}</strong>
+            <span className={selectedItem.ok ? 'font-extrabold text-emerald-700' : 'font-extrabold text-slate-500'}>
+              {selectedItem.ok ? 'NETCDF 확보' : selectedItem.statusCode ? `HTTP ${selectedItem.statusCode}` : '확인 전'}
+            </span>
+            {selectedItem.ok && <span className="text-slate-500">{Math.round(Number(selectedItem.contentLength || 0) / 1024)}KB</span>}
+            {selectedItem.ok && <span className="max-w-[420px] truncate text-[10px] text-slate-400">{fileNameFromDisposition(selectedItem.disposition)}</span>}
+          </>
+        ) : (
+          <>
+            <span className="font-extrabold text-emerald-700">확보 {availableCount}/13</span>
+            <span className="flex items-center gap-1 text-slate-500"><Database className="size-3.5" />총 {(totalBytes / 1024 / 1024).toFixed(1)}MB</span>
+            <span className="text-slate-500">KO 한반도 원본 확인</span>
+          </>
+        )}
+        {message && <span className="ml-auto text-[11px] font-bold text-sky-700">{message}</span>}
+      </div>
+    </WeatherDataSourceCard>
+  );
+}
+
+function LstCatalogPanel({ onGridChange }: { onGridChange: (grid: LstGrid | null, loading: boolean, error?: string) => void }) {
+  const [catalog, setCatalog] = useState<LstCatalog | null>(null);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedRecord, setSelectedRecord] = useState<LstCatalogRecord | null>(null);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    fetch('/data/weather/lst/gyeonggi-catalog.json')
+      .then((response) => {
+        if (!response.ok) throw new Error('저운량 LST 목록을 불러오지 못했습니다.');
+        return response.json();
+      })
+      .then((result) => setCatalog(result))
+      .catch((error) => setMessage(error instanceof Error ? error.message : '저운량 LST 목록 오류'));
+  }, []);
+
+  const loadSnapshot = async (date: string) => {
+    setSelectedDate(date);
+    const record = catalog?.records.find((item) => item.date === date) || null;
+    setSelectedRecord(record);
+    if (!record) return;
+    onGridChange(null, true);
+    setMessage(`${record.dateKst} ${record.timeKst} 원본 LST를 지도에 표시하는 중입니다.`);
+    try {
+      const response = await fetch(record.file);
+      const snapshot = await response.json();
+      if (!response.ok || !snapshot.ok) throw new Error('저장된 LST 스냅샷을 불러오지 못했습니다.');
+      onGridChange({ ...snapshot, count: snapshot.cells.length } as LstGrid, false);
+      setMessage(`구름 ${record.cloudPercent}% · LST 유효 ${record.lstCoveragePercent}% · ${record.lstValidCells.toLocaleString()}개 격자`);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : '저장된 LST 스냅샷 오류';
+      onGridChange(null, false, text);
+      setMessage(text);
+    }
+  };
+
+  const cloudRange = catalog?.records.length
+    ? `${Math.min(...catalog.records.map((record) => record.cloudPercent)).toFixed(1)}~${Math.max(...catalog.records.map((record) => record.cloudPercent)).toFixed(1)}%`
+    : '—';
+
+  return (
+    <WeatherDataSourceCard>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-indigo-600 text-white"><CloudSun className="size-4" /></span>
+        <div className="mr-auto min-w-[240px]">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <h2 className="text-sm font-extrabold text-slate-950">경기도 저운량 LST 원본 20건</h2>
+            <span className="text-[10px] font-bold text-slate-500">CLD 선별 · 2026.05~07 · 2km · 로컬 스냅샷</span>
+          </div>
+          <p className="mt-0.5 text-[10px] text-slate-500">12·13·14시 구름탐지 비교 후 동일 시각 LST 결합</p>
+        </div>
+        <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500">
+          저장자료
+          <select value={selectedDate} onChange={(event) => void loadSnapshot(event.target.value)} className="h-8 min-w-[260px] rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-800">
+            <option value="">저운량 LST 선택</option>
+            {catalog?.records.map((record, index) => (
+              <option key={record.date} value={record.date}>
+                {String(index + 1).padStart(2, '0')} · {record.dateKst} {record.timeKst} · 구름 {record.cloudPercent}%
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-100 pt-3 text-xs">
+        {selectedRecord ? (
+          <>
+            <strong className="text-slate-950">{selectedRecord.dateKst} {selectedRecord.timeKst}</strong>
+            <span className="font-extrabold text-indigo-700">구름 {selectedRecord.cloudPercent}%</span>
+            <span className="font-extrabold text-emerald-700">LST 유효 {selectedRecord.lstCoveragePercent}%</span>
+            <span className="text-slate-500">{selectedRecord.minC.toFixed(1)}~{selectedRecord.maxC.toFixed(1)}℃</span>
+          </>
+        ) : (
+          <>
+            <span className="font-extrabold text-indigo-700">저장 {catalog?.count ?? 0}건</span>
+            <span className="text-slate-500">구름비율 {cloudRange}</span>
+            <span className="text-slate-500">원본 LST·CLD 처리 이력 포함</span>
+          </>
+        )}
+        {message && <span className="ml-auto text-[11px] font-bold text-indigo-700">{message}</span>}
+      </div>
+    </WeatherDataSourceCard>
+  );
 }
 
 function temperatureColor(value: number | null) {
@@ -175,7 +473,7 @@ function interpolateIdw(latitude: number, longitude: number, stations: WeatherSt
   return weightSum ? weightedTemperature / weightSum : null;
 }
 
-function WeatherMap({ stations, networkType, viewMode }: { stations: WeatherStation[]; networkType: NetworkType; viewMode: ViewMode }) {
+function WeatherMap({ stations, networkType, viewMode, lstGrid, lstLoading }: { stations: WeatherStation[]; networkType: NetworkType; viewMode: ViewMode; lstGrid: LstGrid | null; lstLoading: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const dataLayerRef = useRef<any>(null);
@@ -197,12 +495,22 @@ function WeatherMap({ stations, networkType, viewMode }: { stations: WeatherStat
         const satellite = L.tileLayer('https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg', { maxZoom: 19, attribution: '&copy; VWorld' });
         base.addTo(map);
         L.control.layers({ 'VWorld 일반': base, 'VWorld 백지도': white, 'VWorld 위성': satellite }, undefined, { position: 'topright' }).addTo(map);
-        const response = await fetch('/data/suwon-boundary.geojson');
-        const boundary = await response.json();
-        boundaryRef.current = boundary;
-        L.geoJSON(boundary, {
-          style: { color: '#047857', weight: 3, opacity: 0.95, fillColor: '#10b981', fillOpacity: 0.06 },
-          onEachFeature: (feature: any, layer: any) => layer.bindTooltip(feature?.properties?.sig_kor_nm || '수원시', { sticky: true }),
+        const [gyeonggiResponse, suwonResponse] = await Promise.all([
+          fetch('/data/gyeonggi-boundary.geojson'),
+          fetch('/data/suwon-boundary.geojson'),
+        ]);
+        const [gyeonggiBoundary, suwonBoundary] = await Promise.all([
+          gyeonggiResponse.json(),
+          suwonResponse.json(),
+        ]);
+        boundaryRef.current = gyeonggiBoundary;
+        L.geoJSON(gyeonggiBoundary, {
+          style: { color: '#475569', weight: 1.2, opacity: 0.75, fillColor: '#e2e8f0', fillOpacity: 0.025 },
+          onEachFeature: (feature: any, layer: any) => layer.bindTooltip(feature?.properties?.adm_nm || feature?.properties?.name || '경기도', { sticky: true }),
+        }).addTo(map);
+        L.geoJSON(suwonBoundary, {
+          style: { color: '#047857', weight: 3, opacity: 0.95, fillColor: '#10b981', fillOpacity: 0.04 },
+          onEachFeature: (_feature: any, layer: any) => layer.bindTooltip('수원시', { sticky: true }),
         }).addTo(map);
         setMapReady(true);
       } catch (error) {
@@ -222,7 +530,31 @@ function WeatherMap({ stations, networkType, viewMode }: { stations: WeatherStat
     const L = (window as any).L;
     if (dataLayerRef.current) mapRef.current.removeLayer(dataLayerRef.current);
 
-    if (viewMode === 'heatmap' && boundaryRef.current && stations.length) {
+    if (lstGrid?.cells.length && boundaryRef.current) {
+      const group = L.layerGroup();
+      const boundary = boundaryRef.current;
+      const latitudeStep = lstGrid.gridSizeMeters / 111_320;
+      const longitudeStep = lstGrid.gridSizeMeters / (111_320 * Math.cos(37.2636 * Math.PI / 180));
+      const observedCells = lstGrid.cells.filter((cell) => pointInBoundary(cell.longitude, cell.latitude, boundary));
+      const displayTemperatures = observedCells.map((cell) => cell.temperatureC);
+      const displayMin = Math.min(...displayTemperatures);
+      const displayMax = Math.max(...displayTemperatures);
+      setHeatRange({ min: displayMin, max: displayMax });
+      observedCells.forEach((cell) => {
+        const color = idwColor(cell.temperatureC, displayMin, displayMax);
+        L.rectangle([
+          [cell.latitude - latitudeStep / 2, cell.longitude - longitudeStep / 2],
+          [cell.latitude + latitudeStep / 2, cell.longitude + longitudeStep / 2],
+        ], {
+          color,
+          weight: 0.25,
+          opacity: 0.85,
+          fillColor: color,
+          fillOpacity: 0.82,
+        }).bindTooltip(`지표면 온도 <b>${cell.temperatureC.toFixed(1)}°C</b><br/><span style="font-size:11px;color:#64748b">천리안 2A 원본 관측 격자</span>`).addTo(group);
+      });
+      dataLayerRef.current = group.addTo(mapRef.current);
+    } else if (viewMode === 'heatmap' && boundaryRef.current && stations.length) {
       const group = L.layerGroup();
       const boundary = boundaryRef.current;
       const [minLongitude, minLatitude, maxLongitude, maxLatitude] = boundaryExtent(boundary);
@@ -281,7 +613,7 @@ function WeatherMap({ stations, networkType, viewMode }: { stations: WeatherStat
       const [minLongitude, minLatitude, maxLongitude, maxLatitude] = boundaryExtent(boundaryRef.current);
       mapRef.current.fitBounds([[minLatitude, minLongitude], [maxLatitude, maxLongitude]], { padding: [24, 24], maxZoom: 12 });
     }
-  }, [stations, networkType, viewMode, mapReady]);
+  }, [stations, networkType, viewMode, mapReady, lstGrid]);
 
   const heatMin = heatRange?.min ?? null;
   const heatMax = heatRange?.max ?? null;
@@ -291,8 +623,10 @@ function WeatherMap({ stations, networkType, viewMode }: { stations: WeatherStat
     <div className="relative h-full min-h-[680px] overflow-hidden bg-slate-100">
       <div ref={containerRef} className="absolute inset-0" />
       {mapError && <div className="absolute inset-0 z-[500] grid place-items-center bg-slate-100 p-6 text-sm font-bold text-slate-600">{mapError}</div>}
-      {viewMode === 'heatmap' && <div className="pointer-events-none absolute left-1/2 top-5 z-[500] -translate-x-1/2 rounded-xl border border-white/80 bg-slate-950/90 px-4 py-3 text-center text-white shadow-xl"><strong className="block text-sm">AWS 기온 IDW 보간</strong><span className="mt-1 block text-[11px] text-slate-300">{formatObservedAt(stations[0]?.observation.observedAt)} · 입력 {stations.length}개 지점</span></div>}
-      {viewMode === 'heatmap' && <div className="pointer-events-none absolute bottom-5 right-5 z-[500] w-56 rounded-xl border border-white/80 bg-white/95 p-3 text-xs text-slate-700 shadow-xl"><div className="flex items-center justify-between"><strong>기온 범례</strong><span className="text-[10px] text-slate-500">수원시 내부 추정값</span></div><div className="mt-2 h-3 rounded-full border border-white shadow-inner" style={{ background: 'linear-gradient(90deg, hsl(220 82% 49%), hsl(165 82% 49%), hsl(110 82% 49%), hsl(55 82% 49%), hsl(0 82% 49%))' }} /><div className="mt-1 flex justify-between font-extrabold"><span>{heatMin == null ? '—' : `${heatMin.toFixed(1)}℃`}</span><span>{heatMiddle == null ? '—' : `${heatMiddle.toFixed(1)}℃`}</span><span>{heatMax == null ? '—' : `${heatMax.toFixed(1)}℃`}</span></div><div className="mt-1 flex justify-between text-[9px] text-slate-400"><span>낮음</span><span>중간</span><span>높음</span></div></div>}
+      {lstLoading && <div className="absolute inset-0 z-[600] grid place-items-center bg-slate-950/25"><div className="flex items-center gap-3 rounded-xl bg-white px-5 py-4 text-sm font-extrabold text-slate-800 shadow-2xl"><RefreshCw className="size-5 animate-spin text-sky-600" />LST 격자를 지도에 표시하는 중...</div></div>}
+      {lstGrid && <div className="pointer-events-none absolute left-1/2 top-5 z-[500] -translate-x-1/2 rounded-xl border border-white/80 bg-slate-950/90 px-4 py-3 text-center text-white shadow-xl"><strong className="block text-sm">천리안 2A 지표면온도(LST)</strong><span className="mt-1 block text-[11px] text-slate-300">{lstKstLabel(lstGrid.date)} KST · 경기도 · 2km 원본 격자</span></div>}
+      {!lstGrid && viewMode === 'heatmap' && <div className="pointer-events-none absolute left-1/2 top-5 z-[500] -translate-x-1/2 rounded-xl border border-white/80 bg-slate-950/90 px-4 py-3 text-center text-white shadow-xl"><strong className="block text-sm">AWS 기온 IDW 보간</strong><span className="mt-1 block text-[11px] text-slate-300">{formatObservedAt(stations[0]?.observation.observedAt)} · 입력 {stations.length}개 지점</span></div>}
+      {(lstGrid || viewMode === 'heatmap') && <div className="pointer-events-none absolute bottom-5 right-5 z-[500] w-56 rounded-xl border border-white/80 bg-white/95 p-3 text-xs text-slate-700 shadow-xl"><div className="flex items-center justify-between"><strong>{lstGrid ? 'LST 범례' : '기온 범례'}</strong><span className="text-[10px] text-slate-500">{lstGrid ? '원본 관측값' : '수원시 내부 추정값'}</span></div><div className="mt-2 h-3 rounded-full border border-white shadow-inner" style={{ background: 'linear-gradient(90deg, hsl(220 82% 49%), hsl(165 82% 49%), hsl(110 82% 49%), hsl(55 82% 49%), hsl(0 82% 49%))' }} /><div className="mt-1 flex justify-between font-extrabold"><span>{heatMin == null ? '—' : `${heatMin.toFixed(1)}℃`}</span><span>{heatMiddle == null ? '—' : `${heatMiddle.toFixed(1)}℃`}</span><span>{heatMax == null ? '—' : `${heatMax.toFixed(1)}℃`}</span></div><div className="mt-1 flex justify-between text-[9px] text-slate-400"><span>낮음</span><span>중간</span><span>높음</span></div></div>}
       <div className="pointer-events-none absolute bottom-5 left-5 z-[500] rounded-lg border border-white/80 bg-white/95 px-3 py-2 text-xs font-bold text-slate-700 shadow-lg">
         {viewMode === 'stations' ? <><span className="flex items-center gap-2"><i className="size-3 rounded-full border-2 border-white bg-orange-500 shadow" />{networkType.toUpperCase()} 관측점</span><span className="mt-2 flex items-center gap-2"><i className="h-3 w-5 rounded-sm border-2 border-emerald-700 bg-emerald-500/10" />수원시 구 경계</span></> : <><span className="flex items-center gap-2"><Flame className="size-4 text-orange-600" />AWS 기온 IDW 보간</span><span className="mt-1 block text-[10px] font-medium text-slate-500">주변 AWS 입력 · 수원 내부 색상 정규화</span></>}
       </div>
@@ -309,6 +643,15 @@ export function WeatherAnalysisPage() {
   const [selectedHour, setSelectedHour] = useState(15);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [lstGrid, setLstGrid] = useState<LstGrid | null>(null);
+  const [lstLoading, setLstLoading] = useState(false);
+  const [lstError, setLstError] = useState('');
+
+  const handleLstGridChange = (grid: LstGrid | null, isLoading: boolean, gridError = '') => {
+    setLstGrid(grid);
+    setLstLoading(isLoading);
+    setLstError(gridError);
+  };
 
   const loadAsos = async () => {
     setLoading(true);
@@ -392,7 +735,6 @@ export function WeatherAnalysisPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-100">
-      <Header />
       <main className="flex-1">
         <div className="border-b border-slate-200 bg-white">
           <div className="container mx-auto flex flex-wrap items-center justify-between gap-4 px-4 py-5">
@@ -409,6 +751,11 @@ export function WeatherAnalysisPage() {
         </div>
 
         <div className="container mx-auto px-4 py-5">
+          <div className="mb-4 space-y-3" aria-label="기상 데이터 확보 목록">
+            <LstVerificationPanel onGridChange={handleLstGridChange} />
+            <LstCatalogPanel onGridChange={handleLstGridChange} />
+          </div>
+          {lstError && <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700">{lstError}</div>}
           <div className="mb-3 flex flex-wrap items-center gap-3">
             <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
               {(['asos', 'aws'] as NetworkType[]).map((type) => (
@@ -435,7 +782,7 @@ export function WeatherAnalysisPage() {
           </div>
 
           <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:grid-cols-[minmax(0,1fr)_380px]">
-            <WeatherMap stations={stations} networkType={activeType} viewMode={viewMode} />
+            <WeatherMap stations={stations} networkType={activeType} viewMode={viewMode} lstGrid={lstGrid} lstLoading={lstLoading} />
             <aside className="border-t border-slate-200 bg-white xl:border-l xl:border-t-0">
               <div className="border-b border-slate-200 p-5">
                 <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-extrabold tracking-wider text-emerald-700">{activeType === 'aws' ? 'ARCHIVED AWS' : 'LIVE ASOS'}</p><h2 className="mt-1 text-xl font-extrabold text-slate-950">수원 주변 관측소</h2></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">반경 35km</span></div>
@@ -459,7 +806,6 @@ export function WeatherAnalysisPage() {
           </div>
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

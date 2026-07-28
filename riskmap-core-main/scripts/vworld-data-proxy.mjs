@@ -1,8 +1,11 @@
 import { createServer } from 'node:http';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import * as h5wasm from 'h5wasm/node';
+import proj4 from 'proj4';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const workspaceRoot = resolve(root, '..');
@@ -203,6 +206,293 @@ function fetchKmaObservation(searchParams) {
     request.on('error', reject);
     request.end();
   });
+}
+
+function fetchKmaLstList(searchParams) {
+  return new Promise((resolvePromise, reject) => {
+    if (!kmaApiKey) {
+      reject(new Error('Missing KMA_API_KEY'));
+      return;
+    }
+
+    const now = new Date();
+    now.setUTCMinutes(Math.floor(now.getUTCMinutes() / 10) * 10, 0, 0);
+    const start = new Date(now.getTime() - 60 * 60 * 1000);
+    const formatUtc = (date) => date.toISOString().slice(0, 16).replace(/[-T:]/g, '');
+    const area = String(searchParams.get('area') || 'KO').toUpperCase();
+    const url = new URL(`https://apihub.kma.go.kr/api/typ05/api/GK2A/LE2/LST/${area}/dataList`);
+    url.searchParams.set('sDate', searchParams.get('sDate') || formatUtc(start));
+    url.searchParams.set('eDate', searchParams.get('eDate') || formatUtc(now));
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('authKey', kmaApiKey);
+
+    const request = httpsRequest(url, { method: 'GET', timeout: 30000, agent: httpsAgent }, (upstream) => {
+      let data = '';
+      upstream.setEncoding('utf8');
+      upstream.on('data', (chunk) => {
+        data += chunk;
+      });
+      upstream.on('end', () => {
+        resolvePromise({ statusCode: upstream.statusCode || 502, body: data });
+      });
+    });
+
+    request.on('timeout', () => request.destroy(new Error('KMA LST request timeout')));
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+function fetchKmaLstFileList(searchParams) {
+  return new Promise((resolvePromise, reject) => {
+    if (!kmaApiKey) {
+      reject(new Error('Missing KMA_API_KEY'));
+      return;
+    }
+
+    const now = new Date();
+    now.setUTCMinutes(Math.floor(now.getUTCMinutes() / 10) * 10, 0, 0);
+    const requestedTime = searchParams.get('tm') || now.toISOString().slice(0, 16).replace(/[-T:]/g, '');
+    const url = new URL('https://apihub.kma.go.kr/api/typ01/url/sat_file_list.php');
+    url.searchParams.set('sat', 'GK2A');
+    url.searchParams.set('vars', 'L2');
+    url.searchParams.set('area', String(searchParams.get('area') || 'KO').toUpperCase());
+    url.searchParams.set('fmt', 'bin');
+    url.searchParams.set('tm', requestedTime);
+    url.searchParams.set('size', 'Y');
+    url.searchParams.set('filter', 'lst');
+    url.searchParams.set('authKey', kmaApiKey);
+
+    const request = httpsRequest(url, { method: 'GET', timeout: 30000, agent: httpsAgent }, (upstream) => {
+      let data = '';
+      upstream.setEncoding('utf8');
+      upstream.on('data', (chunk) => {
+        data += chunk;
+      });
+      upstream.on('end', () => {
+        resolvePromise({ statusCode: upstream.statusCode || 502, body: data });
+      });
+    });
+
+    request.on('timeout', () => request.destroy(new Error('KMA LST file-list request timeout')));
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+function checkKmaLstDataAt(date, area = 'KO') {
+  return new Promise((resolvePromise, reject) => {
+    const url = new URL(`https://apihub.kma.go.kr/api/typ05/api/GK2A/LE2/LST/${area}/data`);
+    url.searchParams.set('date', date);
+    url.searchParams.set('authKey', kmaApiKey);
+    let settled = false;
+    const request = httpsRequest(url, { method: 'GET', timeout: 30000, agent: httpsAgent }, (upstream) => {
+      const chunks = [];
+      let byteLength = 0;
+      upstream.on('data', (chunk) => {
+        if (settled) return;
+        byteLength += chunk.length;
+        if (upstream.statusCode === 200) {
+          settled = true;
+          resolvePromise({
+            ok: true,
+            date,
+            statusCode: upstream.statusCode,
+            contentType: upstream.headers['content-type'] || '',
+            contentLength: Number(upstream.headers['content-length'] || byteLength || 0),
+            disposition: upstream.headers['content-disposition'] || '',
+          });
+          upstream.destroy();
+          request.destroy();
+          return;
+        }
+        if (byteLength <= 16_384) chunks.push(Buffer.from(chunk));
+      });
+      upstream.on('end', () => {
+        if (settled) return;
+        settled = true;
+        resolvePromise({
+          ok: false,
+          date,
+          statusCode: upstream.statusCode || 502,
+          body: Buffer.concat(chunks).toString('utf8'),
+        });
+      });
+    });
+    request.on('timeout', () => {
+      if (!settled) reject(new Error('KMA LST data request timeout'));
+      request.destroy();
+    });
+    request.on('error', (error) => {
+      if (!settled) reject(error);
+    });
+    request.end();
+  });
+}
+
+async function checkRecentKmaLstData(searchParams) {
+  if (!kmaApiKey) throw new Error('Missing KMA_API_KEY');
+  const area = String(searchParams.get('area') || 'KO').toUpperCase();
+  const requestedDate = searchParams.get('date');
+  if (requestedDate) return checkKmaLstDataAt(requestedDate, area);
+
+  const now = new Date();
+  now.setUTCMinutes(Math.floor(now.getUTCMinutes() / 10) * 10, 0, 0);
+  const attempts = [];
+  for (let offsetMinutes = 10; offsetMinutes <= 180; offsetMinutes += 10) {
+    const date = new Date(now.getTime() - offsetMinutes * 60 * 1000)
+      .toISOString().slice(0, 16).replace(/[-T:]/g, '');
+    const result = await checkKmaLstDataAt(date, area);
+    attempts.push({ date, statusCode: result.statusCode });
+    if (result.ok) return { ...result, attempts };
+    if (result.statusCode === 403) return { ...result, attempts };
+  }
+  return { ok: false, statusCode: 404, message: 'No recent LST file found', attempts };
+}
+
+function fetchKmaLstData(searchParams) {
+  return new Promise((resolvePromise, reject) => {
+    if (!kmaApiKey) {
+      reject(new Error('Missing KMA_API_KEY'));
+      return;
+    }
+    const date = searchParams.get('date');
+    if (!/^\d{12}$/.test(date || '')) {
+      reject(new Error('A 12-digit UTC date is required'));
+      return;
+    }
+    const area = String(searchParams.get('area') || 'KO').toUpperCase();
+    const url = new URL(`https://apihub.kma.go.kr/api/typ05/api/GK2A/LE2/LST/${area}/data`);
+    url.searchParams.set('date', date);
+    url.searchParams.set('authKey', kmaApiKey);
+    const request = httpsRequest(url, { method: 'GET', timeout: 45000, agent: httpsAgent }, (upstream) => {
+      const chunks = [];
+      upstream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      upstream.on('end', () => resolvePromise({
+        statusCode: upstream.statusCode || 502,
+        body: Buffer.concat(chunks),
+        contentType: upstream.headers['content-type'] || 'application/octet-stream',
+      }));
+    });
+    request.on('timeout', () => request.destroy(new Error('KMA LST data download timeout')));
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+const kmaLstGridCache = new Map();
+
+function h5AttributeNumber(attribute, fallback = NaN) {
+  const value = attribute?.value ?? attribute;
+  const scalar = ArrayBuffer.isView(value) || Array.isArray(value) ? value[0] : value;
+  const number = Number(scalar);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+async function buildKmaLstGrid(searchParams) {
+  const date = searchParams.get('date');
+  if (!/^\d{12}$/.test(date || '')) throw new Error('A 12-digit UTC date is required');
+  if (kmaLstGridCache.has(date)) return kmaLstGridCache.get(date);
+
+  const downloaded = await fetchKmaLstData(searchParams);
+  if (downloaded.statusCode !== 200) {
+    throw new Error(`KMA LST download failed (${downloaded.statusCode})`);
+  }
+
+  await h5wasm.ready;
+  const workDir = mkdtempSync(join(tmpdir(), 'livinglabs-lst-'));
+  const filePath = join(workDir, `${date}.nc`);
+  writeFileSync(filePath, downloaded.body);
+
+  try {
+    const file = new h5wasm.File(filePath, 'r');
+    try {
+      const lstDataset = file.get('LST');
+      const qualityDataset = file.get('DQF_LST');
+      const projectionDataset = file.get('gk2a_imager_projection');
+      const projection = projectionDataset.attrs;
+      const width = h5AttributeNumber(projection.image_width);
+      const height = h5AttributeNumber(projection.image_height);
+      const pixelSize = h5AttributeNumber(projection.pixel_size);
+      const upperLeftEasting = h5AttributeNumber(projection.upper_left_easting);
+      const upperLeftNorthing = h5AttributeNumber(projection.upper_left_northing);
+      const sourceProjection = [
+        '+proj=lcc',
+        `+lat_1=${h5AttributeNumber(projection.standard_parallel1)}`,
+        `+lat_2=${h5AttributeNumber(projection.standard_parallel2)}`,
+        `+lat_0=${h5AttributeNumber(projection.origin_latitude)}`,
+        `+lon_0=${h5AttributeNumber(projection.central_meridian)}`,
+        `+x_0=${h5AttributeNumber(projection.false_easting, 0)}`,
+        `+y_0=${h5AttributeNumber(projection.false_northing, 0)}`,
+        '+datum=WGS84',
+        '+units=m',
+        '+no_defs',
+      ].join(' ');
+      const gyeonggiBounds = { west: 126.32, south: 36.82, east: 127.88, north: 38.32 };
+      const projectedCorners = [
+        proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.west, gyeonggiBounds.south]),
+        proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.west, gyeonggiBounds.north]),
+        proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.east, gyeonggiBounds.south]),
+        proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.east, gyeonggiBounds.north]),
+      ];
+      const minX = Math.min(...projectedCorners.map(([x]) => x));
+      const maxX = Math.max(...projectedCorners.map(([x]) => x));
+      const minY = Math.min(...projectedCorners.map(([, y]) => y));
+      const maxY = Math.max(...projectedCorners.map(([, y]) => y));
+      const startColumn = Math.max(0, Math.floor((minX - upperLeftEasting) / pixelSize) - 1);
+      const endColumn = Math.min(width, Math.ceil((maxX - upperLeftEasting) / pixelSize) + 1);
+      const startRow = Math.max(0, Math.floor((upperLeftNorthing - maxY) / pixelSize) - 1);
+      const endRow = Math.min(height, Math.ceil((upperLeftNorthing - minY) / pixelSize) + 1);
+      const columnCount = endColumn - startColumn;
+      const rowCount = endRow - startRow;
+      const rawValues = lstDataset.slice([[startRow, endRow], [startColumn, endColumn]]);
+      const qualityValues = qualityDataset.slice([[startRow, endRow], [startColumn, endColumn]]);
+      const scaleFactor = h5AttributeNumber(lstDataset.attrs.scale_factor, 0.01);
+      const addOffset = h5AttributeNumber(lstDataset.attrs.add_offset, 0);
+      const fillValue = h5AttributeNumber(lstDataset.attrs._FillValue, 65535);
+      const cells = [];
+
+      for (let row = 0; row < rowCount; row += 1) {
+        for (let column = 0; column < columnCount; column += 1) {
+          const index = row * columnCount + column;
+          const rawValue = Number(rawValues[index]);
+          const quality = Number(qualityValues[index]);
+          if (rawValue === fillValue || quality !== 0) continue;
+          const x = upperLeftEasting + (startColumn + column) * pixelSize;
+          const y = upperLeftNorthing - (startRow + row) * pixelSize;
+          const [longitude, latitude] = proj4(sourceProjection, 'EPSG:4326', [x, y]);
+          if (
+            longitude < gyeonggiBounds.west || longitude > gyeonggiBounds.east ||
+            latitude < gyeonggiBounds.south || latitude > gyeonggiBounds.north
+          ) continue;
+          cells.push({
+            latitude: Number(latitude.toFixed(6)),
+            longitude: Number(longitude.toFixed(6)),
+            temperatureC: Number((rawValue * scaleFactor + addOffset - 273.15).toFixed(2)),
+            quality,
+          });
+        }
+      }
+
+      const temperatures = cells.map((cell) => cell.temperatureC);
+      const result = {
+        ok: true,
+        date,
+        gridSizeMeters: pixelSize,
+        cells,
+        minC: temperatures.length ? Math.min(...temperatures) : null,
+        maxC: temperatures.length ? Math.max(...temperatures) : null,
+        count: cells.length,
+      };
+      kmaLstGridCache.set(date, result);
+      if (kmaLstGridCache.size > 24) kmaLstGridCache.delete(kmaLstGridCache.keys().next().value);
+      return result;
+    } finally {
+      file.close();
+    }
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
 }
 const kmaNetworkCache = new Map();
 
@@ -420,6 +710,66 @@ const server = createServer(async (request, response) => {
       send(response, 502, JSON.stringify({
         ok: false,
         error: error?.message || 'Local KMA proxy failed',
+      }));
+    }
+    return;
+  }
+  if (url.pathname === '/kma-lst-list') {
+    try {
+      const result = await fetchKmaLstList(url.searchParams);
+      send(response, result.statusCode, result.body);
+    } catch (error) {
+      send(response, 502, JSON.stringify({
+        ok: false,
+        error: error?.message || 'KMA LST list request failed',
+      }));
+    }
+    return;
+  }
+  if (url.pathname === '/kma-lst-files') {
+    try {
+      const result = await fetchKmaLstFileList(url.searchParams);
+      send(response, result.statusCode, result.body, 'text/plain; charset=utf-8');
+    } catch (error) {
+      send(response, 502, JSON.stringify({
+        ok: false,
+        error: error?.message || 'KMA LST file-list request failed',
+      }));
+    }
+    return;
+  }
+  if (url.pathname === '/kma-lst-check') {
+    try {
+      const result = await checkRecentKmaLstData(url.searchParams);
+      send(response, result.ok ? 200 : result.statusCode || 502, JSON.stringify(result));
+    } catch (error) {
+      send(response, 502, JSON.stringify({
+        ok: false,
+        error: error?.message || 'KMA LST data check failed',
+      }));
+    }
+    return;
+  }
+  if (url.pathname === '/kma-lst-data') {
+    try {
+      const result = await fetchKmaLstData(url.searchParams);
+      send(response, result.statusCode, result.body, result.contentType);
+    } catch (error) {
+      send(response, 502, JSON.stringify({
+        ok: false,
+        error: error?.message || 'KMA LST data download failed',
+      }));
+    }
+    return;
+  }
+  if (url.pathname === '/kma-lst-grid') {
+    try {
+      const result = await buildKmaLstGrid(url.searchParams);
+      send(response, 200, JSON.stringify(result));
+    } catch (error) {
+      send(response, 502, JSON.stringify({
+        ok: false,
+        error: error?.message || 'KMA LST grid conversion failed',
       }));
     }
     return;
