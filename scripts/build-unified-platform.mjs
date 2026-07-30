@@ -30,7 +30,7 @@ runBuild('Portal', workspaceRoot, {
   PAGES_BASE_PATH: '/',
   VITE_INTERNAL_TOOLS_ORIGIN: '/internal-tools',
   VITE_SURVEY_PLATFORM_URL: '/survey/',
-  VITE_VWORLD_PROXY_URL: 'http://127.0.0.1:4173',
+  VITE_VWORLD_PROXY_URL: 'http://127.0.0.1:4173/vworld-data',
 });
 
 runBuild('Survey', join(workspaceRoot, 'Survey platform for collaboration'), {
@@ -42,7 +42,7 @@ runBuild('Internal tools', join(workspaceRoot, 'riskmap-core-main'), {
   PAGES_BASE_PATH: '/internal-tools',
   VITE_PORTAL_TOOLS_URL: 'http://127.0.0.1:4173/tools#adaptation-support-tools',
   VITE_LEAD_DEPARTMENT_TOOL_URL: 'http://127.0.0.1:4173/lead-department-tool',
-  VITE_VWORLD_PROXY_URL: 'http://127.0.0.1:4173',
+  VITE_VWORLD_PROXY_URL: 'http://127.0.0.1:4173/vworld-data',
 });
 
 rmSync(outputRoot, { recursive: true, force: true });
