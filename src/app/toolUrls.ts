@@ -1,10 +1,10 @@
 const localInternalToolsOrigin = import.meta.env.DEV
   ? 'http://127.0.0.1:5175'
-  : 'http://127.0.0.1:4175';
+  : '/internal-tools';
 
 const localSurveyPlatformUrl = import.meta.env.DEV
   ? 'http://127.0.0.1:5174/'
-  : 'http://127.0.0.1:4174/';
+  : '/survey/';
 
 export const internalToolsOrigin =
   import.meta.env.VITE_INTERNAL_TOOLS_ORIGIN || localInternalToolsOrigin;

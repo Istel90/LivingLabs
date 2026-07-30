@@ -8,38 +8,28 @@ if (-not (Test-Path $runtimeDir)) {
   New-Item -ItemType Directory -Path $runtimeDir | Out-Null
 }
 
+$unifiedIndex = Join-Path $root "pages-dist\index.html"
+if (-not (Test-Path $unifiedIndex)) {
+  Write-Host "Unified build output is missing. Building the platform first..."
+  & npm.cmd run build:unified
+  if ($LASTEXITCODE -ne 0) {
+    throw "Unified platform build failed."
+  }
+}
+
 $apps = @(
   @{
-    Name = "portal"
-    Label = "Portal"
+    Name = "platform"
+    Label = "Living Labs Platform"
     Port = 4173
     Url = "http://127.0.0.1:4173/"
     Cwd = $root
-    Script = "preview:local"
-  },
-  @{
-    Name = "survey"
-    Label = "Survey"
-    Port = 4174
-    Url = "http://127.0.0.1:4174/"
-    Cwd = Join-Path $root "Survey platform for collaboration"
-    Script = "preview:local"
-  },
-  @{
-    Name = "riskmap"
-    Label = "Internal Tools"
-    Port = 4175
-    Url = "http://127.0.0.1:4175/"
-    Cwd = Join-Path $root "riskmap-core-main"
-    Script = "preview:local"
-  },
-  @{
-    Name = "vworld-proxy"
-    Label = "VWorld Data Proxy"
-    Port = 4176
-    Url = "http://127.0.0.1:4176/health"
-    Cwd = Join-Path $root "riskmap-core-main"
-    Script = "vworld:proxy"
+    Command = "node.exe"
+    Args = @(
+      "riskmap-core-main/scripts/vworld-data-proxy.mjs",
+      "--port=4173",
+      "--static-root=pages-dist"
+    )
   }
 )
 
@@ -77,8 +67,8 @@ foreach ($app in $apps) {
   $errorLog = Join-Path $runtimeDir "$($app.Name)-$($app.Port).err.log"
 
   $process = Start-Process `
-    -FilePath "npm.cmd" `
-    -ArgumentList @("run", $app.Script) `
+    -FilePath $app.Command `
+    -ArgumentList $app.Args `
     -WorkingDirectory $app.Cwd `
     -WindowStyle Hidden `
     -RedirectStandardOutput $combinedLog `
@@ -111,7 +101,7 @@ foreach ($record in $records) {
 $records | ConvertTo-Json -Depth 4 | Set-Content -Path $processFile -Encoding UTF8
 
 Write-Host ""
-Write-Host "Platform servers"
+Write-Host "Platform server"
 $records | Select-Object label, url, port, pid | Format-Table -AutoSize
 Write-Host "Check status: npm run platform:status"
 Write-Host "Stop all:     npm run platform:stop"
