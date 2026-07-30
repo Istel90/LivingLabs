@@ -19,7 +19,7 @@ type Screen = 'home' | 'dashboard' | 'risks' | 'context' | 'assignment' | 'respo
 
 const localPortalOrigin = import.meta.env.DEV
   ? 'http://127.0.0.1:5173'
-  : 'http://127.0.0.1:4173';
+  : '';
 
 const portalToolsUrl =
   import.meta.env.VITE_PORTAL_TOOLS_URL || `${localPortalOrigin}/tools#adaptation-support-tools`;

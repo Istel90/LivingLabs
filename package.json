@@ -6,6 +6,7 @@
   "scripts": {
     "build": "vite build",
     "build:all": "npm run build && npm --prefix \"Survey platform for collaboration\" run build && npm --prefix riskmap-core-main run build",
+    "build:unified": "node scripts/build-unified-platform.mjs",
     "dev": "vite",
     "dev:portal": "vite",
     "dev:survey": "npm --prefix \"Survey platform for collaboration\" run dev",
@@ -13,11 +14,11 @@
     "dev:internal-tools": "npm --prefix riskmap-core-main run dev",
     "preview:local": "vite preview --host 0.0.0.0 --port 4173 --strictPort",
     "platform:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-platform.ps1",
-    "platform:start:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-platform-dev.ps1",
+    "platform:start:dev": "npm run platform:refresh",
     "platform:dev": "npm run platform:start:dev",
     "platform:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/status-platform.ps1",
     "platform:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-platform.ps1",
-    "platform:refresh": "npm run build:all && npm run platform:stop && npm run platform:start",
+    "platform:refresh": "npm run build:unified && npm run platform:stop && npm run platform:start",
     "weather:build-lst-catalog": "node scripts/build-gyeonggi-lst-catalog.mjs",
     "install:all": "npm install && npm --prefix \"Survey platform for collaboration\" install && npm --prefix riskmap-core-main install"
   },

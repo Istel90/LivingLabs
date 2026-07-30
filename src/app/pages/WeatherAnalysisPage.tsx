@@ -84,7 +84,7 @@ type LstCatalog = {
 
 const LEAFLET_CSS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 const LEAFLET_JS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-const KMA_PROXY_URL = 'http://127.0.0.1:4176';
+const KMA_PROXY_URL = import.meta.env.VITE_KMA_PROXY_URL || '';
 const LST_RECORD_KEY = 'livinglabs.weatherAnalysis.lstVerification.v1';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;

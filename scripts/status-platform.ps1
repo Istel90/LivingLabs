@@ -19,10 +19,7 @@ if (Test-Path $processFile) {
 
 if (-not $apps.Count) {
   $apps = @(
-    @{ Label = "Portal"; Port = 4173; Url = "http://127.0.0.1:4173/" },
-    @{ Label = "Survey"; Port = 4174; Url = "http://127.0.0.1:4174/" },
-    @{ Label = "Internal Tools"; Port = 4175; Url = "http://127.0.0.1:4175/" },
-    @{ Label = "VWorld Data Proxy"; Port = 4176; Url = "http://127.0.0.1:4176/health" }
+    @{ Label = "Living Labs Platform"; Port = 4173; Url = "http://127.0.0.1:4173/" }
   )
 }
 

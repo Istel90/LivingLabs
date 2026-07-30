@@ -14,7 +14,8 @@ function portalUrl(path) {
     }
 
     const basePath = import.meta.env.BASE_URL || '/';
-    return new URL(`${basePath.replace(/\/$/, '')}${path}`, origin).toString();
+    const portalBasePath = basePath.replace(/\/internal-tools\/?$/, '').replace(/\/$/, '');
+    return new URL(`${portalBasePath}${path}`, origin).toString();
 }
 
 export const portalToolsUrl =

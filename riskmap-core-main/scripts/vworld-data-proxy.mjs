@@ -1,8 +1,8 @@
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { fileURLToPath } from 'node:url';
-import { join, resolve } from 'node:path';
+import { extname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as h5wasm from 'h5wasm/node';
 import proj4 from 'proj4';
@@ -33,6 +33,31 @@ const domain = env.VITE_VWORLD_DOMAIN || 'http://127.0.0.1:5175/';
 const allowInsecureTls = env.VWORLD_ALLOW_INSECURE_TLS === 'true' || process.env.VWORLD_ALLOW_INSECURE_TLS === 'true';
 const httpsAgent = allowInsecureTls ? new HttpsAgent({ rejectUnauthorized: false }) : undefined;
 const port = Number(process.env.VWORLD_PROXY_PORT || process.argv.find((arg) => arg.startsWith('--port='))?.split('=')[1] || 5176);
+const staticRootArgument = process.argv.find((arg) => arg.startsWith('--static-root='))?.slice('--static-root='.length);
+const staticRoot = staticRootArgument ? resolve(workspaceRoot, staticRootArgument) : '';
+
+const contentTypes = {
+  '.css': 'text/css; charset=utf-8',
+  '.csv': 'text/csv; charset=utf-8',
+  '.gif': 'image/gif',
+  '.html': 'text/html; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+  '.nc': 'application/x-netcdf',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.txt': 'text/plain; charset=utf-8',
+  '.wasm': 'application/wasm',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+};
 
 function send(response, status, body, contentType = 'application/json; charset=utf-8') {
   response.writeHead(status, {
@@ -206,6 +231,69 @@ function fetchKmaObservation(searchParams) {
     request.on('error', reject);
     request.end();
   });
+}
+
+function isFile(path) {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function resolveStaticFile(rootPath, relativePath) {
+  const safeRoot = resolve(rootPath);
+  const requestedPath = resolve(safeRoot, `.${relativePath}`);
+  if (requestedPath !== safeRoot && !requestedPath.startsWith(`${safeRoot}\\`) && !requestedPath.startsWith(`${safeRoot}/`)) {
+    return '';
+  }
+
+  if (isFile(requestedPath)) return requestedPath;
+  if (isFile(join(requestedPath, 'index.html'))) return join(requestedPath, 'index.html');
+  if (!extname(requestedPath) && isFile(`${requestedPath}.html`)) return `${requestedPath}.html`;
+  return '';
+}
+
+function serveStatic(request, response, url) {
+  if (!staticRoot || !['GET', 'HEAD'].includes(request.method || 'GET')) return false;
+
+  let pathname;
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    return false;
+  }
+
+  let appRoot = staticRoot;
+  let relativePath = pathname;
+  let fallback = join(staticRoot, 'index.html');
+
+  if (pathname === '/internal-tools' || pathname.startsWith('/internal-tools/')) {
+    appRoot = join(staticRoot, 'internal-tools');
+    relativePath = pathname.slice('/internal-tools'.length) || '/';
+    fallback = '';
+  } else if (pathname === '/survey' || pathname.startsWith('/survey/')) {
+    appRoot = join(staticRoot, 'survey');
+    relativePath = pathname.slice('/survey'.length) || '/';
+    fallback = join(appRoot, 'index.html');
+  } else if (pathname.startsWith('/analysis-data/') || pathname.startsWith('/indicator-icons/')) {
+    appRoot = join(staticRoot, 'internal-tools');
+    fallback = '';
+  }
+
+  const filePath = resolveStaticFile(appRoot, relativePath) || (fallback && isFile(fallback) ? fallback : '');
+  if (!filePath) return false;
+
+  response.writeHead(200, {
+    'Cache-Control': extname(filePath) === '.html' ? 'no-cache' : 'public, max-age=3600',
+    'Content-Type': contentTypes[extname(filePath).toLowerCase()] || 'application/octet-stream',
+  });
+  if (request.method === 'HEAD') {
+    response.end();
+  } else {
+    createReadStream(filePath).pipe(response);
+  }
+  return true;
 }
 
 function fetchKmaLstList(searchParams) {
@@ -610,12 +698,17 @@ const server = createServer(async (request, response) => {
   }
 
   const url = new URL(request.url || '/', `http://127.0.0.1:${port}`);
-  if (url.pathname === '/health') {
-    send(response, 200, JSON.stringify({ ok: true, service: 'vworld-data-proxy' }));
+  const routePath = url.pathname.startsWith('/api/') ? url.pathname.slice('/api'.length) : url.pathname;
+  if (routePath === '/health') {
+    send(response, 200, JSON.stringify({
+      ok: true,
+      service: staticRoot ? 'living-labs-platform' : 'vworld-data-proxy',
+      unified: Boolean(staticRoot),
+    }));
     return;
   }
 
-  if (url.pathname === '/dev-reset') {
+  if (routePath === '/dev-reset') {
     if (request.method === 'GET') {
       send(response, 200, JSON.stringify({ ok: true, ...readHandoffStore(devResetStatePath) }));
       return;
@@ -638,7 +731,7 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (url.pathname === '/priority-handoff') {
+  if (routePath === '/priority-handoff') {
     if (request.method === 'GET') {
       const regionCode = url.searchParams.get('regionCode') || '';
       const store = readHandoffStore();
@@ -679,21 +772,21 @@ const server = createServer(async (request, response) => {
     }
   }
 
-  if (url.pathname === '/responsible-handoff') {
+  if (routePath === '/responsible-handoff') {
     if (await handleStoredHandoffRoute(request, response, url, {
       storePath: responsibleHandoffStorePath,
       schemaVersion: 'lead-to-responsible-handoff/v1',
     })) return;
   }
 
-  if (url.pathname === '/responsible-review-response') {
+  if (routePath === '/responsible-review-response') {
     if (await handleStoredHandoffRoute(request, response, url, {
       storePath: responsibleReviewStorePath,
       schemaVersion: 'responsible-to-lead-review/v1',
     })) return;
   }
 
-  if (url.pathname === '/kma-network') {
+  if (routePath === '/kma-network') {
     try {
       const payload = await fetchKmaNetwork(url.searchParams.get('type') || 'asos', url.searchParams.get('radiusKm') || 35);
       send(response, 200, JSON.stringify(payload));
@@ -702,7 +795,7 @@ const server = createServer(async (request, response) => {
     }
     return;
   }
-  if (url.pathname === '/kma-observation') {
+  if (routePath === '/kma-observation') {
     try {
       const result = await fetchKmaObservation(url.searchParams);
       send(response, result.statusCode, result.body, 'text/plain; charset=utf-8');
@@ -714,7 +807,7 @@ const server = createServer(async (request, response) => {
     }
     return;
   }
-  if (url.pathname === '/kma-lst-list') {
+  if (routePath === '/kma-lst-list') {
     try {
       const result = await fetchKmaLstList(url.searchParams);
       send(response, result.statusCode, result.body);
@@ -726,7 +819,7 @@ const server = createServer(async (request, response) => {
     }
     return;
   }
-  if (url.pathname === '/kma-lst-files') {
+  if (routePath === '/kma-lst-files') {
     try {
       const result = await fetchKmaLstFileList(url.searchParams);
       send(response, result.statusCode, result.body, 'text/plain; charset=utf-8');
@@ -738,7 +831,7 @@ const server = createServer(async (request, response) => {
     }
     return;
   }
-  if (url.pathname === '/kma-lst-check') {
+  if (routePath === '/kma-lst-check') {
     try {
       const result = await checkRecentKmaLstData(url.searchParams);
       send(response, result.ok ? 200 : result.statusCode || 502, JSON.stringify(result));
@@ -750,7 +843,7 @@ const server = createServer(async (request, response) => {
     }
     return;
   }
-  if (url.pathname === '/kma-lst-data') {
+  if (routePath === '/kma-lst-data') {
     try {
       const result = await fetchKmaLstData(url.searchParams);
       send(response, result.statusCode, result.body, result.contentType);
@@ -762,7 +855,7 @@ const server = createServer(async (request, response) => {
     }
     return;
   }
-  if (url.pathname === '/kma-lst-grid') {
+  if (routePath === '/kma-lst-grid') {
     try {
       const result = await buildKmaLstGrid(url.searchParams);
       send(response, 200, JSON.stringify(result));
@@ -774,7 +867,8 @@ const server = createServer(async (request, response) => {
     }
     return;
   }
-  if (url.pathname !== '/vworld-data') {
+  if (routePath !== '/vworld-data') {
+    if (serveStatic(request, response, url)) return;
     send(response, 404, JSON.stringify({ error: 'Not found' }));
     return;
   }
@@ -797,7 +891,8 @@ const server = createServer(async (request, response) => {
 
 server.listen(port, '127.0.0.1', () => {
   try {
-    console.log(`VWorld data proxy listening on http://127.0.0.1:${port}/vworld-data`);
+    const label = staticRoot ? 'Living Labs platform' : 'VWorld data proxy';
+    console.log(`${label} listening on http://127.0.0.1:${port}/`);
   } catch {
     // Hidden Windows background processes may not have a writable console.
   }
