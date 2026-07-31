@@ -10,7 +10,7 @@ import { ApplicationsPage } from "./pages/tools/ApplicationsPage";
 import { AboutPage } from "./pages/AboutPage";
 import { LeadDepartmentPrototypePage } from "./pages/LeadDepartmentPrototypePage";
 import { InternalToolGatewayPage } from "./pages/InternalToolGatewayPage";
-import { WeatherAnalysisPage } from "./pages/WeatherAnalysisPage";
+import { ClimateScenarioLabPage } from "./pages/ClimateScenarioLabPage";
 
 export const router = createBrowserRouter([
   {
@@ -31,7 +31,11 @@ export const router = createBrowserRouter([
   },
   {
     path: "/weather-analysis",
-    Component: WeatherAnalysisPage,
+    Component: ClimateScenarioLabPage,
+  },
+  {
+    path: "/climate-scenario-lab",
+    Component: ClimateScenarioLabPage,
   },
   {
     path: "/tools/maps-data",

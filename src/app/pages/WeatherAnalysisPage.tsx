@@ -634,7 +634,7 @@ function WeatherMap({ stations, networkType, viewMode, lstGrid, lstLoading }: { 
   );
 }
 
-export function WeatherAnalysisPage() {
+export function WeatherAnalysisPage({ embedded = false }: { embedded?: boolean }) {
   const [activeType, setActiveType] = useState<NetworkType>('aws');
   const [viewMode, setViewMode] = useState<ViewMode>('heatmap');
   const [networks, setNetworks] = useState<Partial<Record<NetworkType, NetworkResponse>>>({});
@@ -736,7 +736,7 @@ export function WeatherAnalysisPage() {
   return (
     <div className="flex min-h-screen flex-col bg-slate-100">
       <main className="flex-1">
-        <div className="border-b border-slate-200 bg-white">
+        {!embedded && <div className="border-b border-slate-200 bg-white">
           <div className="container mx-auto flex flex-wrap items-center justify-between gap-4 px-4 py-5">
             <div className="flex items-center gap-4">
               <Link to="/tools" aria-label="지원도구로 돌아가기" className="grid size-9 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><ArrowLeft className="size-4" /></Link>
@@ -748,7 +748,7 @@ export function WeatherAnalysisPage() {
               <button type="button" onClick={() => void refresh()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"><RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />새로고침</button>
             </div>
           </div>
-        </div>
+        </div>}
 
         <div className="container mx-auto px-4 py-5">
           <div className="mb-4 space-y-3" aria-label="기상 데이터 확보 목록">

@@ -29,10 +29,10 @@ const sidebarItems = [
     icon: Wrench,
   },
   {
-    id: 'weather-analysis',
-    label: '기상데이터 분석',
-    description: '기상청·VWorld 데이터 분석 실험실',
-    internalUrl: '/weather-analysis',
+    id: 'climate-data-lab',
+    label: '기후·기상 데이터 실험실',
+    description: '지도 기반 관측·LST·IC4 미래전망',
+    internalUrl: '/climate-scenario-lab',
     icon: CloudSun,
   },
 ];
