@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "heatwave-adaptation-catalog/v1",
+  "meta": {
+    "title": "수원시 폭염 적응사업 공간최적화 입력 카탈로그",
+    "status": "prototype",
+    "budgetUnit": "백만원",
+    "note": "사업 단가와 후보지는 기능 검증을 위한 계획 가정값이며 향후 적응사업 설계 기능에서 사용자가 추가·수정할 수 있습니다."
+  },
+  "weights": { "cooling": 35, "equity": 25, "risk": 25, "access": 15 },
+  "projects": [
+    {"id":"shade","name":"그늘막 설치","unit":"개소","unitCost":20,"allocationShare":0.30,"effectLabel":"보행 체감온도 저감","color":"#d95f3b"},
+    {"id":"tree","name":"가로수·그늘숲","unit":"주","unitCost":3,"allocationShare":0.27,"effectLabel":"중장기 지표면·체감온도 저감","color":"#238b57"},
+    {"id":"coolroof","name":"쿨루프 지원","unit":"동","unitCost":12,"allocationShare":0.17,"effectLabel":"건물 표면온도 저감","color":"#3d78c5"},
+    {"id":"shelter","name":"무더위쉼터 개선","unit":"개소","unitCost":80,"allocationShare":0.10,"effectLabel":"취약계층 쉼터 접근성 개선","color":"#7b61a8"},
+    {"id":"umbrella","name":"양산 활성화","unit":"거점","unitCost":1,"allocationShare":0.06,"effectLabel":"개인 일사노출·체감온도 저감","color":"#d9a52e"},
+    {"id":"mist","name":"쿨링포그 설치","unit":"개소","unitCost":30,"allocationShare":0.10,"effectLabel":"국소 체감온도 저감","color":"#2f9ca6"}
+  ],
+  "candidateSites": [
+    {"id":"shade-1","projectId":"shade","location":"수원역 환승권역","lat":37.2661,"lng":127.0003,"priority":98},
+    {"id":"shade-2","projectId":"shade","location":"남문시장 보행권역","lat":37.2765,"lng":127.0168,"priority":92},
+    {"id":"shade-3","projectId":"shade","location":"영통역 생활권","lat":37.2518,"lng":127.0714,"priority":87},
+    {"id":"tree-1","projectId":"tree","location":"세류동 보행축","lat":37.2528,"lng":127.0122,"priority":96},
+    {"id":"tree-2","projectId":"tree","location":"인계동 생활가로","lat":37.2669,"lng":127.0296,"priority":93},
+    {"id":"tree-3","projectId":"tree","location":"권선동 통학축","lat":37.2497,"lng":127.0258,"priority":88},
+    {"id":"coolroof-1","projectId":"coolroof","location":"고등동 노후주거지","lat":37.2715,"lng":127.0057,"priority":95},
+    {"id":"coolroof-2","projectId":"coolroof","location":"지동 저층주거지","lat":37.2810,"lng":127.0235,"priority":91},
+    {"id":"coolroof-3","projectId":"coolroof","location":"매탄동 주거밀집지","lat":37.2633,"lng":127.0479,"priority":86},
+    {"id":"shelter-1","projectId":"shelter","location":"서둔동 쉼터 취약권역","lat":37.2738,"lng":126.9878,"priority":97},
+    {"id":"shelter-2","projectId":"shelter","location":"파장동 고령인구 밀집권역","lat":37.3070,"lng":127.0117,"priority":89},
+    {"id":"shelter-3","projectId":"shelter","location":"망포동 쉼터 공백권역","lat":37.2384,"lng":127.0559,"priority":84},
+    {"id":"umbrella-1","projectId":"umbrella","location":"화서역 보행거점","lat":37.2836,"lng":126.9896,"priority":90},
+    {"id":"umbrella-2","projectId":"umbrella","location":"광교중앙역 보행거점","lat":37.2885,"lng":127.0517,"priority":88},
+    {"id":"umbrella-3","projectId":"umbrella","location":"성균관대역 보행거점","lat":37.3002,"lng":126.9708,"priority":83},
+    {"id":"mist-1","projectId":"mist","location":"수원역 광장","lat":37.2656,"lng":126.9998,"priority":94},
+    {"id":"mist-2","projectId":"mist","location":"못골시장 보행권역","lat":37.2753,"lng":127.0199,"priority":89},
+    {"id":"mist-3","projectId":"mist","location":"광교호수공원 진입부","lat":37.2828,"lng":127.0613,"priority":82}
+  ],
+  "pathway": [
+    {"stage":1,"threshold":"< 15일/년","title":"기본 노출관리","activate":["양산 활성화","그늘막 설치"],"transition":"모니터링 유지"},
+    {"stage":2,"threshold":"≥ 15일/년","title":"우선권역 사업 확대","activate":["그늘막 설치","무더위쉼터 개선","쿨링포그 설치"],"transition":"양산 단독대책 종료"},
+    {"stage":3,"threshold":"≥ 25일/년","title":"생활권 구조대책 전환","activate":["가로수·그늘숲","쿨루프 지원"],"transition":"임시 그늘막 중심 신규투자 축소"},
+    {"stage":4,"threshold":"≥ 40일/년","title":"도시구조 전환","activate":["연속 그늘축","공공시설 쉼터거점","토지이용 개선"],"transition":"단일 개소사업만으로 목표 달성 불가"}
+  ]
+}

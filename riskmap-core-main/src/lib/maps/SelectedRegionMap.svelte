@@ -33,6 +33,8 @@
         mapResetKey = 0,
         showAnalysisLegend = false,
         focusedCandidate = null,
+        adaptationSites = [],
+        forceSelectedBoundary = false,
         locked = false
     } = $props();
 
@@ -58,6 +60,7 @@
     let analysisLayerGroup;
     let riskGridLayer;
     let parcelCandidateLayer;
+    let adaptationSiteLayer;
     let visibleAnalysisLayerIds = $state([]);
     let riskGridVisible = $state(true);
     let selectedGridLayer = $state(activeGridLayer);
@@ -167,6 +170,60 @@
             .filter(Boolean);
 
         analysisLayerGroup = L.layerGroup(layers).addTo(map);
+    }
+
+    function optimizedAdaptationSites() {
+        const requestedSites = Array.isArray(adaptationSites) ? adaptationSites : [];
+        if (!requestedSites.length || !riskGrid?.values?.length || !riskGrid?.transform) return requestedSites;
+
+        const columns = Number(riskGrid.columns);
+        const rows = Number(riskGrid.rows);
+        const originX = Number(riskGrid.transform.originX);
+        const originY = Number(riskGrid.transform.originY);
+        const cellWidth = Math.abs(Number(riskGrid.transform.pixelWidth) || 100);
+        const cellHeight = Math.abs(Number(riskGrid.transform.pixelHeight) || 100);
+        if (![columns, rows, originX, originY, cellWidth, cellHeight].every(Number.isFinite)) return requestedSites;
+
+        const boundaryFeatures = getBoundaryFeaturesForRegionCode(regionCode);
+        const rankedCells = riskGrid.values
+            .map((rawValue, index) => ({ index, value: Number(rawValue), row: Math.floor(index / columns), column: index % columns }))
+            .filter((cell) => Number.isFinite(cell.value))
+            .sort((a, b) => b.value - a.value);
+        const selectedCells = [];
+        const minimumCellDistance = Math.max(1, Math.min(8, Math.floor(Math.sqrt(rankedCells.length / Math.max(1, requestedSites.length)) * 0.45)));
+
+        for (const cell of rankedCells) {
+            const x = originX + (cell.column * cellWidth) + (cellWidth / 2);
+            const y = originY - (cell.row * cellHeight) - (cellHeight / 2);
+            const [lat, lng] = epsg5179ToLatLng(x, y);
+            if (boundaryFeatures.length && !pointInBoundary([lng, lat], boundaryFeatures)) continue;
+            if (selectedCells.some((chosen) => Math.hypot(chosen.row - cell.row, chosen.column - cell.column) < minimumCellDistance)) continue;
+            selectedCells.push({ ...cell, lat, lng });
+            if (selectedCells.length >= requestedSites.length) break;
+        }
+
+        return requestedSites.map((site, index) => {
+            const cell = selectedCells[index];
+            return cell ? { ...site, lat: cell.lat, lng: cell.lng, riskValue: cell.value } : site;
+        });
+    }
+
+    function renderAdaptationSiteLayer() {
+        if (!map || !window.L) return;
+        adaptationSiteLayer?.remove();
+        adaptationSiteLayer = null;
+        const sites = optimizedAdaptationSites();
+        if (!sites.length) return;
+        const markers = sites
+            .filter((site) => Number.isFinite(Number(site.lat)) && Number.isFinite(Number(site.lng)))
+            .map((site) => window.L.circleMarker([Number(site.lat), Number(site.lng)], {
+                radius: 8,
+                color: '#ffffff',
+                weight: 2,
+                fillColor: site.color || '#c85d3e',
+                fillOpacity: 0.98
+            }).bindTooltip(`<b>${site.projectName || '적응사업'}</b><br>${site.location || '자동 배치 후보'}<br>배정 ${Number(site.quantity || 0).toLocaleString()}${site.unit || ''}${Number.isFinite(site.riskValue) ? `<br>선택지표 위험도 ${site.riskValue.toFixed(2)}` : ''}`));
+        adaptationSiteLayer = window.L.layerGroup(markers).addTo(map);
     }
 
     function meridionalArc(lat, a, e2) {
@@ -1536,6 +1593,7 @@
             selectedBoundaryLayer = L.geoJSON(
                 { type: 'FeatureCollection', features },
                 {
+                    pane: 'selectedBoundaryPane',
                     interactive: false,
                     style: {
                         color: '#2563eb',
@@ -1628,6 +1686,11 @@
             map.createPane('parcelCandidatePane');
             map.getPane('parcelCandidatePane').style.zIndex = 560;
         }
+        if (!map.getPane('selectedBoundaryPane')) {
+            map.createPane('selectedBoundaryPane');
+            map.getPane('selectedBoundaryPane').style.zIndex = 610;
+            map.getPane('selectedBoundaryPane').style.pointerEvents = 'none';
+        }
 
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors',
@@ -1680,6 +1743,7 @@
             disposed = true;
             removeRiskGridLayer();
             parcelCandidateLayer?.remove();
+            adaptationSiteLayer?.remove();
             map?.remove();
         };
     });
@@ -1693,8 +1757,10 @@
     });
 
     $effect(() => {
+        if (forceSelectedBoundary && !selectedBoundaryVisible) selectedBoundaryVisible = true;
         selectedBoundaryVisible;
-        toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
+        toggleLayer(selectedBoundaryLayer, forceSelectedBoundary ? true : selectedBoundaryVisible);
+        selectedBoundaryLayer?.bringToFront?.();
     });
 
     $effect(() => {
@@ -1707,6 +1773,8 @@
         renderAnalysisLayers();
         renderRiskGridLayer();
         syncParcelCandidateLayerFromProps();
+        adaptationSites;
+        renderAdaptationSiteLayer();
     });
 
     $effect(() => {
@@ -1867,8 +1935,10 @@
         <label>
             <input
                 type="checkbox"
-                checked={selectedBoundaryVisible}
+                checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
+                disabled={forceSelectedBoundary}
                 onchange={(event) => {
+                    if (forceSelectedBoundary) return;
                     selectedBoundaryVisible = event.currentTarget.checked;
                     toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
                 }}
