@@ -93,6 +93,13 @@ jobs:
             cp pages-dist/index.html "pages-dist/$route/index.html"
           done
           cp pages-dist/index.html pages-dist/404.html
+          for route in \
+            planning-optimization-lab \
+            planning-optimization-workspace
+          do
+            mkdir -p "pages-dist/internal-tools/$route"
+            cp "pages-dist/internal-tools/$route.html" "pages-dist/internal-tools/$route/index.html"
+          done
           touch pages-dist/.nojekyll
 
       - name: Upload Pages artifact

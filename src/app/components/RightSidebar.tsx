@@ -1,5 +1,6 @@
 import { CloudSun, ExternalLink, FlaskConical, Wrench } from 'lucide-react';
 import { Link } from 'react-router';
+import { planningOptimizationLabUrl } from '../toolUrls';
 
 interface RightSidebarProps {
   selectedItem: string;
@@ -34,6 +35,13 @@ const sidebarItems = [
     description: '지도 기반 관측·LST·IC4 미래전망',
     internalUrl: '/climate-scenario-lab',
     icon: CloudSun,
+  },
+  {
+    id: 'planning-optimization-lab',
+    label: '계획·최적화 실험실',
+    description: '기후적응 사업 배치·예산 최적화',
+    externalUrl: planningOptimizationLabUrl,
+    icon: Wrench,
   },
 ];
 

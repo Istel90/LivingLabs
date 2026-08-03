@@ -27,3 +27,7 @@ export const adaptationPathwayToolUrl =
   `${internalToolsOrigin}/adaptation-pathway`;
 
 export const leadDepartmentToolUrl = `${import.meta.env.BASE_URL}lead-department-tool`;
+
+export const climateDataLabUrl = `${import.meta.env.BASE_URL}climate-scenario-lab`;
+
+export const planningOptimizationLabUrl = `${import.meta.env.BASE_URL}internal-tools/planning-optimization-workspace`;
