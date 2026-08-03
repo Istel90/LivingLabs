@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ClipboardList,
+  CloudSun,
   Database,
   ExternalLink,
   FileText,
@@ -20,8 +21,10 @@ import { Header } from '../components/Header';
 import { Footer } from '../components/Footer';
 import {
   adaptationPathwayToolUrl,
+  climateDataLabUrl,
   leadDepartmentToolUrl,
   priorityManagementAreaToolUrl,
+  planningOptimizationLabUrl,
   responsibleDepartmentToolUrl,
   surveyPlatformUrl,
 } from '../toolUrls';
@@ -66,6 +69,25 @@ const process = [
   ['02', '리스크 도출', '시민과 담당부서가 함께 우선 대응할 기후 리스크를 선정합니다.'],
   ['03', '사업 디자인', '지역에 필요한 적응사업의 위치, 유형과 목표 물량을 설계합니다.'],
   ['04', '효과 평가', '사업 이행량과 적응효과를 점검하고 다음 계획에 반영합니다.'],
+];
+
+const labs = [
+  {
+    eyebrow: 'CLIMATE DATA LAB',
+    title: '기후·기상 데이터 실험실',
+    description: '관측자료, 위성 LST, IC4 미래전망을 지도에서 비교하며 지역의 기후위험 변화를 탐색합니다.',
+    href: climateDataLabUrl,
+    icon: CloudSun,
+    accent: 'from-sky-600 to-cyan-500',
+  },
+  {
+    eyebrow: 'PLANNING LAB',
+    title: '계획·최적화 실험실',
+    description: '기후적응 사업 후보지와 예산 조건을 조정하고 공간 배치 및 우선순위 결과를 비교합니다.',
+    href: planningOptimizationLabUrl,
+    icon: BarChart3,
+    accent: 'from-amber-600 to-orange-500',
+  },
 ];
 
 export function HomePage() {
@@ -179,6 +201,41 @@ export function HomePage() {
                 </div>
               </a>
             ))}
+          </div>
+        </section>
+
+        <section className="border-y border-slate-200 bg-white">
+          <div className="container mx-auto px-4 py-16">
+            <div className="mb-8 max-w-3xl">
+              <p className="text-sm font-extrabold text-emerald-700">INTERACTIVE LABS</p>
+              <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">데이터 탐색에서 계획 최적화까지</h2>
+              <p className="mt-3 leading-7 text-slate-600">
+                기후 데이터를 직접 살펴보고, 분석 결과를 실제 적응사업 계획과 예산 배분으로 연결해 보세요.
+              </p>
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-2">
+              {labs.map((lab) => (
+                <a
+                  key={lab.title}
+                  href={lab.href}
+                  className="group grid overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm transition hover:-translate-y-1 hover:shadow-xl sm:grid-cols-[180px_1fr]"
+                >
+                  <div className={`grid min-h-44 place-items-center bg-gradient-to-br ${lab.accent} text-white`}>
+                    <lab.icon className="size-16 opacity-90" />
+                  </div>
+                  <div className="flex flex-col justify-center p-6">
+                    <p className="text-xs font-extrabold tracking-wider text-emerald-700">{lab.eyebrow}</p>
+                    <h3 className="mt-2 text-xl font-extrabold text-slate-900">{lab.title}</h3>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">{lab.description}</p>
+                    <span className="mt-5 inline-flex items-center gap-2 text-sm font-extrabold text-[#0b65a4]">
+                      실험실 열기
+                      <ArrowRight className="size-4 transition group-hover:translate-x-1" />
+                    </span>
+                  </div>
+                </a>
+              ))}
+            </div>
           </div>
         </section>
 
