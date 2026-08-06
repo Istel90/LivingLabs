@@ -6,6 +6,10 @@ build/
 .env.local
 *.log
 .runtime-logs/
+.runtime-secrets/
+.venv*/
+__pycache__/
+*.pyc
 pages-dist/
 riskmap-core-main.zip
 .tools/

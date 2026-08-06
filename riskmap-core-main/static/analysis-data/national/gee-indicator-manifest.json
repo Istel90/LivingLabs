@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "project": "livinglabprojects",
+  "driveFolder": "LivingLabs_GEE",
+  "crs": "EPSG:5179",
+  "scaleMeters": 100,
+  "landsatPeriod": {
+    "startYear": 2021,
+    "endYear": 2025,
+    "months": [
+      6,
+      7,
+      8,
+      9
+    ]
+  },
+  "indicators": [
+    {
+      "id": "lst_hot_observation_frequency_35c",
+      "file": "kor_lst_hot_observation_frequency_35c_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "3OFQAQSULGCSHSUT5GGMMOYU",
+      "sizeBytes": 3090657,
+      "md5": "35c7f540eeb16e9418d147ffb5630955",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100
+    },
+    {
+      "id": "lst_summer_p90",
+      "file": "kor_lst_summer_p90_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "NJ5A3CPHRPMV5WDLSHVACD24",
+      "sizeBytes": 15548037,
+      "md5": "bf5e7a016861150cd2768ae21ba106cc",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100
+    },
+    {
+      "id": "lst_annual_summer_p90",
+      "file": "kor_lst_annual_summer_p90_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "5IQOVXQCJTKQLWIYJ22HJE4G",
+      "sizeBytes": 53617016,
+      "md5": "190d24aac09ba2eaae35eb636fe3e294",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T04:40:27.664014+00:00"
+    },
+    {
+      "id": "lst_summer_p90_trend",
+      "file": "kor_lst_summer_p90_trend_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "SBF3LH2TPYEH63FQH7GSDA4A",
+      "sizeBytes": 54347122,
+      "md5": "7e7150f342d26c3bfc61ce37a320fb25",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T05:25:16.425476+00:00"
+    },
+    {
+      "id": "ndbi_summer_median",
+      "file": "kor_ndbi_summer_median_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "VXQHJG2DXN4JLCIKV5S4EMPS",
+      "sizeBytes": 59921580,
+      "md5": "c6e24262badf21ef94e4bbd474ac438a",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T05:43:31.650723+00:00"
+    },
+    {
+      "id": "ndmi_summer_dry",
+      "file": "kor_ndmi_summer_dry_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "2DYR2Y7BXW3BRLA6YCILROPO",
+      "sizeBytes": 59921728,
+      "md5": "979701b5a44df7245a0a5e1770ed89c2",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T06:11:09.938390+00:00"
+    },
+    {
+      "id": "ndvi_summer_cover_frequency",
+      "file": "kor_ndvi_summer_cover_frequency_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "DI3KGCNOTFUBKU2RRDHJIMHK",
+      "sizeBytes": 11148627,
+      "md5": "d321387a0fec169de83005443b81e44f",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T06:37:34.161570+00:00"
+    },
+    {
+      "id": "mndwi_summer_wet_frequency",
+      "file": "kor_mndwi_summer_wet_frequency_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "ECTFWG2DOR5IAMUY2KUFTIDK",
+      "sizeBytes": 5115867,
+      "md5": "3e2a0d81e7b6c9eec79a93814286c33a",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T06:58:58.087004+00:00"
+    },
+    {
+      "id": "built_surface_probability",
+      "file": "kor_built_surface_probability_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "N633OPYFVQRYI2ZECZEVTIHS",
+      "sizeBytes": 61252980,
+      "md5": "f1de330eba7194a18822f58cb16079d1",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T07:19:34.251798+00:00"
+    },
+    {
+      "id": "bare_surface_probability",
+      "file": "kor_bare_surface_probability_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "BFOTVXA5BCTRFNJBJOVMEWEX",
+      "sizeBytes": 58237014,
+      "md5": "5e095768fa49f383f876848d141b803f",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T07:39:08.866902+00:00"
+    },
+    {
+      "id": "tree_cover_probability",
+      "file": "kor_tree_cover_probability_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "7FM2QUKE7J2PCSZXR5JPT6HL",
+      "sizeBytes": 59330970,
+      "md5": "8cd2132d8e6f95ee225ded4b5a2c9e44",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T07:49:28.477371+00:00"
+    },
+    {
+      "id": "green_cover_probability",
+      "file": "kor_green_cover_probability_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "JO5I56V4TGDV536ZYG3PU46B",
+      "sizeBytes": 57381188,
+      "md5": "213c02b53bbae260871b86117b060634",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T08:13:11.573215+00:00"
+    },
+    {
+      "id": "water_wetland_probability",
+      "file": "kor_water_wetland_probability_2021_2025_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "QM2U6ZXA3XQ4XXMCBAWY3WDM",
+      "sizeBytes": 58982231,
+      "md5": "5d90c0abc46ae5aeb4caad5a4488d591",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T08:33:53.233543+00:00"
+    },
+    {
+      "id": "elevation",
+      "file": "kor_elevation_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "MGEWTYTN2KRAYF76XMTA3J5L",
+      "sizeBytes": 24914684,
+      "md5": "a1ee01a24222f592401a4857373d97a6",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-04T08:55:25.119465+00:00"
+    },
+    {
+      "id": "slope",
+      "file": "kor_slope_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "NA5WGMJ4QPEQ6D6TJDJIWX6A",
+      "sizeBytes": 14020127,
+      "md5": "7e65c58e93f660e0679a549b20338741",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-05T03:23:08.734971+00:00"
+    },
+    {
+      "id": "aspect",
+      "file": "kor_aspect_100m_epsg5179.tif",
+      "status": "COMPLETED",
+      "taskId": "AP4774LLBG22RVLRBNYYV54I",
+      "sizeBytes": 24750853,
+      "md5": "949316011d52f5aa81c08dbbf26093a5",
+      "crs": "EPSG:5179",
+      "scaleMeters": 100,
+      "completedAt": "2026-08-05T03:33:34.330003+00:00"
+    }
+  ],
+  "updatedAt": "2026-08-05T03:33:34.330003+00:00"
+}
