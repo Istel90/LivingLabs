@@ -235,6 +235,15 @@
 
     let indicators = config.indicators.map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
     let appliedIndicators = [];
+    let loadedPreviewIndicators = [];
+    let indicatorPreviewGrid = null;
+    $: previewAnalysisIndicators = indicators.map((item) => {
+        const loaded = loadedPreviewIndicators.find((previewItem) => previewItem.id === item.id);
+        return loaded
+            ? { ...loaded, enabled: item.enabled && isIndicatorAvailable(item), weight: item.weight, direction: item.direction }
+            : item;
+    });
+    $: if (indicatorPreviewGrid && !analysisDone && ['Risk', 'Hotspot'].includes(activeLayer)) activeLayer = 'H';
     $: candidateList = analysisResult?.parcelCandidates?.length
         ? analysisResult.parcelCandidates
         : [];
@@ -581,6 +590,11 @@
 
         if (!analysisResult?.gridResult) mapSource = config.mapSource;
 
+        if (!analysisResult?.gridResult) {
+            loadedPreviewIndicators = await loadIndicatorInputs(indicators.map((item) => ({ ...item })));
+            indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
+        }
+
         lastDevResetAt = await readDevelopmentResetSignal();
         devResetPollTimer = window.setInterval(async () => {
             const resetAt = await readDevelopmentResetSignal();
@@ -718,6 +732,28 @@
             : config.mapSource;
 
         return loaded;
+    }
+
+    function createIndicatorPreviewGrid(sourceIndicators) {
+        const reference = sourceIndicators.find((item) =>
+            Array.isArray(item.gridValues) &&
+            item.gridValues.length &&
+            item.gridMeta?.columns &&
+            item.gridMeta?.rows &&
+            item.gridMeta?.transform
+        );
+        if (!reference) return null;
+
+        return {
+            preview: true,
+            gridUnit: reference.gridMeta.gridUnit || gridUnit,
+            columns: Number(reference.gridMeta.columns),
+            rows: Number(reference.gridMeta.rows),
+            extent: reference.gridMeta.extent,
+            transform: reference.gridMeta.transform,
+            crs: reference.gridMeta.crs,
+            values: reference.gridValues
+        };
     }
 
     function isIndicatorAvailable(item) {
@@ -2042,8 +2078,8 @@
                                 regionName={region}
                                 height="760px"
                                 showCadastral={false}
-                                analysisIndicators={analysisDone ? appliedIndicators : indicators.filter((item) => item.enabled && isIndicatorAvailable(item))}
-                                riskGrid={analysisResult?.gridResult}
+                                analysisIndicators={analysisDone ? appliedIndicators : previewAnalysisIndicators}
+                                riskGrid={analysisResult?.gridResult || indicatorPreviewGrid}
                                 activeGridLayer={activeLayer}
                                 onGridLayerChange={setActiveGridLayer}
                                 showAnalysisLegend={true}
