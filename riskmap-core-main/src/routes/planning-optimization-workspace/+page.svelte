@@ -233,7 +233,7 @@
 <div class="tool-shell">
     <header class="topbar">
         <div class="brand"><div class="brand-mark">CR</div><div><strong>Climate Risk Lab</strong><span>기후위험 평가·의사결정 지원</span></div></div>
-        <div class="project-meta"><div><span>프로젝트</span><strong>{selectedRegion?.name} 공간·시간 계획</strong></div><a class="ghost-link" href={`${base}/priority-management-area/heatwave?regionCode=${regionCode}&regionName=${encodeURIComponent(`${selectedRegion?.sido} ${selectedRegion?.name}`)}`}>실천권역 분석으로 돌아가기</a><div class="avatar">실험</div></div>
+        <div class="project-meta"><div><span>프로젝트</span><strong>{selectedRegion?.name} 공간·시간 계획</strong></div><a class="ghost-link" href={`${base}/national-indicator-status`}>전국 지표 구축 현황</a><a class="ghost-link" href={`${base}/priority-management-area/heatwave?regionCode=${regionCode}&regionName=${encodeURIComponent(`${selectedRegion?.sido} ${selectedRegion?.name}`)}`}>실천권역 분석으로 돌아가기</a><div class="avatar">실험</div></div>
     </header>
 
     <div class="workspace">

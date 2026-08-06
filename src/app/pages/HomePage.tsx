@@ -25,6 +25,7 @@ import {
   leadDepartmentToolUrl,
   priorityManagementAreaToolUrl,
   planningOptimizationLabUrl,
+  nationalIndicatorStatusUrl,
   responsibleDepartmentToolUrl,
   surveyPlatformUrl,
 } from '../toolUrls';
@@ -87,6 +88,14 @@ const labs = [
     href: planningOptimizationLabUrl,
     icon: BarChart3,
     accent: 'from-amber-600 to-orange-500',
+  },
+  {
+    eyebrow: 'NATIONAL DATA BUILD',
+    title: '전국 100m 지표 구축 현황',
+    description: '2021~2025년 위성·지형 기반 전국 지표의 생성 완료 현황과 파일 검증 정보를 공유합니다.',
+    href: nationalIndicatorStatusUrl,
+    icon: Database,
+    accent: 'from-violet-700 to-indigo-500',
   },
 ];
 
