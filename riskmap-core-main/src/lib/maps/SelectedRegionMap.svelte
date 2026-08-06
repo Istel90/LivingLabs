@@ -1353,6 +1353,7 @@
 
     function gridValuesForLayer(grid, layer) {
         if (!grid) return [];
+        if (grid.preview && ['Risk', 'Hotspot'].includes(layer)) return [];
         if (['H', 'E', 'V'].includes(layer)) {
             const values = gridValuesFromVisibleIndicators(grid, layer);
             if (values) return values;
@@ -1833,7 +1834,11 @@
         <div class="analysis-overlay-stack">
             <div class="analysis-legend" aria-label="분석 범례">
                 <strong>분석 범례</strong>
-                <span class="legend-note">H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.</span>
+                <span class="legend-note">
+                    {riskGrid?.preview
+                        ? '분석 전 미리보기 · H·E·V 탭과 체크박스로 01 지표 데이터를 확인합니다.'
+                        : 'H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.'}
+                </span>
                 {#if riskGrid?.stats}
                     <label class="risk-surface-summary">
                         <input
@@ -1852,6 +1857,7 @@
                         <button
                             type="button"
                             class:active={selectedGridLayer === layer}
+                            disabled={riskGrid?.preview && ['Risk', 'Hotspot'].includes(layer)}
                             onclick={() => { selectedGridLayer = layer; onGridLayerChange(layer); renderRiskGridLayer(); }}
                         >
                             {layer}
