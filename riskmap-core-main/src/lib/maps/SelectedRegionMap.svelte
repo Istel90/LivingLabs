@@ -1833,7 +1833,7 @@
         <div class="analysis-overlay-stack">
             <div class="analysis-legend" aria-label="분석 범례">
                 <strong>분석 범례</strong>
-                <span class="legend-note">체크된 지표만 표시</span>
+                <span class="legend-note">H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.</span>
                 {#if riskGrid?.stats}
                     <label class="risk-surface-summary">
                         <input
@@ -1846,18 +1846,18 @@
                         <div class="risk-ramp" aria-hidden="true"></div>
                         <small>낮음 → 높음</small>
                     </label>
-                    <div class="analysis-grid-tabs" aria-label="분석 격자 레이어">
-                        {#each gridLayers as layer}
-                            <button
-                                type="button"
-                                class:active={selectedGridLayer === layer}
-                                onclick={() => { selectedGridLayer = layer; onGridLayerChange(layer); renderRiskGridLayer(); }}
-                            >
-                                {layer}
-                            </button>
-                        {/each}
-                    </div>
                 {/if}
+                <div class="analysis-grid-tabs" aria-label="분석 격자 레이어">
+                    {#each gridLayers as layer}
+                        <button
+                            type="button"
+                            class:active={selectedGridLayer === layer}
+                            onclick={() => { selectedGridLayer = layer; onGridLayerChange(layer); renderRiskGridLayer(); }}
+                        >
+                            {layer}
+                        </button>
+                    {/each}
+                </div>
                 {#each analysisGroups.filter((group) => groupsForGridLayer(selectedGridLayer).includes(group)) as group}
                     {@const items = analysisIndicators.filter((item) => item.enabled && item.group === group)}
                     {#if items.length}

@@ -2042,11 +2042,11 @@
                                 regionName={region}
                                 height="760px"
                                 showCadastral={false}
-                                analysisIndicators={appliedIndicators}
+                                analysisIndicators={analysisDone ? appliedIndicators : indicators.filter((item) => item.enabled && isIndicatorAvailable(item))}
                                 riskGrid={analysisResult?.gridResult}
                                 activeGridLayer={activeLayer}
                                 onGridLayerChange={setActiveGridLayer}
-                                showAnalysisLegend={analysisDone}
+                                showAnalysisLegend={true}
                                 parcelCandidates={analysisResult?.parcelCandidates || []}
                                 candidateContextKey={activeAlternativeId}
                                 {mapResetKey}
