@@ -214,6 +214,7 @@
     let supabaseBusy = false;
     let supabaseStatus = 'Supabase 저장 준비';
     let supabaseSaveDialog = null;
+    let indicatorDialog = null;
     let devResetPollTimer = null;
     let lastDevResetAt = '';
 
@@ -237,6 +238,12 @@
     let appliedIndicators = [];
     let loadedPreviewIndicators = [];
     let indicatorPreviewGrid = null;
+    const indicatorGroupMeta = {
+        '기후위험': { english: 'Hazard', dimension: 'H', direction: 'positive', color: '#ef6c4d', icon: '☀' },
+        '노출': { english: 'Exposure', dimension: 'E', direction: 'positive', color: '#3b82c4', icon: '◎' },
+        '민감도': { english: 'Sensitivity', dimension: 'V', direction: 'positive', color: '#a855a8', icon: '◇' },
+        '적응역량': { english: 'Adaptive Capacity', dimension: 'V', direction: 'negative', color: '#2f9b73', icon: '✚' }
+    };
     $: previewAnalysisIndicators = indicators.map((item) => {
         const loaded = loadedPreviewIndicators.find((previewItem) => previewItem.id === item.id);
         return loaded
@@ -1783,12 +1790,214 @@
         schedulePriorityDraftSave();
     }
 
+    function openIndicatorDialog() {
+        indicatorDialog = {
+            label: '시연용 생활인구 밀도',
+            description: `${region} 행정구역에 맞춘 사용자 정의 100m 격자`,
+            group: '노출',
+            weight: 1,
+            color: indicatorGroupMeta['노출'].color,
+            dataMode: 'geotiff',
+            pattern: 'urban-core',
+            fileName: '',
+            uploadedValues: null,
+            uploadedMeta: null,
+            processing: false,
+            error: ''
+        };
+    }
+
+    function closeIndicatorDialog() {
+        indicatorDialog = null;
+    }
+
+    function updateIndicatorDialogGroup(group) {
+        indicatorDialog = {
+            ...indicatorDialog,
+            group,
+            color: indicatorGroupMeta[group].color,
+            error: ''
+        };
+    }
+
+    function demoNoise(column, row) {
+        const value = Math.sin((column + 3) * 12.9898 + (row + 7) * 78.233) * 43758.5453;
+        return value - Math.floor(value);
+    }
+
+    function createDemoIndicatorValues(pattern) {
+        if (!indicatorPreviewGrid?.values?.length) return null;
+        const { columns, rows } = indicatorPreviewGrid;
+        return indicatorPreviewGrid.values.map((referenceValue, index) => {
+            if (!Number.isFinite(Number(referenceValue))) return null;
+            const column = index % columns;
+            const row = Math.floor(index / columns);
+            const x = columns > 1 ? column / (columns - 1) : 0.5;
+            const y = rows > 1 ? row / (rows - 1) : 0.5;
+            const noise = demoNoise(column, row);
+            let score;
+            if (pattern === 'southwest') {
+                score = Math.exp(-(((x - 0.3) ** 2) / 0.055 + ((y - 0.72) ** 2) / 0.08));
+            } else if (pattern === 'corridor') {
+                score = Math.exp(-((y - (0.78 - x * 0.52)) ** 2) / 0.018) * (0.55 + 0.45 * Math.sin(x * Math.PI));
+            } else if (pattern === 'distributed') {
+                score = 0.22 + (0.48 * noise) + (0.22 * Math.sin(x * Math.PI * 3) * Math.cos(y * Math.PI * 2));
+            } else {
+                score = Math.exp(-(((x - 0.52) ** 2) / 0.07 + ((y - 0.47) ** 2) / 0.06));
+            }
+            return clamp01((score * 0.84) + (noise * 0.16));
+        });
+    }
+
+    function normalizeUploadedValues(rawValues) {
+        if (!indicatorPreviewGrid?.values?.length) throw new Error('기준 100m 격자가 아직 준비되지 않았습니다.');
+        if (!Array.isArray(rawValues) || rawValues.length !== indicatorPreviewGrid.values.length) {
+            throw new Error(`JSON 값 개수는 현재 격자 ${indicatorPreviewGrid.values.length.toLocaleString()}개와 같아야 합니다.`);
+        }
+        const numericValues = rawValues.map((value) => value === null ? null : Number(value));
+        const finiteValues = numericValues.filter(Number.isFinite);
+        if (!finiteValues.length) throw new Error('JSON에서 사용할 수 있는 숫자를 찾지 못했습니다.');
+        const minimum = finiteValues.reduce((result, value) => Math.min(result, value), Infinity);
+        const maximum = finiteValues.reduce((result, value) => Math.max(result, value), -Infinity);
+        const needsNormalization = minimum < 0 || maximum > 1;
+        const range = maximum - minimum;
+        return numericValues.map((value, index) => {
+            if (!Number.isFinite(value) || !Number.isFinite(Number(indicatorPreviewGrid.values[index]))) return null;
+            return needsNormalization ? clamp01(range ? (value - minimum) / range : 0.5) : clamp01(value);
+        });
+    }
+
+    async function readIndicatorGridFile(event) {
+        const file = event.currentTarget.files?.[0];
+        if (!file) return;
+        try {
+            const payload = JSON.parse(await file.text());
+            const values = normalizeUploadedValues(Array.isArray(payload) ? payload : payload?.values);
+            indicatorDialog = { ...indicatorDialog, fileName: file.name, uploadedValues: values, error: '' };
+        } catch (error) {
+            indicatorDialog = { ...indicatorDialog, fileName: file.name, uploadedValues: null, error: error.message || 'JSON 파일을 읽지 못했습니다.' };
+        }
+    }
+
+    function normalizeProjection(projection) {
+        if (typeof projection === 'number') return `EPSG:${projection}`;
+        const text = String(projection || '').trim();
+        if (!text) return '';
+        if (/^\d+$/.test(text)) return `EPSG:${text}`;
+        return text.toUpperCase().startsWith('EPSG:') ? text.toUpperCase() : text;
+    }
+
+    async function readIndicatorGeoTiff(event) {
+        const file = event.currentTarget.files?.[0];
+        if (!file) return;
+        if (file.size > 250 * 1024 * 1024) {
+            indicatorDialog = { ...indicatorDialog, fileName: file.name, uploadedValues: null, uploadedMeta: null, error: '현재 브라우저 업로드는 250MB 이하 GeoTIFF를 지원합니다.' };
+            return;
+        }
+        indicatorDialog = { ...indicatorDialog, fileName: file.name, uploadedValues: null, uploadedMeta: null, processing: true, error: '' };
+        try {
+            const [{ default: parseGeoraster }, { default: proj4 }] = await Promise.all([
+                import('georaster'),
+                import('proj4')
+            ]);
+            proj4.defs('EPSG:5179', '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs');
+            proj4.defs('EPSG:5186', '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs');
+            const raster = await parseGeoraster(await file.arrayBuffer());
+            const sourceProjection = normalizeProjection(raster.projection);
+            if (!sourceProjection) throw new Error('GeoTIFF 좌표계 정보를 찾지 못했습니다. EPSG 코드가 포함된 파일을 사용해 주세요.');
+            const sourceBand = raster.values?.[0];
+            if (!sourceBand?.length || !raster.width || !raster.height) throw new Error('첫 번째 밴드의 래스터 값을 읽지 못했습니다.');
+            const targetProjection = indicatorPreviewGrid.crs || 'EPSG:5179';
+            const sameProjection = normalizeProjection(targetProjection) === sourceProjection;
+            const noDataValue = raster.noDataValue;
+            const rawValues = indicatorPreviewGrid.values.map((maskValue, index) => {
+                if (!Number.isFinite(Number(maskValue))) return null;
+                const column = index % indicatorPreviewGrid.columns;
+                const row = Math.floor(index / indicatorPreviewGrid.columns);
+                const targetX = indicatorPreviewGrid.transform.originX + ((column + 0.5) * indicatorPreviewGrid.transform.pixelWidth);
+                const targetY = indicatorPreviewGrid.transform.originY - ((row + 0.5) * indicatorPreviewGrid.transform.pixelHeight);
+                const [sourceX, sourceY] = sameProjection
+                    ? [targetX, targetY]
+                    : proj4(targetProjection, sourceProjection, [targetX, targetY]);
+                const sourceColumn = Math.floor((sourceX - raster.xmin) / raster.pixelWidth);
+                const sourceRow = Math.floor((raster.ymax - sourceY) / raster.pixelHeight);
+                if (sourceColumn < 0 || sourceRow < 0 || sourceColumn >= raster.width || sourceRow >= raster.height) return null;
+                const value = Number(sourceBand[sourceRow]?.[sourceColumn]);
+                if (!Number.isFinite(value) || (noDataValue !== undefined && noDataValue !== null && value === Number(noDataValue))) return null;
+                return value;
+            });
+            const validCount = rawValues.filter(Number.isFinite).length;
+            if (!validCount) throw new Error(`업로드 파일이 ${region} 기준 격자와 겹치지 않습니다. 좌표계와 위치를 확인해 주세요.`);
+            const values = normalizeUploadedValues(rawValues);
+            indicatorDialog = {
+                ...indicatorDialog,
+                fileName: file.name,
+                uploadedValues: values,
+                uploadedMeta: {
+                    sourceProjection,
+                    targetProjection,
+                    sourceSize: `${raster.width.toLocaleString()} × ${raster.height.toLocaleString()}`,
+                    validCount,
+                    bandCount: raster.numberOfRasters || raster.values.length
+                },
+                processing: false,
+                error: ''
+            };
+        } catch (error) {
+            indicatorDialog = { ...indicatorDialog, uploadedValues: null, uploadedMeta: null, processing: false, error: error.message || 'GeoTIFF 파일을 읽지 못했습니다.' };
+        }
+    }
+
+    function summarizeCustomValues(values) {
+        const finiteValues = values.filter(Number.isFinite);
+        if (!finiteValues.length) return 0.5;
+        return finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length;
+    }
+
     function addIndicator() {
-        indicators = [...indicators, {
-            id: Date.now(), icon: '◇', label: '새 사용자 지표', description: 'GeoTIFF 경로를 연결할 사용자 정의 지표',
-            dimension: 'V', group: '민감도', weight: 1.0, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'user-geotiff', value: 0.5, color: '#7f8c9b'
-        }];
-        markAnalysisDirty('사용자 지표가 추가되었습니다. 메타정보와 파일 연결 후 분석하세요.');
+        if (!indicatorDialog || !indicatorPreviewGrid) return;
+        const meta = indicatorGroupMeta[indicatorDialog.group];
+        const gridValues = ['json', 'geotiff'].includes(indicatorDialog.dataMode)
+            ? indicatorDialog.uploadedValues
+            : createDemoIndicatorValues(indicatorDialog.pattern);
+        if (!gridValues) {
+            indicatorDialog = { ...indicatorDialog, error: '먼저 사용할 격자 데이터를 준비해 주세요.' };
+            return;
+        }
+        const item = {
+            id: `custom-${Date.now()}`,
+            icon: meta.icon,
+            label: indicatorDialog.label.trim(),
+            description: indicatorDialog.description.trim() || `${region} 사용자 정의 지표`,
+            dimension: meta.dimension,
+            group: indicatorDialog.group,
+            weight: Math.max(0.1, Number(indicatorDialog.weight) || 1),
+            direction: meta.direction,
+            enabled: true,
+            dataStatus: 'available',
+            sourceType: indicatorDialog.dataMode === 'geotiff' ? 'user-geotiff-100m' : indicatorDialog.dataMode === 'json' ? 'user-json-100m' : 'demo-grid-100m',
+            sourceLabel: ['json', 'geotiff'].includes(indicatorDialog.dataMode) ? indicatorDialog.fileName : '임시 시연 데이터',
+            sourceMeta: indicatorDialog.uploadedMeta,
+            supportedGridUnits: ['100m'],
+            value: summarizeCustomValues(gridValues),
+            color: indicatorDialog.color,
+            gridValues,
+            gridMeta: {
+                gridUnit: indicatorPreviewGrid.gridUnit,
+                columns: indicatorPreviewGrid.columns,
+                rows: indicatorPreviewGrid.rows,
+                extent: indicatorPreviewGrid.extent,
+                transform: indicatorPreviewGrid.transform,
+                crs: indicatorPreviewGrid.crs
+            },
+            regionCode,
+            custom: true
+        };
+        indicators = [...indicators, item];
+        loadedPreviewIndicators = [...loadedPreviewIndicators, item];
+        activeLayer = meta.dimension;
+        markAnalysisDirty(`${item.label} 지표가 ${item.group}에 추가되었습니다. 지도에서 확인한 뒤 Risk 분석을 실행하세요.`);
+        closeIndicatorDialog();
     }
 
     function addAlternative() {
@@ -1988,7 +2197,7 @@
                 <div class="panel indicator-panel">
                     <div class="panel-head">
                         <div><span class="section-number">01</span><h2>분석 지표 구성</h2><p>사용 가능 지표만 Risk 분석에 반영됩니다.</p></div>
-                        <button class="add-button" onclick={addIndicator}>+ 지표 추가</button>
+                        <button class="add-button" onclick={openIndicatorDialog}>+ 지표 추가</button>
                     </div>
                     <div class="analysis-control-card">
                         <div class="analysis-control-copy">
@@ -2012,7 +2221,7 @@
                     </div>
                     {#each ['기후위험', '노출', '민감도', '적응역량'] as group}
                         <div class="indicator-group">
-                            <div class="group-label">{group}<span>{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span></div>
+                            <div class="group-label">{group} ({indicatorGroupMeta[group].english})<span>{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span></div>
                             {#each indicators.filter((item) => item.group === group) as item}
                                 <div class="indicator-item" class:disabled={!item.enabled} class:unavailable={!isIndicatorAvailable(item)}>
                                     <input
@@ -2188,6 +2397,115 @@
         </main>
     </div>
 </div>
+
+{#if indicatorDialog}
+    <div class="indicator-modal-backdrop" role="presentation" onclick={(event) => event.target === event.currentTarget && closeIndicatorDialog()}>
+        <section class="indicator-modal" role="dialog" aria-modal="true" aria-labelledby="indicator-modal-title">
+            <header>
+                <div>
+                    <span>CUSTOM INDICATOR</span>
+                    <h2 id="indicator-modal-title">새 분석 지표 추가</h2>
+                    <p>{region} · 행정구역 코드 {regionCode} · 현재 100m 기준 격자</p>
+                </div>
+                <button type="button" class="indicator-modal-close" aria-label="닫기" onclick={closeIndicatorDialog}>×</button>
+            </header>
+
+            <div class="indicator-modal-grid">
+                <label class="indicator-wide-field">지표 이름
+                    <input bind:value={indicatorDialog.label} placeholder="예: 취약계층 이용시설 밀도" />
+                </label>
+                <label class="indicator-wide-field">설명
+                    <textarea bind:value={indicatorDialog.description} rows="2" placeholder="지표의 의미와 출처를 적어주세요."></textarea>
+                </label>
+                <label>리스크 구성요소
+                    <select value={indicatorDialog.group} onchange={(event) => updateIndicatorDialogGroup(event.currentTarget.value)}>
+                        {#each Object.keys(indicatorGroupMeta) as group}
+                            <option value={group}>{group} ({indicatorGroupMeta[group].english})</option>
+                        {/each}
+                    </select>
+                </label>
+                <label>분석 가중치
+                    <input type="number" min="0.1" max="10" step="0.1" bind:value={indicatorDialog.weight} />
+                </label>
+                <label>범례 색상
+                    <input class="indicator-color-input" type="color" bind:value={indicatorDialog.color} />
+                </label>
+                <label>데이터 입력 방식
+                    <select bind:value={indicatorDialog.dataMode} onchange={() => indicatorDialog = { ...indicatorDialog, error: '' }}>
+                        <option value="geotiff">GeoTIFF 실제 레이어</option>
+                        <option value="demo">임시 데이터로 시연</option>
+                        <option value="json">100m 격자 JSON</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="indicator-data-box">
+                {#if indicatorDialog.dataMode === 'demo'}
+                    <div class="indicator-data-heading">
+                        <div><strong>임시 공간 패턴</strong><span>현재 수원시 경계 안에서 바로 시각화됩니다.</span></div>
+                        <span class="indicator-demo-badge">DEMO</span>
+                    </div>
+                    <div class="indicator-pattern-grid">
+                        {#each [
+                            ['urban-core', '도심 집중', '중심부가 높고 외곽으로 감소'],
+                            ['southwest', '남서부 집중', '남서 생활권에 높은 값 배치'],
+                            ['corridor', '축·회랑형', '대각선 교통축을 따라 분포'],
+                            ['distributed', '분산형', '여러 생활권에 불규칙 분포']
+                        ] as pattern}
+                            <button type="button" class:active={indicatorDialog.pattern === pattern[0]} onclick={() => indicatorDialog = { ...indicatorDialog, pattern: pattern[0] }}>
+                                <strong>{pattern[1]}</strong><span>{pattern[2]}</span>
+                            </button>
+                        {/each}
+                    </div>
+                {:else if indicatorDialog.dataMode === 'geotiff'}
+                    <div class="indicator-data-heading">
+                        <div><strong>GeoTIFF 실제 레이어 업로드</strong><span>첫 번째 밴드를 읽어 현재 {region} 100m 격자로 자동 변환합니다.</span></div>
+                        <span class:ready={Boolean(indicatorDialog.uploadedValues)} class="indicator-demo-badge">{indicatorDialog.processing ? 'READING' : indicatorDialog.uploadedValues ? 'READY' : 'TIF'}</span>
+                    </div>
+                    <label class="indicator-file-drop">
+                        <input type="file" accept=".tif,.tiff,image/tiff,image/geotiff" onchange={readIndicatorGeoTiff} disabled={indicatorDialog.processing} />
+                        <strong>{indicatorDialog.processing ? 'GeoTIFF를 읽고 격자를 변환하는 중…' : indicatorDialog.fileName || 'TIF / TIFF 파일 선택'}</strong>
+                        <span>EPSG:5179·5186·4326 및 좌표계 정의가 포함된 GeoTIFF · 최대 250MB</span>
+                    </label>
+                    {#if indicatorDialog.uploadedMeta}
+                        <div class="indicator-file-meta">
+                            <span>원본 {indicatorDialog.uploadedMeta.sourceProjection}</span>
+                            <span>{indicatorDialog.uploadedMeta.sourceSize}px</span>
+                            <span>밴드 {indicatorDialog.uploadedMeta.bandCount}개</span>
+                            <span>수원시 유효 셀 {indicatorDialog.uploadedMeta.validCount.toLocaleString()}개</span>
+                        </div>
+                    {/if}
+                {:else}
+                    <div class="indicator-data-heading">
+                        <div><strong>100m 격자 JSON 업로드</strong><span>숫자 배열 또는 <code>{`{ "values": [...] }`}</code> 형식을 지원합니다.</span></div>
+                        <span class:ready={Boolean(indicatorDialog.uploadedValues)} class="indicator-demo-badge">{indicatorDialog.uploadedValues ? 'READY' : 'JSON'}</span>
+                    </div>
+                    <label class="indicator-file-drop">
+                        <input type="file" accept=".json,application/json" onchange={readIndicatorGridFile} />
+                        <strong>{indicatorDialog.fileName || 'JSON 파일 선택'}</strong>
+                        <span>현재 기준 격자와 같은 {indicatorPreviewGrid?.values?.length?.toLocaleString() || 0}개 값이 필요합니다.</span>
+                    </label>
+                {/if}
+                {#if indicatorDialog.error}<p class="indicator-modal-error">{indicatorDialog.error}</p>{/if}
+            </div>
+
+            <div class="indicator-effect-summary">
+                <span style={`--indicator-color:${indicatorDialog.color}`}></span>
+                <div>
+                    <strong>{indicatorDialog.group} ({indicatorGroupMeta[indicatorDialog.group].english}) · {indicatorGroupMeta[indicatorDialog.group].dimension}</strong>
+                    <p>{indicatorDialog.group === '적응역량' ? '값이 높을수록 취약성(V)을 낮추는 방향으로 계산합니다.' : '값이 높을수록 해당 구성요소의 위험 점수를 높이는 방향으로 계산합니다.'}</p>
+                </div>
+            </div>
+
+            <footer>
+                <button type="button" class="indicator-cancel-button" onclick={closeIndicatorDialog}>취소</button>
+                <button type="button" class="indicator-submit-button" onclick={addIndicator} disabled={!indicatorPreviewGrid || !indicatorDialog.label.trim() || indicatorDialog.processing || (['json', 'geotiff'].includes(indicatorDialog.dataMode) && !indicatorDialog.uploadedValues)}>
+                    지도에 추가
+                </button>
+            </footer>
+        </section>
+    </div>
+{/if}
 
 {#if supabaseSaveDialog}
     <div class="save-progress-modal-backdrop" role="presentation">

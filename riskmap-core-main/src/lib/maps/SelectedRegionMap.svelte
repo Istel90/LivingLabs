@@ -39,6 +39,12 @@
     } = $props();
 
     const analysisGroups = ['기후위험', '노출', '민감도', '적응역량'];
+    const analysisGroupEnglish = {
+        '기후위험': 'Hazard',
+        '노출': 'Exposure',
+        '민감도': 'Sensitivity',
+        '적응역량': 'Adaptive Capacity'
+    };
     const gridLayers = ['H', 'E', 'V', 'Risk', 'Hotspot'];
     const gridLayerLabels = {
         Risk: '종합 Risk',
@@ -1868,7 +1874,7 @@
                     {@const items = analysisIndicators.filter((item) => item.enabled && item.group === group)}
                     {#if items.length}
                         <section>
-                            <h3>{group}</h3>
+                            <h3>{group} ({analysisGroupEnglish[group]})</h3>
                             <div class="legend-items">
                                 {#each items as item}
                                     <label>
