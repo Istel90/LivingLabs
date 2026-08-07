@@ -39,7 +39,7 @@
     } = $props();
 
     const analysisGroups = ['기후위험', '노출', '민감도', '적응역량'];
-    const gridLayers = ['Risk', 'H', 'E', 'V', 'Hotspot'];
+    const gridLayers = ['H', 'E', 'V', 'Risk', 'Hotspot'];
     const gridLayerLabels = {
         Risk: '종합 Risk',
         H: '기후위험 H',
