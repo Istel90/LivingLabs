@@ -1561,7 +1561,7 @@
     function handleParcelCandidates(candidates, message, sourceAlternativeId = activeAlternativeId) {
         const nextCandidates = enrichPracticeDistricts(Array.isArray(candidates) ? candidates : []);
         const nextMessage = message || (nextCandidates.length
-            ? `${nextCandidates.length}개 실천권역과 유형별 실천지구 도출`
+            ? `실천권역 내 ${nextCandidates.length}개 유형별 실천지구 도출`
             : '실천권역이 아직 없습니다.');
         const targetIndex = alternatives.findIndex((alternative) => alternative.id === sourceAlternativeId);
         if (targetIndex < 0) return;
@@ -2733,8 +2733,8 @@
 
             <section class="panel candidates wide-candidates">
                 <div class="panel-head">
-                    <div><span class="section-number">02</span><h2>실천권역과 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 필지 후보와 시연용 유형 분류가 표시됩니다.'}</p></div>
-                    <span class="count-badge">{candidateList.length}개 실천권역</span>
+                    <div><span class="section-number">02</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
+                    <span class="count-badge">실천지구 {candidateList.length}개</span>
                 </div>
                 {#if candidateList.length}
                     <div class="practice-type-note">
@@ -2754,7 +2754,7 @@
                                         {@const index = candidateList.findIndex((item) => candidateIdentity(item) === candidateIdentity(candidate))}
                                         <article class="candidate-card" class:active={selectedCandidate === index}>
                                             <button class="candidate-main" type="button" onclick={() => selectCandidate(candidate, index)}>
-                                                <span class="rank">{String(candidate.rank).padStart(2, '0')}</span>
+                                                <span class="rank">{String(candidate.districtNumber || candidate.rank).padStart(2, '0')}</span>
                                                 <span><strong>{candidate.name}</strong><small>{candidate.area}</small></span>
                                                 <b>{formatScore(candidate.risk)}</b>
                                             </button>
@@ -2766,9 +2766,9 @@
                         {/each}
                     </div>
                     {#if detailCandidateItem}
-                        <aside class="candidate-detail-panel" aria-label="실천권역 분류 상세보기" style={`--practice-color:${detailCandidateItem.practiceTypeColor}`}>
+                        <aside class="candidate-detail-panel" aria-label="실천지구 분류 상세보기" style={`--practice-color:${detailCandidateItem.practiceTypeColor}`}>
                             <div>
-                                <span>실천권역 분류 사유 · 시연용</span>
+                                <span>실천지구 분류 사유 · 시연용</span>
                                 <strong>{detailCandidateItem.name}</strong>
                                 <em>{detailCandidateItem.practiceTypeLabel}</em>
                                 <small>{detailCandidateItem.classificationReason}</small>
@@ -2787,7 +2787,7 @@
                 {:else}
                     <div class="empty-candidate-state">
                         <strong>실천권역 도출 대기</strong>
-                        <span>Risk 분석과 실천권역 도출이 끝나면 실제 핫스팟-필지 교차 후보와 3개 시연 유형이 여기에 표시됩니다.</span>
+                        <span>Risk 분석과 실천권역 도출이 끝나면 실천권역을 구성하는 실제 핫스팟-필지 교차 실천지구가 3개 시연 유형으로 표시됩니다.</span>
                     </div>
                 {/if}
             </section>
