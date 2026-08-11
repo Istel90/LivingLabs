@@ -6,6 +6,7 @@
         getRegionCenter,
         regionZoom
     } from '$lib/data/administrativeRegions.js';
+    import { enrichPracticeDistricts, PRACTICE_TYPE_META } from '$lib/data/practiceDistricts.js';
     import {
         createVWorldDataUrl,
         createVWorldWmsOptions,
@@ -865,7 +866,7 @@
             .slice(0, 10)
             .map((cluster, index) => ({
                 id: `parcel-candidate-${index + 1}`,
-                name: `필지 후보 ${String(index + 1).padStart(2, '0')}`,
+                name: `실천권역 ${String(index + 1).padStart(2, '0')}`,
                 area: `${cluster.members.length.toLocaleString()}필지 · hotspot ${cluster.hotspotCount.toLocaleString()}셀`,
                 risk: Number(cluster.riskMean.toFixed(2)),
                 h: Number((cluster.hMean || 0).toFixed(2)),
@@ -888,6 +889,7 @@
 
     function renderParcelCandidateLayer(candidates) {
         if (!map || !window.L) return;
+        candidates = enrichPracticeDistricts(candidates);
         parcelCandidateLayer?.remove();
         parcelCandidateLayer = null;
         const legendCandidates = candidates.filter(Boolean);
@@ -904,6 +906,10 @@
             center: candidate.center,
             features: candidate.features || [],
             pnuList: candidate.pnuList || [],
+            practiceType: candidate.practiceType,
+            practiceTypeLabel: candidate.practiceTypeLabel,
+            practiceTypeColor: candidate.practiceTypeColor,
+            classificationReason: candidate.classificationReason,
             isPriority: Number(candidate.rank) <= 3
         }));
         const features = drawableCandidates.flatMap((candidate) =>
@@ -914,7 +920,12 @@
                     candidateId: candidate.id || candidate.name || `parcel-candidate-${candidate.rank}`,
                     candidateName: candidate.name,
                     candidateRisk: candidate.risk,
-                    candidateRank: candidate.rank
+                    candidateRank: candidate.rank,
+                    practiceType: candidate.practiceType,
+                    practiceTypeLabel: candidate.practiceTypeLabel,
+                    practiceTypeColor: candidate.practiceTypeColor,
+                    practiceTypeFillColor: candidate.practiceTypeFillColor,
+                    classificationReason: candidate.classificationReason
                 }
             }))
         );
@@ -932,7 +943,12 @@
                     fillOpacity: parcelFeatureStyle(feature).fillOpacity
                 }),
                 onEachFeature: (feature, layer) => {
-                    layer.bindTooltip(`${feature.properties?.candidateName || '필지 후보'} · Risk ${feature.properties?.candidateRisk || '--'}`, { sticky: true });
+                    layer.bindTooltip(
+                        `<strong>${feature.properties?.candidateName || '실천권역'}</strong><br>` +
+                        `${feature.properties?.practiceTypeLabel || '유형 검토 중'} · Risk ${feature.properties?.candidateRisk || '--'}<br>` +
+                        `<span>${feature.properties?.classificationReason || ''}</span>`,
+                        { sticky: true }
+                    );
                     layer.on('click', () => {
                         const key = feature.properties?.candidateId || feature.properties?.candidateName || '';
                         const candidate = legendCandidates.find((item) =>
@@ -1056,10 +1072,10 @@
 
         if (parcelCandidateRunning) return;
         if (candidates.length) {
-            parcelCandidateStatus = `${candidates.length}개 필지 후보 표시 중`;
+            parcelCandidateStatus = `${candidates.length}개 유형별 실천권역 표시 중`;
         } else {
             parcelCandidateStatus = riskGrid?.values?.length
-                ? 'Risk 분석 완료. 필지 후보 도출을 실행하세요.'
+                ? 'Risk 분석 완료. 실천권역도출하기를 실행하세요.'
                 : 'Risk 분석 후 실행';
         }
     }
@@ -1069,10 +1085,12 @@
         const key = String(feature?.properties?.candidateId || feature?.properties?.candidateName || '');
         const selected = focusedParcelCandidateKey && key === focusedParcelCandidateKey;
         const priority = rank <= 3;
+        const type = feature?.properties?.practiceType || 'facility';
+        const meta = PRACTICE_TYPE_META[type] || PRACTICE_TYPE_META.facility;
         return {
-            color: selected ? '#7f1d1d' : priority ? '#dc2626' : '#f97316',
+            color: selected ? '#111827' : meta.color,
             weight: selected ? 4 : priority ? 2.4 : 1.4,
-            fillColor: selected ? '#ef4444' : priority ? '#ef4444' : '#f59e0b',
+            fillColor: meta.fillColor,
             fillOpacity: selected ? 0.48 : priority ? 0.32 : 0.22
         };
     }
@@ -1254,7 +1272,7 @@
 
             await yieldToBrowser();
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
-            const candidates = clusterParcelRecords(parcelRecords);
+            const candidates = enrichPracticeDistricts(clusterParcelRecords(parcelRecords));
             renderParcelCandidateLayer(candidates);
             const slimCandidates = candidates.map(({ features, ...candidate }) => ({
                 ...candidate,
@@ -1272,8 +1290,8 @@
                 featureTotal: features?.length || 0
             }));
             const message = candidates.length
-                ? `${candidates.length}개 필지 후보 클러스터 도출 · ${parcelRecords.length.toLocaleString()}필지 교차`
-                : '교차된 필지가 있으나 후보 클러스터 기준을 충족하지 못했습니다.';
+                ? `${candidates.length}개 실천권역 도출 · ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류`
+                : '교차된 필지가 있으나 실천권역 기준을 충족하지 못했습니다.';
             parcelCandidateStatus = message;
             onParcelCandidatesChange(slimCandidates, message, runCandidateContextKey);
         } catch (error) {
@@ -1292,7 +1310,7 @@
                             ? 'VWorld 필지 API 응답 시간이 초과되었습니다. 범위를 줄이거나 잠시 후 다시 실행하세요.'
                         : error?.message?.startsWith('VWorld ')
                             ? error.message
-                            : '필지 후보 도출 실패 · VWorld API 응답을 확인하세요.';
+                            : '실천권역 도출 실패 · VWorld API 응답을 확인하세요.';
             parcelCandidateStatus = message;
             onParcelCandidatesChange([], message, runCandidateContextKey);
         } finally {
@@ -1304,13 +1322,17 @@
         return Math.min(1, Math.max(0, value));
     }
 
+    function isGridValueCollection(values) {
+        return Array.isArray(values) || ArrayBuffer.isView(values);
+    }
+
     function visibleGridIndicatorsForLayer(layer) {
         if (!['H', 'E', 'V'].includes(layer)) return [];
         return analysisIndicators.filter((item) =>
             item.enabled &&
             item.dimension === layer &&
             visibleAnalysisLayerIds.includes(String(item.id)) &&
-            Array.isArray(item.gridValues)
+            isGridValueCollection(item.gridValues)
         );
     }
 
@@ -1329,6 +1351,9 @@
 
         const items = visibleGridIndicatorsForLayer(layer);
         if (!items.length) return hasVisibleIndicatorsForLayer(layer) ? null : [];
+        if (items.length === 1 && !(layer === 'V' && items[0].direction === 'negative')) {
+            return items[0].gridValues;
+        }
 
         const values = new Array(cellCount).fill(null);
 
@@ -1422,26 +1447,31 @@
 
         const boundaryFeatures = getBoundaryFeaturesForRegionCode(regionCode);
         const drawableCells = [];
+        const addDrawableCell = (index) => {
+            const row = Math.floor(index / columns);
+            const column = index % columns;
+            if (row < 0 || row >= rows || column < 0 || column >= columns) return;
+            const centerX = originX + (column * cellWidth) + (cellWidth / 2);
+            const centerY = originY - (row * cellHeight) - (cellHeight / 2);
+            const [centerLat, centerLng] = epsg5179ToLatLng(centerX, centerY);
+            if (!pointInBoundary([centerLng, centerLat], boundaryFeatures)) return;
 
-        for (let row = 0; row < rows; row += 1) {
-            for (let column = 0; column < columns; column += 1) {
-                const index = (row * columns) + column;
-                const centerX = originX + (column * cellWidth) + (cellWidth / 2);
-                const centerY = originY - (row * cellHeight) - (cellHeight / 2);
-                const [centerLat, centerLng] = epsg5179ToLatLng(centerX, centerY);
-                if (!pointInBoundary([centerLng, centerLat], boundaryFeatures)) continue;
+            const left = originX + (column * cellWidth);
+            const right = left + cellWidth;
+            const top = originY - (row * cellHeight);
+            const bottom = top - cellHeight;
 
-                const left = originX + (column * cellWidth);
-                const right = left + cellWidth;
-                const top = originY - (row * cellHeight);
-                const bottom = top - cellHeight;
+            drawableCells.push({
+                index,
+                northwest: epsg5179ToLatLng(left, top),
+                southeast: epsg5179ToLatLng(right, bottom)
+            });
+        };
 
-                drawableCells.push({
-                    index,
-                    northwest: epsg5179ToLatLng(left, top),
-                    southeast: epsg5179ToLatLng(right, bottom)
-                });
-            }
+        if (Array.isArray(grid.validIndices) && grid.validIndices.length) {
+            grid.validIndices.forEach(addDrawableCell);
+        } else {
+            for (let index = 0; index < rows * columns; index += 1) addDrawableCell(index);
         }
 
         const RiskCanvasLayer = L.Layer.extend({
@@ -1902,24 +1932,25 @@
                 {/if}
             </div>
             {#if riskGrid?.stats}
-                <div class="parcel-candidate-panel" aria-label="필지 후보 도출 패널">
+                <div class="parcel-candidate-panel" aria-label="실천권역 도출 패널">
                     <div class="parcel-candidate-tools">
                         <button
                             type="button"
                             disabled={parcelCandidateRunning || !hasVWorldApiKey()}
                             onclick={deriveParcelCandidates}
                         >
-                            {parcelCandidateRunning ? '필지 분석 중...' : '필지 후보 도출'}
+                            {parcelCandidateRunning ? '실천권역 분석 중...' : '실천권역도출하기'}
                         </button>
                         <span>{parcelCandidateStatus}</span>
                     </div>
                     {#if parcelCandidateLegend.length}
-                        <section class="parcel-candidate-legend" aria-label="필지 후보 범례">
-                            <h3>후보지 범례</h3>
+                        <section class="parcel-candidate-legend" aria-label="유형별 실천권역 범례">
+                            <h3>유형별 실천권역</h3>
                             <div class="candidate-legend-items">
                                 {#each parcelCandidateLegend as candidate}
                                     <button
                                         type="button"
+                                        style={`--practice-color:${candidate.practiceTypeColor || '#f97316'}`}
                                         class:priority={candidate.isPriority}
                                         class:active={focusedParcelCandidateKey === parcelCandidateKey(candidate)}
                                         onpointerdown={(event) => {
@@ -1931,7 +1962,7 @@
                                     >
                                         <i aria-hidden="true"></i>
                                         <b>{candidate.name}</b>
-                                        <small>Risk {candidate.riskLabel} · {candidate.parcelLabel}필지 · {candidate.totalAreaLabel}</small>
+                                        <small>{candidate.practiceTypeLabel} · Risk {candidate.riskLabel} · {candidate.parcelLabel}필지 · {candidate.totalAreaLabel}</small>
                                     </button>
                                 {/each}
                             </div>
@@ -2274,14 +2305,14 @@
         width: .66rem;
         height: .66rem;
         border-radius: 999px;
-        background: #f97316;
-        box-shadow: 0 0 0 3px rgb(249 115 22 / 14%);
+        background: var(--practice-color, #f97316);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--practice-color, #f97316) 18%, transparent);
     }
 
     .candidate-legend-items button.priority i,
     .candidate-legend-items button.active i {
-        background: #dc2626;
-        box-shadow: 0 0 0 3px rgb(220 38 38 / 14%);
+        background: var(--practice-color, #dc2626);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--practice-color, #dc2626) 20%, transparent);
     }
 
     .candidate-legend-items b {

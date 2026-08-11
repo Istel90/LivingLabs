@@ -37,9 +37,9 @@ const sidebarItems = [
     icon: CloudSun,
   },
   {
-    id: 'planning-optimization-lab',
-    label: '계획·최적화 실험실',
-    description: '기후적응 사업 배치·예산 최적화',
+    id: 'climate-hazard-lab',
+    label: '전국 기후위험 실험실',
+    description: '행정구역별 H01~H10 100m 지표 확인',
     externalUrl: planningOptimizationLabUrl,
     icon: Wrench,
   },

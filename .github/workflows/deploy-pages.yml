@@ -94,6 +94,8 @@ jobs:
           done
           cp pages-dist/index.html pages-dist/404.html
           for route in \
+            climate-hazard-demo \
+            climate-hazard-lab \
             planning-optimization-lab \
             planning-optimization-workspace \
             national-indicator-status
