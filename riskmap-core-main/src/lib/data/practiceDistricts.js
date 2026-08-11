@@ -3,18 +3,21 @@ export const PRACTICE_TYPE_ORDER = ['citizen', 'facility', 'planning'];
 export const PRACTICE_TYPE_META = {
     citizen: {
         label: '시민실천',
+        districtLabel: '시민실천지구',
         shortDescription: '생활권 참여·운영 중심',
         color: '#0f8b6d',
         fillColor: '#34d399'
     },
     facility: {
         label: '시설지원사업',
+        districtLabel: '시설지원실천지구',
         shortDescription: '시설 설치·개선 투자 중심',
         color: '#c2410c',
         fillColor: '#fb923c'
     },
     planning: {
         label: '계획행정수단',
+        districtLabel: '계획실천지구',
         shortDescription: '계획·기준·지구 관리 중심',
         color: '#4f46e5',
         fillColor: '#818cf8'
@@ -27,7 +30,7 @@ function numeric(value, fallback = 0) {
 }
 
 function candidateKey(candidate, index) {
-    return String(candidate?.id || candidate?.name || `practice-area-${index + 1}`);
+    return String(candidate?.id || candidate?.parcelCandidateName || candidate?.name || `practice-area-${index + 1}`);
 }
 
 function formatArea(value) {
@@ -110,15 +113,20 @@ export function enrichPracticeDistricts(sourceCandidates = []) {
             .forEach((item) => typeByKey.set(item.key, 'facility'));
     }
 
+    const districtSequenceByType = new Map(PRACTICE_TYPE_ORDER.map((type) => [type, 0]));
+
     return indexed.map(({ candidate, index, key }) => {
         const practiceType = typeByKey.get(key) || 'facility';
         const meta = PRACTICE_TYPE_META[practiceType];
         const rank = numeric(candidate.rank, index + 1);
+        const districtNumber = (districtSequenceByType.get(practiceType) || 0) + 1;
+        districtSequenceByType.set(practiceType, districtNumber);
         const originalName = candidate.parcelCandidateName || candidate.name || `필지 후보 ${String(rank).padStart(2, '0')}`;
         return {
             ...candidate,
-            name: `실천권역 ${String(rank).padStart(2, '0')}`,
+            name: `${meta.districtLabel} ${String(districtNumber).padStart(2, '0')}`,
             parcelCandidateName: originalName,
+            districtNumber,
             practiceType,
             practiceTypeLabel: meta.label,
             practiceTypeDescription: meta.shortDescription,

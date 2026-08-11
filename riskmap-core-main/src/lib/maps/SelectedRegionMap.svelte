@@ -866,7 +866,7 @@
             .slice(0, 10)
             .map((cluster, index) => ({
                 id: `parcel-candidate-${index + 1}`,
-                name: `실천권역 ${String(index + 1).padStart(2, '0')}`,
+                name: `필지 후보 ${String(index + 1).padStart(2, '0')}`,
                 area: `${cluster.members.length.toLocaleString()}필지 · hotspot ${cluster.hotspotCount.toLocaleString()}셀`,
                 risk: Number(cluster.riskMean.toFixed(2)),
                 h: Number((cluster.hMean || 0).toFixed(2)),
@@ -1072,7 +1072,7 @@
 
         if (parcelCandidateRunning) return;
         if (candidates.length) {
-            parcelCandidateStatus = `${candidates.length}개 유형별 실천권역 표시 중`;
+            parcelCandidateStatus = `실천권역 내 ${candidates.length}개 유형별 실천지구 표시 중`;
         } else {
             parcelCandidateStatus = riskGrid?.values?.length
                 ? 'Risk 분석 완료. 실천권역도출하기를 실행하세요.'
@@ -1290,8 +1290,8 @@
                 featureTotal: features?.length || 0
             }));
             const message = candidates.length
-                ? `${candidates.length}개 실천권역 도출 · ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류`
-                : '교차된 필지가 있으나 실천권역 기준을 충족하지 못했습니다.';
+                ? `실천권역 내 ${candidates.length}개 실천지구 도출 · ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류`
+                : '교차된 필지가 있으나 실천지구 기준을 충족하지 못했습니다.';
             parcelCandidateStatus = message;
             onParcelCandidatesChange(slimCandidates, message, runCandidateContextKey);
         } catch (error) {
@@ -1944,8 +1944,8 @@
                         <span>{parcelCandidateStatus}</span>
                     </div>
                     {#if parcelCandidateLegend.length}
-                        <section class="parcel-candidate-legend" aria-label="유형별 실천권역 범례">
-                            <h3>유형별 실천권역</h3>
+                        <section class="parcel-candidate-legend" aria-label="실천권역 내 유형별 실천지구 범례">
+                            <h3>실천권역 내 유형별 실천지구</h3>
                             <div class="candidate-legend-items">
                                 {#each parcelCandidateLegend as candidate}
                                     <button
