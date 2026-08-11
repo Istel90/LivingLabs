@@ -113,10 +113,33 @@ function createParentCityRegions(directRegions) {
         .filter((region) => region.childCodes.length > 1);
 }
 
+function createPilotMetroRegions(directRegions) {
+    return ['28'].map((sidoCode) => {
+        const childRegions = directRegions.filter((region) => region.sidoCode === sidoCode);
+        const childCodes = childRegions.map((region) => region.code).sort();
+        const features = childCodes.map((code) => boundaryFeaturesByCode[code]).filter(Boolean);
+        const bounds = boundsForFeatures(features);
+        const sido = SIDO_NAMES_BY_CODE[sidoCode];
+
+        return {
+            type: 'metro',
+            sido,
+            sidoCode,
+            code: `${sidoCode}000`,
+            sigungu: sido,
+            fullName: sido,
+            childCodes,
+            center: centerForBounds(bounds),
+            bounds
+        };
+    }).filter((region) => region.childCodes.length > 0);
+}
+
 const directRegions = createDirectRegions();
 const parentCityRegions = createParentCityRegions(directRegions);
+const pilotMetroRegions = createPilotMetroRegions(directRegions);
 
-export const regionOptions = [...directRegions, ...parentCityRegions].sort((a, b) => {
+export const regionOptions = [...directRegions, ...parentCityRegions, ...pilotMetroRegions].sort((a, b) => {
     if (a.sidoCode !== b.sidoCode) return Number(a.sidoCode) - Number(b.sidoCode);
     if (a.fullName !== b.fullName) return a.fullName.localeCompare(b.fullName, 'ko');
     return a.code.localeCompare(b.code);
@@ -157,6 +180,7 @@ export function getSigunguLabel(region) {
 
 export function regionZoom(region) {
     if (!region) return 10;
+    if (region.type === 'metro') return 8;
     if (region.type === 'city') return 11;
     if (region.sigungu.endsWith('구')) return 13;
     if (region.sigungu.endsWith('시') || region.sigungu.endsWith('군')) return 11;

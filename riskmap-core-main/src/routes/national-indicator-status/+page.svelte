@@ -64,7 +64,7 @@
                 <p>계획·최적화 실험실 확장을 위해 생성한 위성·토지피복·지형 지표의 공개 검토용 현황입니다.</p>
             </div>
             <nav>
-                <a href={`${base}/planning-optimization-workspace`}>계획·최적화 실험실</a>
+                <a href={`${base}/climate-hazard-lab`}>전국 기후위험 실험실</a>
                 <a href={`${base}/`}>지원도구로 돌아가기</a>
             </nav>
         </div>
