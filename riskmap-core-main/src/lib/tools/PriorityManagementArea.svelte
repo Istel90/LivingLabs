@@ -1,6 +1,7 @@
 <script>
     import { onDestroy, onMount } from 'svelte';
     import { base } from '$app/paths';
+    import proj4 from 'proj4';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
     import {
@@ -10,6 +11,7 @@
     } from '$lib/data/practiceDistricts.js';
     import {
         getRegionByCode,
+        getRegionBounds,
         getRegionOptionsBySido,
         getSigunguLabel,
         sidos
@@ -23,6 +25,11 @@
 
     export let hazard = 'heatwave';
     export let nationalLab = false;
+
+    proj4.defs(
+        'EPSG:5179',
+        '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs +type=crs'
+    );
 
     const steps = ['프로젝트 설정', '입력자료', '가중치 설정', '분석 실행', '결과 지도', '의사결정 지원'];
     const gridOptions = ['100m', '50m', '10m', '5m'];
@@ -804,6 +811,90 @@
         schedulePriorityDraftSave();
     }
 
+    function publicDemoSeed(item) {
+        return `${regionCode}:${item.indicatorCode || item.id}`
+            .split('')
+            .reduce((sum, character) => sum + character.charCodeAt(0), 0);
+    }
+
+    function publicDemoValue(index, columns, rows, seed) {
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        const x = columns > 1 ? column / (columns - 1) : 0.5;
+        const y = rows > 1 ? row / (rows - 1) : 0.5;
+        const wave = (Math.sin((x * 8.4) + (seed * 0.07)) + Math.cos((y * 7.1) - (seed * 0.05))) * 0.09;
+        const ridge = Math.max(0, 1 - Math.hypot(x - 0.64, y - 0.42) * 2.1) * 0.22;
+        const texture = (((index * 1103515245 + seed * 12345) >>> 8) % 101) / 1000;
+        return clamp01(0.34 + wave + ridge + texture);
+    }
+
+    function createPublicDemoFallbackGrid(item, referenceItem = null) {
+        let columns = Number(referenceItem?.gridMeta?.columns);
+        let rows = Number(referenceItem?.gridMeta?.rows);
+        let extent = referenceItem?.gridMeta?.extent;
+        let transform = referenceItem?.gridMeta?.transform;
+
+        if (!(columns > 0 && rows > 0 && transform)) {
+            const bounds = getRegionBounds(regionCode);
+            if (!bounds) return null;
+            const [xmin, ymin] = proj4('EPSG:4326', 'EPSG:5179', [bounds.west, bounds.south]);
+            const [xmax, ymax] = proj4('EPSG:4326', 'EPSG:5179', [bounds.east, bounds.north]);
+            const originX = Math.floor(Math.min(xmin, xmax) / 100) * 100;
+            const originY = Math.ceil(Math.max(ymin, ymax) / 100) * 100;
+            columns = Math.max(1, Math.ceil((Math.max(xmin, xmax) - originX) / 100));
+            rows = Math.max(1, Math.ceil((originY - Math.min(ymin, ymax)) / 100));
+            transform = { originX, originY, pixelWidth: 100, pixelHeight: 100 };
+            extent = {
+                xmin: originX,
+                ymin: originY - (rows * 100),
+                xmax: originX + (columns * 100),
+                ymax: originY
+            };
+        }
+
+        const cellCount = columns * rows;
+        if (!Number.isFinite(cellCount) || cellCount <= 0 || cellCount > 450000) return null;
+        const seed = publicDemoSeed(item);
+        const values = new Float32Array(cellCount);
+        let sum = 0;
+        for (let index = 0; index < cellCount; index += 1) {
+            const value = publicDemoValue(index, columns, rows, seed);
+            values[index] = value;
+            sum += value;
+        }
+        const mean = sum / cellCount;
+
+        return {
+            ...item,
+            enabled: item.enabled,
+            dataStatus: 'available',
+            sourceType: 'PUBLIC-DEMO-FALLBACK',
+            demoFallback: true,
+            loadedValue: mean,
+            gridValues: values,
+            gridValidIndices: null,
+            gridMeta: {
+                gridUnit: '100m',
+                rows,
+                columns,
+                extent,
+                transform,
+                crs: 'EPSG:5179'
+            },
+            gridSummary: {
+                gridUnit: '100m',
+                rows,
+                columns,
+                validCells: cellCount,
+                rawMean: Number(mean.toFixed(4)),
+                rawUnit: '정규화 점수',
+                normalizedMean: mean,
+                sourceResolution: '시연용 대체 패턴'
+            },
+            loadError: `${item.label} 원자료 서버에 연결하지 못해 공개 시연용 대체 패턴을 사용했습니다.`
+        };
+    }
+
     async function loadIndicatorInputs(sourceIndicators) {
         const loaded = await Promise.all(sourceIndicators.map(async (item) => {
             if (!usableIndicator(item) || !item.dataPath) return item;
@@ -842,6 +933,13 @@
                     }
                 };
             } catch (error) {
+                if (nationalLab && item.indicatorCode) {
+                    return {
+                        ...item,
+                        publicFallbackPending: true,
+                        loadError: `${item.label} 원자료 서버에 연결하지 못했습니다.`
+                    };
+                }
                 return {
                     ...item,
                     enabled: false,
@@ -851,12 +949,33 @@
             }
         }));
 
-        const loadedGrid = loaded.find((item) => item.gridSummary);
+        const referenceItem = loaded.find((item) =>
+            !item.publicFallbackPending &&
+            isGridValueCollection(item.gridValues) &&
+            item.gridMeta?.columns &&
+            item.gridMeta?.rows
+        );
+        const resolved = loaded.map((item) => {
+            if (!item.publicFallbackPending) return item;
+            const fallback = createPublicDemoFallbackGrid(item, referenceItem);
+            if (fallback) return fallback;
+            return {
+                ...item,
+                enabled: false,
+                dataStatus: 'missing',
+                loadError: `${item.label} 입력자료와 시연용 대체 격자를 준비하지 못했습니다.`
+            };
+        });
+
+        const loadedGrid = resolved.find((item) => item.gridSummary);
+        const usesDemoFallback = resolved.some((item) => item.demoFallback && item.enabled);
         mapSource = loadedGrid
-            ? `${config.rasterReadyPrefix} · ${loadedGrid.gridSummary.columns}×${loadedGrid.gridSummary.rows} · 평균 ${loadedGrid.gridSummary.rawMean}${loadedGrid.gridSummary.rawUnit}`
+            ? usesDemoFallback
+                ? `공개 시연용 100m 대체 패턴 · 실제 Hazard 원자료 서버 연결 전 · ${loadedGrid.gridSummary.columns}×${loadedGrid.gridSummary.rows}`
+                : `${config.rasterReadyPrefix} · ${loadedGrid.gridSummary.columns}×${loadedGrid.gridSummary.rows} · 평균 ${loadedGrid.gridSummary.rawMean}${loadedGrid.gridSummary.rawUnit}`
             : config.mapSource;
 
-        return loaded;
+        return resolved;
     }
 
     function createIndicatorPreviewGrid(sourceIndicators) {
@@ -1393,9 +1512,13 @@
         setTimeout(() => {
             const validCells = result.gridResult?.stats?.validCells;
             const riskModeLabel = result.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk';
-            const nextAnalysisMessage = Number.isFinite(validCells)
+            const usesDemoFallback = result.indicators.some((item) => item.demoFallback);
+            const completedMessage = Number.isFinite(validCells)
                 ? `${runGridUnit} 기준 격자 ${validCells.toLocaleString()}셀 · ${result.indicators.length}개 지표로 ${riskModeLabel} 분석 완료`
                 : `${runGridUnit} 기준 격자 · ${result.indicators.length}개 지표로 ${riskModeLabel} 분석 완료`;
+            const nextAnalysisMessage = usesDemoFallback
+                ? `${completedMessage} · 공개 시연용 대체 패턴 포함(실제 Hazard 원자료 아님)`
+                : completedMessage;
 
             alternatives = alternatives.map((alternative, index) => index === analysisAlternativeIndex
                 ? {
@@ -2137,10 +2260,7 @@
         }
         indicatorDialog = { ...indicatorDialog, fileName: file.name, uploadedValues: null, uploadedMeta: null, processing: true, error: '' };
         try {
-            const [{ default: parseGeoraster }, { default: proj4 }] = await Promise.all([
-                import('georaster'),
-                import('proj4')
-            ]);
+            const { default: parseGeoraster } = await import('georaster');
             proj4.defs('EPSG:5179', '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs');
             proj4.defs('EPSG:5186', '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs');
             const raster = await parseGeoraster(await file.arrayBuffer());
