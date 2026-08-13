@@ -8,6 +8,7 @@
     } from '$lib/data/administrativeRegions.js';
     import { enrichPracticeDistricts, PRACTICE_TYPE_META } from '$lib/data/practiceDistricts.js';
     import {
+        canUseVWorldData,
         createVWorldDataUrl,
         createVWorldWmsOptions,
         hasVWorldApiKey,
@@ -634,7 +635,10 @@
     }
 
     function hotspotRequestBoxes(points) {
-        const tileSize = 0.006;
+        // Keep each VWorld query small enough to stay below the 1,000 feature
+        // response cap in dense urban blocks. Large boxes regularly return
+        // thousands of parcels and silently lose the parcels after page one.
+        const tileSize = 0.0024;
         const boxes = new Map();
 
         points.forEach((hotspot) => {
@@ -661,12 +665,12 @@
 
         return [...boxes.values()]
             .sort((left, right) => (right.maxRisk - left.maxRisk) || (right.count - left.count))
-            .slice(0, 12)
+            .slice(0, 20)
             .map((box) => ({
-                minLng: box.minLng - 0.0012,
-                minLat: box.minLat - 0.0012,
-                maxLng: box.maxLng + 0.0012,
-                maxLat: box.maxLat + 0.0012,
+                minLng: box.minLng - 0.00035,
+                minLat: box.minLat - 0.00035,
+                maxLng: box.maxLng + 0.00035,
+                maxLat: box.maxLat + 0.00035,
                 count: box.count
             }));
     }
@@ -687,59 +691,157 @@
         return new Promise((resolve) => window.setTimeout(resolve, 0));
     }
 
-    async function fetchJsonWithTimeout(url, timeoutMs = 9000) {
-        const controller = new AbortController();
-        const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-
-        try {
-            const response = await fetch(url, { signal: controller.signal });
-            if (!response.ok) throw new Error(`VWorld ${response.status}`);
-            return await response.json();
-        } catch (error) {
-            if (error?.name === 'AbortError') throw new Error('request-timeout');
-            throw error;
-        } finally {
-            window.clearTimeout(timer);
-        }
+    function wait(milliseconds) {
+        return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
     }
 
-    async function fetchVWorldCadastralFeatures(boxes, { timeoutMs = 45000 } = {}) {
-        const featuresById = new Map();
-        const pageSize = 650;
-        const maxPages = 1;
-        const maxFeatures = 5000;
-        const deadline = Date.now() + timeoutMs;
+    function isTransientVWorldStatus(status) {
+        return [408, 425, 429, 500, 502, 503, 504].includes(Number(status));
+    }
 
-        for (const box of boxes) {
-            if (featuresById.size >= maxFeatures) break;
-            if (Date.now() > deadline) throw new Error('request-timeout');
-            for (let page = 1; page <= maxPages; page += 1) {
-                if (Date.now() > deadline) throw new Error('request-timeout');
-                const geomFilter = `BOX(${box.minLng},${box.minLat},${box.maxLng},${box.maxLat})`;
-                const url = createVWorldDataUrl(VWORLD_DATASETS.cadastral, {
-                    geomFilter,
-                    size: pageSize,
-                    page
+    async function fetchJsonWithRetry(url, { timeoutMs = 12000, retries = 1 } = {}) {
+        let lastError;
+
+        for (let attempt = 0; attempt <= retries; attempt += 1) {
+            const controller = new AbortController();
+            const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+            try {
+                const response = await fetch(url, {
+                    signal: controller.signal,
+                    headers: { Accept: 'application/json' }
                 });
-                const payload = await fetchJsonWithTimeout(url);
-                if (payload?.response?.status === 'ERROR') {
-                    const code = payload.response.error?.code || 'API_ERROR';
-                    const text = payload.response.error?.text || 'VWorld 데이터 API 오류';
-                    throw new Error(`VWorld ${code}: ${text}`);
+                const text = await response.text();
+
+                if (!response.ok) {
+                    const error = new Error(`VWorld ${response.status}`);
+                    error.status = response.status;
+                    throw error;
                 }
-                const features = extractVWorldFeatures(payload);
-                features.forEach((feature) => {
-                    const id = featureId(feature);
-                    if (id) featuresById.set(id, feature);
-                });
 
-                await yieldToBrowser();
-                if (featuresById.size >= maxFeatures) break;
-                if (features.length < pageSize) break;
+                try {
+                    return JSON.parse(text);
+                } catch {
+                    throw new Error('VWorld invalid-json');
+                }
+            } catch (error) {
+                lastError = error?.name === 'AbortError' ? new Error('request-timeout') : error;
+                const retryable = error?.name === 'AbortError' ||
+                    error instanceof TypeError ||
+                    isTransientVWorldStatus(error?.status);
+                if (!retryable || attempt >= retries) throw lastError;
+                await wait(450 * (attempt + 1));
+            } finally {
+                window.clearTimeout(timer);
             }
         }
 
-        return [...featuresById.values()];
+        throw lastError || new Error('VWorld request-failed');
+    }
+
+    async function fetchVWorldCadastralFeatures(
+        boxes,
+        { timeoutMs = 75000, concurrency = 1, onProgress = () => {} } = {}
+    ) {
+        const featuresById = new Map();
+        // VWorld intermittently returns 502 for large cadastral payloads even when
+        // the same extent succeeds in smaller pages. Keep each payload modest and
+        // page through the tile instead of silently losing the tail of the result.
+        const pageSize = 400;
+        const maxPagesPerBox = 3;
+        const maxFeatures = 8000;
+        const deadline = Date.now() + timeoutMs;
+        const queue = [...boxes];
+        const failures = [];
+        let completed = 0;
+        let nextRequestAt = 0;
+
+        async function throttleVWorldRequest() {
+            const delay = nextRequestAt - Date.now();
+            if (delay > 0) await wait(delay);
+        }
+
+        async function fetchBox(box) {
+            if (Date.now() > deadline) throw new Error('request-timeout');
+            const geomFilter = `BOX(${box.minLng},${box.minLat},${box.maxLng},${box.maxLat})`;
+            const features = [];
+            let total = 0;
+
+            for (let page = 1; page <= maxPagesPerBox; page += 1) {
+                if (Date.now() > deadline) throw new Error('request-timeout');
+                try {
+                    const url = createVWorldDataUrl(VWORLD_DATASETS.cadastral, {
+                        geomFilter,
+                        size: pageSize,
+                        page
+                    });
+                    const remainingTime = Math.max(3000, Math.min(12000, deadline - Date.now()));
+                    await throttleVWorldRequest();
+                    let payload;
+                    try {
+                        payload = await fetchJsonWithRetry(url, { timeoutMs: remainingTime });
+                    } finally {
+                        // VWorld becomes unreliable under back-to-back cadastral
+                        // requests. Leave breathing room before the next page/tile.
+                        nextRequestAt = Date.now() + 900;
+                    }
+                    if (payload?.response?.status === 'ERROR') {
+                        const code = payload.response.error?.code || 'API_ERROR';
+                        const text = payload.response.error?.text || 'VWorld 데이터 API 오류';
+                        const error = new Error(`VWorld ${code}: ${text}`);
+                        error.vworldCode = code;
+                        throw error;
+                    }
+
+                    const pageFeatures = extractVWorldFeatures(payload);
+                    features.push(...pageFeatures);
+                    total = Number(payload?.response?.record?.total) || pageFeatures.length;
+                    if (pageFeatures.length < pageSize || features.length >= total || Date.now() > deadline - 3000) break;
+                } catch (error) {
+                    if (page === 1 || !features.length) throw error;
+                    return { features, truncated: true };
+                }
+            }
+
+            return { features, truncated: total > features.length };
+        }
+
+        async function worker() {
+            while (queue.length && featuresById.size < maxFeatures) {
+                const box = queue.shift();
+                try {
+                    const result = await fetchBox(box);
+                    const features = result.features;
+                    features.forEach((feature) => {
+                        const id = featureId(feature);
+                        if (id) featuresById.set(id, feature);
+                    });
+                    if (result.truncated) failures.push(new Error('VWorld response-truncated'));
+                } catch (error) {
+                    failures.push(error);
+                } finally {
+                    completed += 1;
+                    onProgress({ completed, total: boxes.length, failed: failures.length, features: featuresById.size });
+                    await yieldToBrowser();
+                }
+            }
+        }
+
+        await Promise.all(
+            Array.from({ length: Math.min(concurrency, Math.max(1, boxes.length)) }, () => worker())
+        );
+
+        if (!featuresById.size && failures.length) {
+            const timeoutFailure = failures.find((error) => error?.message === 'request-timeout');
+            throw timeoutFailure || failures[0];
+        }
+
+        return {
+            features: [...featuresById.values()],
+            failureCount: failures.length,
+            completedCount: completed,
+            requestedCount: boxes.length
+        };
     }
 
     function parcelLabel(feature) {
@@ -998,7 +1100,7 @@
             (candidate.pnuList || []).length &&
             candidate.bounds
         );
-        if (!missingGeometry.length || !hasVWorldApiKey()) return;
+        if (!missingGeometry.length || !canUseVWorldData()) return;
 
         const requestBoxes = missingGeometry.map(candidateRequestBox).filter(Boolean);
         if (!requestBoxes.length) return;
@@ -1008,7 +1110,13 @@
         parcelCandidateStatus = `저장된 필지 도형 복원 중 · ${missingGeometry.length}개 후보`;
 
         try {
-            const fetchedFeatures = await fetchVWorldCadastralFeatures(requestBoxes, { timeoutMs: 45000 });
+            const fetchResult = await fetchVWorldCadastralFeatures(requestBoxes, {
+                timeoutMs: 60000,
+                onProgress: ({ completed, total, failed }) => {
+                    parcelCandidateStatus = `저장된 필지 도형 복원 중 · ${completed}/${total} 구역${failed ? ` · ${failed}개 재조회 실패` : ''}`;
+                }
+            });
+            const fetchedFeatures = fetchResult.features;
             if (parcelCandidateRunId !== runId || parcelCandidateLayerScope(parcelCandidates) !== scope) return;
 
             const featureById = new Map(fetchedFeatures.map((feature) => [String(featureId(feature)), feature]));
@@ -1244,8 +1352,8 @@
             parcelCandidateStatus = 'Risk 분석 결과가 먼저 필요합니다.';
             return;
         }
-        if (!hasVWorldApiKey()) {
-            parcelCandidateStatus = 'VWorld API 키가 없어 필지 geometry를 가져올 수 없습니다.';
+        if (!canUseVWorldData()) {
+            parcelCandidateStatus = 'VWorld 필지 API 연결 주소가 설정되지 않았습니다.';
             return;
         }
 
@@ -1260,7 +1368,12 @@
 
             const requestBoxes = hotspotRequestBoxes(hotspots);
             parcelCandidateStatus = `연속지적도 API 요청 중 · ${requestBoxes.length}개 구역`;
-            const cadastralFeatures = await fetchVWorldCadastralFeatures(requestBoxes);
+            const fetchResult = await fetchVWorldCadastralFeatures(requestBoxes, {
+                onProgress: ({ completed, total, failed, features }) => {
+                    parcelCandidateStatus = `연속지적도 API 조회 · ${completed}/${total} 구역 · ${features.toLocaleString()}필지${failed ? ` · ${failed}개 구역 재조회 실패` : ''}`;
+                }
+            });
+            const cadastralFeatures = fetchResult.features;
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             if (!cadastralFeatures.length) throw new Error('parcel-empty');
 
@@ -1289,17 +1402,17 @@
                 featureLimit: features?.length || 0,
                 featureTotal: features?.length || 0
             }));
+            const partialLabel = fetchResult.failureCount
+                ? ` · ${fetchResult.failureCount}개 구역은 응답 누락으로 부분 분석`
+                : '';
             const message = candidates.length
-                ? `실천권역 내 ${candidates.length}개 실천지구 도출 · ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류`
+                ? `실천권역 내 ${candidates.length}개 실천지구 도출 · ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류${partialLabel}`
                 : '교차된 필지가 있으나 실천지구 기준을 충족하지 못했습니다.';
             parcelCandidateStatus = message;
             onParcelCandidatesChange(slimCandidates, message, runCandidateContextKey);
         } catch (error) {
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             console.error(error);
-            parcelCandidateLayer?.remove();
-            parcelCandidateLayer = null;
-            parcelCandidateLegend = [];
             const message = error?.message === 'parcel-empty'
                 ? '연속지적도 API에서 필지 geometry를 받지 못했습니다.'
                 : error?.message === 'intersection-empty'
@@ -1312,7 +1425,12 @@
                             ? error.message
                             : '실천권역 도출 실패 · VWorld API 응답을 확인하세요.';
             parcelCandidateStatus = message;
-            onParcelCandidatesChange([], message, runCandidateContextKey);
+            // A transient API failure must not erase a previously completed
+            // analysis. Keep the last valid candidates visible and only report
+            // the failed refresh in the status area.
+            if (!(parcelCandidates || []).length) {
+                onParcelCandidatesChange([], message, runCandidateContextKey);
+            }
         } finally {
             if (parcelCandidateRunId === runId) parcelCandidateRunning = false;
         }
@@ -1936,7 +2054,7 @@
                     <div class="parcel-candidate-tools">
                         <button
                             type="button"
-                            disabled={parcelCandidateRunning || !hasVWorldApiKey()}
+                            disabled={parcelCandidateRunning || !canUseVWorldData()}
                             onclick={deriveParcelCandidates}
                         >
                             {parcelCandidateRunning ? '실천권역 분석 중...' : '실천권역도출하기'}
