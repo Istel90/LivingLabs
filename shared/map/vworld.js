@@ -24,6 +24,10 @@ export function hasVWorldApiKey() {
   return Boolean(getVWorldApiKey());
 }
 
+export function canUseVWorldData() {
+  return Boolean(getVWorldProxyUrl() || getVWorldApiKey());
+}
+
 export function getVWorldDomain() {
   return import.meta.env.VITE_VWORLD_DOMAIN || VWORLD_DEFAULT_DOMAIN;
 }
@@ -47,7 +51,8 @@ export function createVWorldWmsOptions(layer, options = {}) {
 
 export function createVWorldDataUrl(data, params = {}) {
   const proxyUrl = getVWorldProxyUrl();
-  const url = new URL(proxyUrl || VWORLD_DATA_URL);
+  const baseUrl = globalThis.location?.origin || 'http://127.0.0.1';
+  const url = new URL(proxyUrl || VWORLD_DATA_URL, baseUrl);
   const query = {
     service: 'data',
     version: '2.0',
