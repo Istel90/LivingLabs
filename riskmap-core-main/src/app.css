@@ -2,7 +2,7 @@
 
 :root { font-family: Inter, Pretendard, "Noto Sans KR", Arial, sans-serif; color: #172727; background: #f3f5f1; font-synthesis: none; }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 1180px; }
+body { margin: 0; min-width: 360px; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 .app-shell { min-height: 100vh; background: #f3f5f1; }
@@ -337,8 +337,8 @@ button { cursor: pointer; }
 .lab-analysis-runner > button:hover { background: #ea580c; }
 .lab-analysis-runner > button:disabled { opacity: .68; cursor: wait; }
 .analysis-control-card {
-    display: grid;
-    grid-template-columns: minmax(150px, .9fr) minmax(130px, .7fr) minmax(220px, 1.2fr) auto;
+    display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     align-items: end;
     border-bottom: 1px solid #e4e9e4;
@@ -346,7 +346,7 @@ button { cursor: pointer; }
     padding: 13px;
 }
 .analysis-control-copy {
-    grid-column: 1 / -1;
+    flex: 1 1 100%;
     width: 100%;
     min-width: 280px;
     white-space: normal !important;
@@ -387,6 +387,7 @@ button { cursor: pointer; }
     overflow-wrap: break-word !important;
 }
 .analysis-control-card label {
+    flex: 1 1 140px;
     min-width: 0;
     color: #71837c;
     font-size: 8px;
@@ -405,6 +406,7 @@ button { cursor: pointer; }
     font-weight: 900;
 }
 .control-stats {
+    flex: 1 1 200px;
     min-width: 0;
     display: flex;
     flex-wrap: wrap;
@@ -420,6 +422,7 @@ button { cursor: pointer; }
     white-space: nowrap;
 }
 .analysis-control-card > .primary {
+    flex: 0 0 auto;
     min-width: 118px;
     white-space: nowrap;
 }
@@ -1052,7 +1055,6 @@ button { cursor: pointer; }
 
 @media(max-width:1400px){
     .workflow-guide { display: none; }
-    .analysis-control-card { grid-template-columns: repeat(2, minmax(150px, 1fr)) minmax(220px, 1.2fr) auto; }
     .data-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .content-grid { grid-template-columns: 1fr; }
     .map-score-overlay {
