@@ -2035,8 +2035,9 @@
                 <strong>분석 범례</strong>
                 <span class="legend-note">
                     {riskGrid?.preview
-                        ? '분석 전 미리보기 · H·E·V 탭과 체크박스로 01 지표 데이터를 확인합니다.'
-                        : 'H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.'}
+                        ? '분석 전 미리보기 · H·E·V 탭과 눈 아이콘으로 01 지표 데이터를 확인합니다.'
+                        : 'H·E·V 탭과 눈 아이콘으로 지도 시각화를 켜고 끌 수 있습니다.'}
+                    <br />눈 아이콘은 지도 표시만 제어하며, 분석 결과(Risk 계산)에는 영향을 주지 않습니다. 분석 포함 여부는 01 분석 지표 구성에서 설정하세요.
                 </span>
                 {#if riskGrid?.stats}
                     <label class="risk-surface-summary">
@@ -2082,16 +2083,34 @@
                             <h3>{group} ({analysisGroupEnglish[group]})</h3>
                             <div class="legend-items">
                                 {#each items as item}
-                                    <label>
-                                        <input
-                                            type="checkbox"
-                                            checked={visibleAnalysisLayerIds.includes(String(item.id))}
-                                            onchange={(event) => toggleAnalysisLayer(item.id, event.currentTarget.checked)}
-                                        />
+                                    {@const visible = visibleAnalysisLayerIds.includes(String(item.id))}
+                                    <div class="legend-item">
+                                        <button
+                                            type="button"
+                                            class="visibility-toggle"
+                                            class:visible
+                                            aria-pressed={visible}
+                                            aria-label={`${item.label} 지도 표시 ${visible ? '끄기' : '켜기'}`}
+                                            title={visible ? '지도에서 숨기기' : '지도에 표시하기'}
+                                            onclick={() => toggleAnalysisLayer(item.id, !visible)}
+                                        >
+                                            {#if visible}
+                                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="M12 5c-6 0-9.5 5-10.5 7 1 2 4.5 7 10.5 7s9.5-5 10.5-7c-1-2-4.5-7-10.5-7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+                                                    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+                                                </svg>
+                                            {:else}
+                                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="M12 5c-6 0-9.5 5-10.5 7 1 2 4.5 7 10.5 7s9.5-5 10.5-7c-1-2-4.5-7-10.5-7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+                                                    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+                                                    <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                                                </svg>
+                                            {/if}
+                                        </button>
                                         <i style={`--legend-color:${item.color || '#64748b'}`}></i>
                                         <b>{item.label}</b>
                                         <small>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</small>
-                                    </label>
+                                    </div>
                                 {/each}
                             </div>
                         </section>
@@ -2314,6 +2333,7 @@
         color: #64748b;
         font-size: .68rem;
         font-weight: 800;
+        line-height: 1.5;
     }
 
     .risk-surface-summary {
@@ -2581,7 +2601,7 @@
         gap: .35rem;
     }
 
-    .legend-items label {
+    .legend-items .legend-item {
         display: grid;
         grid-template-columns: .85rem .75rem minmax(0, 1fr) auto;
         gap: .45rem;
@@ -2590,14 +2610,28 @@
         color: #334155;
         font-size: .72rem;
         font-weight: 800;
+    }
+
+    .legend-items .visibility-toggle {
+        display: grid;
+        place-items: center;
+        width: .85rem;
+        height: .85rem;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: #94a3b8;
         cursor: pointer;
     }
 
-    .legend-items input {
-        width: .82rem;
-        height: .82rem;
-        margin: 0;
-        accent-color: #0f766e;
+    .legend-items .visibility-toggle.visible {
+        color: #0f766e;
+    }
+
+    .legend-items .visibility-toggle svg {
+        width: 100%;
+        height: 100%;
     }
 
     .legend-items i {
