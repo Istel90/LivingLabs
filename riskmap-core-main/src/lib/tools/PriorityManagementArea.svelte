@@ -354,6 +354,16 @@
         '민감도': { english: 'Sensitivity', dimension: 'V', direction: 'positive', color: '#a855a8', icon: '◇' },
         '적응역량': { english: 'Adaptive Capacity', dimension: 'V', direction: 'negative', color: '#2f9b73', icon: '✚' }
     };
+    let groupExpanded = Object.fromEntries(
+        Object.keys(indicatorGroupMeta).map((group) => [
+            group,
+            indicators.some((item) => item.group === group && item.enabled)
+        ])
+    );
+
+    function toggleGroupExpanded(group) {
+        groupExpanded = { ...groupExpanded, [group]: !groupExpanded[group] };
+    }
     $: previewAnalysisIndicators = indicators.map((item) => {
         const loaded = loadedPreviewIndicators.find((previewItem) => previewItem.id === item.id);
         return loaded
@@ -2641,24 +2651,35 @@
                         <button class="primary" onclick={runAnalysis} disabled={running}>{running ? '계산 중...' : 'Risk 분석 실행'}</button>
                     </div>
                     {#each ['기후위험', '노출', '민감도', '적응역량'] as group}
-                        <div class="indicator-group">
-                            <div class="group-label">{group} ({indicatorGroupMeta[group].english})<span>{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span></div>
-                            {#each indicators.filter((item) => item.group === group) as item}
-                                <div class="indicator-item" class:disabled={!item.enabled} class:unavailable={!isIndicatorAvailable(item)}>
-                                    <input
-                                        type="checkbox"
-                                        checked={item.enabled}
-                                        disabled={!isIndicatorAvailable(item)}
-                                        onchange={(event) => setIndicatorEnabled(item.id, event.currentTarget.checked)}
-                                    />
-                                    <div class="indicator-icon" style={`--icon-color:${item.color}`}>
-                                        {#if item.iconPath}<img src={item.iconPath} alt="" />{:else}{item.icon}{/if}
+                        <div class="indicator-group" class:collapsed={!groupExpanded[group]}>
+                            <button
+                                type="button"
+                                class="group-label"
+                                aria-expanded={groupExpanded[group]}
+                                onclick={() => toggleGroupExpanded(group)}
+                            >
+                                <span class="group-chevron" aria-hidden="true">▾</span>
+                                <span class="group-name">{group} ({indicatorGroupMeta[group].english})</span>
+                                <span class="group-count">{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span>
+                            </button>
+                            {#if groupExpanded[group]}
+                                {#each indicators.filter((item) => item.group === group) as item}
+                                    <div class="indicator-item" class:disabled={!item.enabled} class:unavailable={!isIndicatorAvailable(item)}>
+                                        <input
+                                            type="checkbox"
+                                            checked={item.enabled}
+                                            disabled={!isIndicatorAvailable(item)}
+                                            onchange={(event) => setIndicatorEnabled(item.id, event.currentTarget.checked)}
+                                        />
+                                        <div class="indicator-icon" style={`--icon-color:${item.color}`}>
+                                            {#if item.iconPath}<img src={item.iconPath} alt="" />{:else}{item.icon}{/if}
+                                        </div>
+                                        <div class="indicator-copy"><strong>{item.label}</strong><span>{indicatorStatusText(item)} · {item.description}</span></div>
+                                        <div class="dimension-tag">{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
+                                        <label class="weight">가중치<input type="number" min="0" max="3" step="0.1" value={item.weight} oninput={(event) => setIndicatorWeight(item.id, event.currentTarget.value)} /></label>
                                     </div>
-                                    <div class="indicator-copy"><strong>{item.label}</strong><span>{indicatorStatusText(item)} · {item.description}</span></div>
-                                    <div class="dimension-tag">{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
-                                    <label class="weight">가중치<input type="number" min="0" max="3" step="0.1" value={item.weight} oninput={(event) => setIndicatorWeight(item.id, event.currentTarget.value)} /></label>
-                                </div>
-                            {/each}
+                                {/each}
+                            {/if}
                         </div>
                     {/each}
                 </div>
