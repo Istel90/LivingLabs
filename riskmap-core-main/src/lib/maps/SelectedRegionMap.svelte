@@ -1548,6 +1548,51 @@
         return '#22c55e';
     }
 
+    function legendStops(layer) {
+        if (layer === 'H') {
+            return [
+                { color: '#fde68a', range: '0.30 미만', label: '매우 낮음' },
+                { color: '#facc15', range: '0.30 ~ 0.45', label: '낮음' },
+                { color: '#f97316', range: '0.45 ~ 0.60', label: '보통' },
+                { color: '#dc2626', range: '0.60 ~ 0.75', label: '높음' },
+                { color: '#991b1b', range: '0.75 이상', label: '매우 높음' }
+            ];
+        }
+        if (layer === 'E') {
+            return [
+                { color: '#bae6fd', range: '0.30 미만', label: '매우 낮음' },
+                { color: '#38bdf8', range: '0.30 ~ 0.45', label: '낮음' },
+                { color: '#0284c7', range: '0.45 ~ 0.60', label: '보통' },
+                { color: '#1d4ed8', range: '0.60 ~ 0.75', label: '높음' },
+                { color: '#0f172a', range: '0.75 이상', label: '매우 높음' }
+            ];
+        }
+        if (layer === 'V') {
+            return [
+                { color: '#e9d5ff', range: '0.30 미만', label: '매우 낮음' },
+                { color: '#c084fc', range: '0.30 ~ 0.45', label: '낮음' },
+                { color: '#a855f7', range: '0.45 ~ 0.60', label: '보통' },
+                { color: '#7e22ce', range: '0.60 ~ 0.75', label: '높음' },
+                { color: '#581c87', range: '0.75 이상', label: '매우 높음' }
+            ];
+        }
+        if (layer === 'Hotspot') {
+            return [
+                { color: '#ef4444', range: '0.60 미만', label: '핫스팟 후보' },
+                { color: '#b91c1c', range: '0.60 ~ 0.75', label: '주요 핫스팟' },
+                { color: '#7f1d1d', range: '0.75 이상', label: '최우선 핫스팟' }
+            ];
+        }
+        return [
+            { color: '#22c55e', range: '0.15 미만', label: '매우 낮음' },
+            { color: '#84cc16', range: '0.15 ~ 0.30', label: '낮음' },
+            { color: '#facc15', range: '0.30 ~ 0.45', label: '보통' },
+            { color: '#f97316', range: '0.45 ~ 0.60', label: '다소 높음' },
+            { color: '#dc2626', range: '0.60 ~ 0.75', label: '높음' },
+            { color: '#b91c1c', range: '0.75 이상', label: '매우 높음' }
+        ];
+    }
+
     function createRiskGridLayer(L, grid) {
         if (!grid?.transform || !grid?.columns || !grid?.rows) return null;
 
@@ -2005,6 +2050,18 @@
                         <div class="risk-ramp" aria-hidden="true"></div>
                         <small>낮음 → 높음</small>
                     </label>
+                    <div class="risk-scale-legend" aria-label={`${gridLayerLabels[selectedGridLayer] || selectedGridLayer} 색상 스케일 범례`}>
+                        <b>{gridLayerLabels[selectedGridLayer] || selectedGridLayer} 색상 스케일</b>
+                        <div class="risk-scale-stops">
+                            {#each legendStops(selectedGridLayer) as stop}
+                                <div class="risk-scale-stop">
+                                    <i style={`background:${stop.color}`}></i>
+                                    <span>{stop.range}</span>
+                                    <small>{stop.label}</small>
+                                </div>
+                            {/each}
+                        </div>
+                    </div>
                 {/if}
                 <div class="analysis-grid-tabs" aria-label="분석 격자 레이어">
                     {#each gridLayers as layer}
@@ -2300,6 +2357,59 @@
         height: .42rem;
         border-radius: 999px;
         background: linear-gradient(90deg, #22c55e, #84cc16, #facc15, #f97316, #dc2626, #b91c1c);
+    }
+
+    .risk-scale-legend {
+        margin-top: .5rem;
+        border: 1px solid rgb(15 23 42 / 10%);
+        border-radius: .72rem;
+        background: rgb(248 250 252 / 88%);
+        padding: .55rem .62rem;
+    }
+
+    .risk-scale-legend > b {
+        display: block;
+        margin-bottom: .4rem;
+        color: #244a45;
+        font-size: .68rem;
+        font-weight: 900;
+    }
+
+    .risk-scale-stops {
+        display: grid;
+        gap: .3rem;
+    }
+
+    .risk-scale-stop {
+        display: grid;
+        grid-template-columns: .68rem minmax(0, auto) 1fr;
+        gap: .45rem;
+        align-items: center;
+        min-width: 0;
+    }
+
+    .risk-scale-stop i {
+        width: .68rem;
+        height: .68rem;
+        border-radius: .2rem;
+        box-shadow: 0 0 0 1px rgb(15 23 42 / 12%);
+    }
+
+    .risk-scale-stop span {
+        color: #334155;
+        font-size: .64rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .risk-scale-stop small {
+        overflow: hidden;
+        color: #64748b;
+        font-size: .64rem;
+        font-weight: 700;
+        text-align: right;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .analysis-grid-tabs {
