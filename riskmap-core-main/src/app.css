@@ -524,6 +524,12 @@ button { cursor: pointer; }
 .map-result-wrap {
     position: relative;
 }
+@media (min-width: 1401px) {
+    .map-result-wrap {
+        position: sticky;
+        top: 74px;
+    }
+}
 .map-score-overlay {
     position: absolute;
     left: 18px;
