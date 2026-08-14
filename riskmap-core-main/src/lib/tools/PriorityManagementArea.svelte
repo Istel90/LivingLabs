@@ -364,6 +364,12 @@
     function toggleGroupExpanded(group) {
         groupExpanded = { ...groupExpanded, [group]: !groupExpanded[group] };
     }
+
+    let expandedDescriptions = {};
+
+    function toggleIndicatorDescription(id) {
+        expandedDescriptions = { ...expandedDescriptions, [id]: !expandedDescriptions[id] };
+    }
     $: previewAnalysisIndicators = indicators.map((item) => {
         const loaded = loadedPreviewIndicators.find((previewItem) => previewItem.id === item.id);
         return loaded
@@ -2674,7 +2680,22 @@
                                         <div class="indicator-icon" style={`--icon-color:${item.color}`}>
                                             {#if item.iconPath}<img src={item.iconPath} alt="" />{:else}{item.icon}{/if}
                                         </div>
-                                        <div class="indicator-copy"><strong>{item.label}</strong><span>{indicatorStatusText(item)} · {item.description}</span></div>
+                                        <div class="indicator-copy">
+                                            <span class="indicator-name-row">
+                                                <strong>{item.label}</strong>
+                                                <button
+                                                    type="button"
+                                                    class="info-toggle"
+                                                    class:active={expandedDescriptions[item.id]}
+                                                    aria-expanded={!!expandedDescriptions[item.id]}
+                                                    aria-label={`${item.label} 설명 ${expandedDescriptions[item.id] ? '닫기' : '보기'}`}
+                                                    onclick={() => toggleIndicatorDescription(item.id)}
+                                                >ⓘ</button>
+                                            </span>
+                                            <div class="indicator-description-wrap" class:open={expandedDescriptions[item.id]}>
+                                                <span>{indicatorStatusText(item)} · {item.description}</span>
+                                            </div>
+                                        </div>
                                         <div class="dimension-tag">{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
                                         <label class="weight">가중치<input type="number" min="0" max="3" step="0.1" value={item.weight} oninput={(event) => setIndicatorWeight(item.id, event.currentTarget.value)} /></label>
                                     </div>
