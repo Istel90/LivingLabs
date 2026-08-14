@@ -2666,7 +2666,7 @@
                 <div class="right-column">
                     <div class="panel analysis-map-panel">
                         <div class="panel-head map-head">
-                            <div><h2>{alternatives[activeAlternative]?.name} 분석 지도</h2><p>{alternatives[activeAlternative]?.description} · {region} · 행정구역 코드 {regionCode}</p></div>
+                            <div><span class="section-number">02</span><h2>{alternatives[activeAlternative]?.name} 분석 지도</h2><p>{alternatives[activeAlternative]?.description} · {region} · 행정구역 코드 {regionCode}</p></div>
                             <div class="map-toolbar">
                                 <div class="database-actions">
                                     <label>
@@ -2733,7 +2733,7 @@
 
             <section class="panel candidates wide-candidates">
                 <div class="panel-head">
-                    <div><span class="section-number">02</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
+                    <div><span class="section-number">03</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
                     <span class="count-badge">실천지구 {candidateList.length}개</span>
                 </div>
                 {#if candidateList.length}
