@@ -679,7 +679,7 @@ button { cursor: pointer; }
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 10px;
-    padding-left: 0;
+    padding-left: 16px;
     padding-right: 0;
 }
 .analysis-map-panel .map-head > div:first-child {
