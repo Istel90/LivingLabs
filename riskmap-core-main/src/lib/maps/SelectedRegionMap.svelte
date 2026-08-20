@@ -74,6 +74,7 @@
     let selectedGridLayer = $state(activeGridLayer);
     let visibleLayerScopeKey = $state('');
     let selectedBoundaryVisible = $state(true);
+    let layerPanelOpen = $state(false);
     let sidoBoundaryVisible = $state(showSidoBoundary);
     let sigunguBoundaryVisible = $state(showSigunguBoundary);
     let cadastralVisible = $state(false);
@@ -2166,35 +2167,56 @@
             {/if}
         </div>
     {/if}
-    <div class="layer-panel">
-        <strong>베이스·행정 레이어</strong>
-        <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
-        <label>
-            <input
-                type="checkbox"
-                checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
-                disabled={forceSelectedBoundary}
-                onchange={(event) => {
-                    if (forceSelectedBoundary) return;
-                    selectedBoundaryVisible = event.currentTarget.checked;
-                    toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
-                }}
-            />
-            선택지역 경계
-        </label>
-        {#if hasVWorldApiKey()}
-            <label><input type="checkbox" checked={sidoBoundaryVisible} onchange={(event) => { sidoBoundaryVisible = event.currentTarget.checked; toggleLayer(sidoLayer, sidoBoundaryVisible); }} /> 시도 경계</label>
-            <label><input type="checkbox" checked={sigunguBoundaryVisible} onchange={(event) => { sigunguBoundaryVisible = event.currentTarget.checked; toggleLayer(sggLayer, sigunguBoundaryVisible); }} /> 시군구 경계</label>
-            {#if showCadastral}
-                <label><input type="checkbox" checked={cadastralVisible} onchange={(event) => { cadastralVisible = event.currentTarget.checked; toggleLayer(cadastralLayer, cadastralVisible); }} /> 연속지적도</label>
+    <div class="map-icon-controls">
+        <div class="icon-control-wrap">
+            <button
+                type="button"
+                class="icon-control-button"
+                class:active={layerPanelOpen}
+                aria-expanded={layerPanelOpen}
+                aria-label="베이스·행정 레이어 설정 열기"
+                onclick={() => (layerPanelOpen = !layerPanelOpen)}
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <polygon points="12 3 21 8 12 13 3 8 12 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                    <polyline points="3 12 12 17 21 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                    <polyline points="3 16 12 21 21 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                </svg>
+                <span class="icon-tooltip">선택지역 경계</span>
+            </button>
+            {#if layerPanelOpen}
+                <div class="layer-panel">
+                    <strong>베이스·행정 레이어</strong>
+                    <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
+                            disabled={forceSelectedBoundary}
+                            onchange={(event) => {
+                                if (forceSelectedBoundary) return;
+                                selectedBoundaryVisible = event.currentTarget.checked;
+                                toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
+                            }}
+                        />
+                        선택지역 경계
+                    </label>
+                    {#if hasVWorldApiKey()}
+                        <label><input type="checkbox" checked={sidoBoundaryVisible} onchange={(event) => { sidoBoundaryVisible = event.currentTarget.checked; toggleLayer(sidoLayer, sidoBoundaryVisible); }} /> 시도 경계</label>
+                        <label><input type="checkbox" checked={sigunguBoundaryVisible} onchange={(event) => { sigunguBoundaryVisible = event.currentTarget.checked; toggleLayer(sggLayer, sigunguBoundaryVisible); }} /> 시군구 경계</label>
+                        {#if showCadastral}
+                            <label><input type="checkbox" checked={cadastralVisible} onchange={(event) => { cadastralVisible = event.currentTarget.checked; toggleLayer(cadastralLayer, cadastralVisible); }} /> 연속지적도</label>
+                        {/if}
+                    {:else}
+                        <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
+                    {/if}
+                </div>
             {/if}
-        {:else}
-            <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
-        {/if}
+        </div>
         {#if !locked}
-            <button class="return-region-button" type="button" onclick={returnToSelectedRegion} title={`${regionName || '선택 지역'} 전체 보기`}>
-                <span aria-hidden="true">⌖</span>
-                {regionReturnLabel()}
+            <button type="button" class="icon-control-button" onclick={returnToSelectedRegion}>
+                <span class="icon-glyph" aria-hidden="true">⌖</span>
+                <span class="icon-tooltip">{regionReturnLabel()}</span>
             </button>
         {/if}
     </div>
@@ -2249,40 +2271,83 @@
         font-size: .65rem;
     }
 
-    .return-region-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: .35rem;
-        width: 100%;
-        margin-top: .3rem;
-        border: 1px solid rgb(15 118 110 / 26%);
-        border-radius: .65rem;
-        background: #ecfdf5;
-        color: #0f766e;
-        padding: .52rem .72rem;
-        font-size: .72rem;
-        font-weight: 900;
+    .map-icon-controls {
+        position: absolute;
+        right: .85rem;
+        top: .85rem;
+        z-index: 900;
+        display: grid;
+        gap: .5rem;
+        justify-items: end;
+    }
+
+    .icon-control-wrap {
+        position: relative;
+    }
+
+    .icon-control-button {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 2.35rem;
+        height: 2.35rem;
+        border: 1px solid rgb(15 23 42 / 10%);
+        border-radius: .7rem;
+        background: rgb(255 255 255 / 92%);
+        color: #0f172a;
+        box-shadow: 0 12px 26px rgb(15 23 42 / 14%);
+        backdrop-filter: blur(10px);
         cursor: pointer;
     }
 
-    .return-region-button:hover {
+    .icon-control-button:hover,
+    .icon-control-button.active {
         border-color: #0f766e;
-        background: #ecfdf5;
+        color: #0f766e;
     }
 
-    .return-region-button span {
-        font-size: 1rem;
+    .icon-control-button svg {
+        width: 1.15rem;
+        height: 1.15rem;
+    }
+
+    .icon-control-button .icon-glyph {
+        font-size: 1.15rem;
         line-height: 1;
+    }
+
+    .icon-tooltip {
+        position: absolute;
+        right: calc(100% + .5rem);
+        top: 50%;
+        z-index: 520;
+        transform: translateY(-50%);
+        white-space: nowrap;
+        border-radius: .45rem;
+        background: #0f172a;
+        color: #fff;
+        padding: .3rem .55rem;
+        font-size: .68rem;
+        font-weight: 700;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .12s ease;
+    }
+
+    .icon-control-button:hover .icon-tooltip,
+    .icon-control-button:focus-visible .icon-tooltip {
+        opacity: 1;
     }
 
     .layer-panel {
         position: absolute;
-        right: .85rem;
-        top: .85rem;
+        right: 0;
+        top: calc(100% + .5rem);
         z-index: 500;
         display: grid;
         gap: .38rem;
+        width: max-content;
+        max-width: 15rem;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .9rem;
         background: rgb(255 255 255 / 92%);

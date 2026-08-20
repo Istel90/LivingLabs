@@ -528,6 +528,7 @@ button { cursor: pointer; }
     .map-result-wrap {
         position: sticky;
         top: 74px;
+        z-index: 900;
     }
 }
 .map-score-overlay {
