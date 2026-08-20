@@ -355,14 +355,23 @@
         '적응역량': { english: 'Adaptive Capacity', dimension: 'V', direction: 'negative', color: '#2f9b73', icon: '✚' }
     };
     let groupExpanded = Object.fromEntries(
-        Object.keys(indicatorGroupMeta).map((group) => [
-            group,
-            indicators.some((item) => item.group === group && item.enabled)
-        ])
+        Object.keys(indicatorGroupMeta).map((group) => {
+            const available = indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length;
+            const selected = selectedIndicatorsFor(group).length;
+            return [group, selected > available / 2];
+        })
     );
 
     function toggleGroupExpanded(group) {
         groupExpanded = { ...groupExpanded, [group]: !groupExpanded[group] };
+    }
+
+    function collapsedGroupSummary(group) {
+        const selected = selectedIndicatorsFor(group);
+        if (!selected.length) return '';
+        const shown = selected.slice(0, 2).map((item) => item.label).join(', ');
+        const remaining = selected.length - 2;
+        return remaining > 0 ? `${shown} 외 ${remaining}개` : shown;
     }
 
     let expandedDescriptions = {};
@@ -2666,6 +2675,9 @@
                             >
                                 <span class="group-chevron" aria-hidden="true">▾</span>
                                 <span class="group-name">{group} ({indicatorGroupMeta[group].english})</span>
+                                {#if !groupExpanded[group] && collapsedGroupSummary(group)}
+                                    <span class="group-collapsed-summary">{collapsedGroupSummary(group)}</span>
+                                {/if}
                                 <span class="group-count">{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span>
                             </button>
                             {#if groupExpanded[group]}
