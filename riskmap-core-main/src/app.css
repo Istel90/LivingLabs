@@ -684,7 +684,7 @@ button { cursor: pointer; }
 .analysis-map-panel .map-head > div:first-child {
     width: 100%;
     box-sizing: border-box;
-    padding-left: 16px;
+    padding-left: 35px;
     padding-right: 16px;
 }
 .analysis-map-panel .handoff-actions {
