@@ -427,7 +427,7 @@ button { cursor: pointer; }
     white-space: nowrap;
 }
 .content-grid {
-    grid-template-columns: minmax(480px, 520px) minmax(820px, 1fr);
+    grid-template-columns: minmax(340px, 380px) minmax(820px, 1fr);
     align-items: stretch;
 }
 .content-grid > .indicator-panel {
