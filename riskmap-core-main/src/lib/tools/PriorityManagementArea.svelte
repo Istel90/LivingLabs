@@ -296,6 +296,7 @@
     $: projectName = `${region} ${config.projectSuffix}`;
     let analysisDone = false;
     let running = false;
+    let bottomPanelTab = '03';
     let selectedCandidate = 0;
     let activeAlternative = 0;
     let gridUnit = '100m';
@@ -2782,10 +2783,12 @@
                             </section>
                         </div>
                     </div>
-                </div>
-            </section>
-
-            <section class="panel candidates wide-candidates">
+                    <div class="map-bottom-panel">
+                        <div class="map-bottom-tab-bar" role="tablist">
+                            <button type="button" role="tab" class:active={bottomPanelTab === '03'} aria-selected={bottomPanelTab === '03'} onclick={() => (bottomPanelTab = '03')}>03 실천권역</button>
+                            <button type="button" role="tab" class:active={bottomPanelTab === '04'} aria-selected={bottomPanelTab === '04'} onclick={() => (bottomPanelTab = '04')}>04 검토 요청</button>
+                        </div>
+            <section class="panel candidates wide-candidates map-bottom-tab-panel" class:tab-hidden={bottomPanelTab !== '03'}>
                 <div class="panel-head">
                     <div><span class="section-number">03</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
                     <span class="count-badge">실천지구 {candidateList.length}개</span>
@@ -2846,7 +2849,7 @@
                 {/if}
             </section>
 
-            <section class="decision-panel decision-transfer-summary" id="decision-transfer-summary">
+            <section class="decision-panel decision-transfer-summary map-bottom-tab-panel" id="decision-transfer-summary" class:tab-hidden={bottomPanelTab !== '04'}>
                 <div class="decision-title">
                     <span class="section-number">04</span>
                     <div>
@@ -2885,6 +2888,9 @@
                     <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>
                         주관부서 지원도구로 검토 요청
                     </button>
+                </div>
+            </section>
+                    </div>
                 </div>
             </section>
         </main>
