@@ -8,6 +8,7 @@ import * as h5wasm from 'h5wasm/node';
 import proj4 from 'proj4';
 import pg from 'pg';
 import { createObservedHazardGridBuilder } from './hazard-grid.mjs';
+import { createHevGridStore } from './hev-grid-store.mjs';
 
 const { Pool } = pg;
 
@@ -39,7 +40,7 @@ const httpsAgent = allowInsecureTls ? new HttpsAgent({ rejectUnauthorized: false
 const port = Number(process.env.VWORLD_PROXY_PORT || process.argv.find((arg) => arg.startsWith('--port='))?.split('=')[1] || 5176);
 const staticRootArgument = process.argv.find((arg) => arg.startsWith('--static-root='))?.slice('--static-root='.length);
 const staticRoot = staticRootArgument ? resolve(workspaceRoot, staticRootArgument) : '';
-const buildObservedHazardGrid = createObservedHazardGridBuilder({
+const buildObservedHazardGridFromFiles = createObservedHazardGridBuilder({
   metricsPath: resolve(root, 'static', 'analysis-data', 'climate', 'kma-asos-hazard-station-metrics-2021-2025.json'),
   boundariesPath: resolve(workspaceRoot, 'public', 'data', 'climate', 'admin-boundaries.geojson'),
   highresBinaryPath: resolve(root, 'static', 'analysis-data', 'climate', 'kma-highres-ta-2021-2025-500m.f32.gz'),
@@ -56,6 +57,39 @@ const cadastrePool = new Pool({
   connectionTimeoutMillis: 3000,
   idleTimeoutMillis: 30000,
 });
+
+const hevGridStore = createHevGridStore({ pool: cadastrePool });
+const hevPostgisRetryDelay = 30000;
+let hevPostgisRetryAt = 0;
+cadastrePool.on('error', (error) => {
+  hevPostgisRetryAt = Date.now() + hevPostgisRetryDelay;
+  console.warn(`PostGIS pool error: ${error?.message || error}`);
+});
+
+async function buildObservedHazardGrid(searchParams) {
+  const regionCode = (searchParams.get('regionCode') || '').trim();
+  const indicator = (searchParams.get('indicator') || '').trim().toUpperCase();
+  if (Date.now() >= hevPostgisRetryAt) {
+    try {
+      const stored = await hevGridStore.get(regionCode, indicator);
+      if (stored) return stored;
+    } catch (error) {
+      hevPostgisRetryAt = Date.now() + hevPostgisRetryDelay;
+      console.warn(`HEV PostGIS read fallback (${regionCode}/${indicator}): ${error?.message || error}`);
+    }
+  }
+
+  const payload = await buildObservedHazardGridFromFiles(searchParams);
+  if (Date.now() < hevPostgisRetryAt) return { ...payload, storage: 'file-fallback' };
+  try {
+    await hevGridStore.put(payload);
+    return { ...payload, storage: 'postgis' };
+  } catch (error) {
+    hevPostgisRetryAt = Date.now() + hevPostgisRetryDelay;
+    console.warn(`HEV PostGIS write fallback (${regionCode}/${indicator}): ${error?.message || error}`);
+    return { ...payload, storage: 'file-fallback' };
+  }
+}
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -796,6 +830,15 @@ const server = createServer(async (request, response) => {
       service: staticRoot ? 'living-labs-platform' : 'vworld-data-proxy',
       unified: Boolean(staticRoot),
     }));
+    return;
+  }
+
+  if (routePath === '/hazard-grid/health') {
+    try {
+      send(response, 200, JSON.stringify({ ok: await hevGridStore.ready(), ...(await hevGridStore.status()) }));
+    } catch (error) {
+      send(response, 503, JSON.stringify({ ok: false, error: error?.message || 'HEV PostGIS unavailable' }));
+    }
     return;
   }
 
