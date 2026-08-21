@@ -38,6 +38,9 @@
     const requiredGroups = ['기후위험', '노출', '민감도', '적응역량'];
     const vLambda = 0.5;
     const asset = (path) => `${base}${path}`;
+    const IC4_ADMIN_DATA_PATH = '/analysis-data/climate/ic4-admin-projections.json';
+    const ic4MetricByIndicator = { H06: 'WSDI', H08: 'TX90P', H09: 'WSDIx' };
+    let ic4DatasetPromise = null;
     const DEPARTMENT_HANDOFF_KEY = 'livinglabs.priorityManagementHandoff';
     const priorityHandoffInboxUrl = import.meta.env.VITE_PRIORITY_HANDOFF_INBOX_URL || '/priority-handoff';
     const vworldProxyUrl = import.meta.env.VITE_VWORLD_PROXY_URL || '';
@@ -207,7 +210,7 @@
 
     const config = hazardConfigs[hazard] || hazardConfigs.heatwave;
     function configureIndicatorsForRegion(sourceIndicators, code, datasetMode = hazardDatasetMode) {
-        const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H07', 'H10']);
+        const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09', 'H10']);
         return sourceIndicators.map((item) => {
             if (item.indicatorCode) {
                 const observed = datasetMode === 'observed';
@@ -222,9 +225,13 @@
                     scenario: hazardScenario,
                     period: hazardFuturePeriod
                 });
+                const ic4MetricCode = observed ? ic4MetricByIndicator[item.indicatorCode] : null;
                 return {
                     ...item,
-                    description: observed
+                    ic4MetricCode,
+                    description: ic4MetricCode
+                        ? 'IC4 2020 행정구역 평균값 · 분석용 100m 격자에 동일값 할당'
+                        : observed
                         ? item.indicatorCode === 'H01'
                             ? '2021~2025 평균 · 500m 원자료를 정렬한 지역 100m 분석격자'
                             : item.indicatorCode === 'H10'
@@ -235,14 +242,20 @@
                         : item.indicatorCode === 'H10'
                             ? 'SSP 기반 직접 미래 전망자료 없음'
                             : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 지역 100m 분석격자`,
-                    sourceType: observed
+                    sourceType: ic4MetricCode
+                        ? 'KMA-IC4-admin-100m-proxy'
+                        : observed
                         ? item.indicatorCode === 'H10'
                             ? 'Landsat-LST-100m'
                             : item.indicatorCode === 'H01'
                                 ? 'KMA-observed-100m'
                                 : 'KMA-ASOS-IDW-100m'
                         : 'KMA-AR6-region-100m',
-                    dataPath: available ? `/hazard-grid?${dataQuery.toString()}` : null,
+                    dataPath: available
+                        ? ic4MetricCode
+                            ? IC4_ADMIN_DATA_PATH
+                            : `/hazard-grid?${dataQuery.toString()}`
+                        : null,
                     dataStatus: available ? 'available' : 'missing',
                     enabled: available && item.indicatorCode === (observed ? 'H01' : 'H04')
                 };
@@ -936,10 +949,11 @@
         const cellCount = columns * rows;
         if (!Number.isFinite(cellCount) || cellCount <= 0 || cellCount > 450000) return null;
         const seed = publicDemoSeed(item);
+        const adminBacked = Number.isFinite(item.adminNormalizedValue);
         const values = new Float32Array(cellCount);
         let sum = 0;
         for (let index = 0; index < cellCount; index += 1) {
-            const value = publicDemoValue(index, columns, rows, seed);
+            const value = adminBacked ? item.adminNormalizedValue : publicDemoValue(index, columns, rows, seed);
             values[index] = value;
             sum += value;
         }
@@ -949,8 +963,8 @@
             ...item,
             enabled: item.enabled,
             dataStatus: 'available',
-            sourceType: 'PUBLIC-DEMO-FALLBACK',
-            demoFallback: true,
+            sourceType: adminBacked ? 'KMA-IC4-admin-100m-proxy' : 'PUBLIC-DEMO-FALLBACK',
+            demoFallback: !adminBacked,
             loadedValue: mean,
             gridValues: values,
             gridValidIndices: null,
@@ -967,12 +981,50 @@
                 rows,
                 columns,
                 validCells: cellCount,
-                rawMean: Number(mean.toFixed(4)),
-                rawUnit: '정규화 점수',
+                rawMean: adminBacked ? item.adminRawValue : Number(mean.toFixed(4)),
+                rawUnit: adminBacked ? item.adminRawUnit : '정규화 점수',
                 normalizedMean: mean,
-                sourceResolution: '시연용 대체 패턴'
+                sourceResolution: adminBacked ? item.adminSourceResolution : '시연용 대체 패턴'
             },
-            loadError: `${item.label} 원자료 서버에 연결하지 못해 공개 시연용 대체 패턴을 사용했습니다.`
+            loadError: adminBacked
+                ? `${item.label}은 IC4 행정구역 평균값을 분석용 100m 격자에 동일하게 적용했습니다.`
+                : `${item.label} 원자료 서버에 연결하지 못해 공개 시연용 대체 패턴을 사용했습니다.`
+        };
+    }
+
+    async function loadIc4Dataset() {
+        if (!ic4DatasetPromise) {
+            ic4DatasetPromise = fetch(asset(IC4_ADMIN_DATA_PATH)).then((response) => {
+                if (!response.ok) throw new Error(`IC4 HTTP ${response.status}`);
+                return response.json();
+            });
+        }
+        return ic4DatasetPromise;
+    }
+
+    function resolveIc4AdminIndicator(item, dataset) {
+        const scenario = 'RCP45';
+        const year = '2020';
+        const metricCode = item.ic4MetricCode;
+        const rawValue = Number(dataset?.data?.[regionCode]?.[scenario]?.[year]?.[metricCode]);
+        if (!Number.isFinite(rawValue)) throw new Error(`${metricCode} IC4 value is missing`);
+
+        const nationwideValues = Object.values(dataset?.data || {})
+            .map((regionData) => Number(regionData?.[scenario]?.[year]?.[metricCode]))
+            .filter(Number.isFinite);
+        const minimum = Math.min(...nationwideValues);
+        const maximum = Math.max(...nationwideValues);
+        const normalizedValue = maximum > minimum ? (rawValue - minimum) / (maximum - minimum) : 0.5;
+        const metric = (dataset?.metrics || []).find((entry) => entry.code === metricCode);
+
+        return {
+            ...item,
+            publicFallbackPending: true,
+            adminNormalizedValue: clamp01(normalizedValue),
+            adminRawValue: rawValue,
+            adminRawUnit: metric?.unit || '일/년',
+            adminSourceResolution: 'IC4 2020 시군구 평균 → 분석용 100m 동일값 할당',
+            loadError: ''
         };
     }
 
@@ -981,6 +1033,10 @@
             if (!usableIndicator(item) || !item.dataPath) return item;
 
             try {
+                if (item.ic4MetricCode) {
+                    return resolveIc4AdminIndicator(item, await loadIc4Dataset());
+                }
+
                 const dataUrl = item.dataPath.startsWith('/hazard-grid') ? item.dataPath : asset(item.dataPath);
                 const response = await fetch(dataUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
