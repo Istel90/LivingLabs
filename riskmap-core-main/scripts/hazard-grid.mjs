@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import proj4 from 'proj4';
 
 proj4.defs(
@@ -69,7 +70,50 @@ function idwAt(x, y, stations, indicator) {
   return weighted / weightSum;
 }
 
-export function createObservedHazardGridBuilder({ metricsPath, boundariesPath }) {
+function loadHighresGrid(binaryPath, metadataPath) {
+  const metadata = JSON.parse(readFileSync(metadataPath, 'utf8'));
+  const bytes = gunzipSync(readFileSync(binaryPath));
+  const values = new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
+  return { metadata, values };
+}
+
+function createHighresSampler(highres, bounds) {
+  const bucketSize = 1000;
+  const margin = 2000;
+  const buckets = new Map();
+  const values = highres.values;
+  for (let offset = 0; offset < values.length; offset += 3) {
+    const x = values[offset];
+    const y = values[offset + 1];
+    if (x < bounds.xmin - margin || x > bounds.xmax + margin || y < bounds.ymin - margin || y > bounds.ymax + margin) continue;
+    const key = `${Math.floor(x / bucketSize)}:${Math.floor(y / bucketSize)}`;
+    const bucket = buckets.get(key) || [];
+    bucket.push(offset);
+    buckets.set(key, bucket);
+  }
+
+  return (x, y) => {
+    const bucketX = Math.floor(x / bucketSize);
+    const bucketY = Math.floor(y / bucketSize);
+    let nearestDistance2 = Infinity;
+    let nearestValue = NaN;
+    for (let dy = -2; dy <= 2; dy += 1) {
+      for (let dx = -2; dx <= 2; dx += 1) {
+        const bucket = buckets.get(`${bucketX + dx}:${bucketY + dy}`) || [];
+        for (const offset of bucket) {
+          const distanceX = x - values[offset];
+          const distanceY = y - values[offset + 1];
+          const distance2 = (distanceX * distanceX) + (distanceY * distanceY);
+          if (distance2 >= nearestDistance2) continue;
+          nearestDistance2 = distance2;
+          nearestValue = values[offset + 2];
+        }
+      }
+    }
+    return nearestDistance2 <= 2_250_000 ? nearestValue : NaN;
+  };
+}
+export function createObservedHazardGridBuilder({ metricsPath, boundariesPath, highresBinaryPath, highresMetadataPath }) {
   let sources = null;
   const cache = new Map();
 
@@ -81,7 +125,8 @@ export function createObservedHazardGridBuilder({ metricsPath, boundariesPath })
       ...station,
       xy: proj4('EPSG:4326', 'EPSG:5179', [Number(station.longitude), Number(station.latitude)]),
     }));
-    sources = { metrics, boundaries, stations };
+    const highres = loadHighresGrid(highresBinaryPath, highresMetadataPath);
+    sources = { metrics, boundaries, stations, highres };
     return sources;
   }
 
@@ -93,7 +138,7 @@ export function createObservedHazardGridBuilder({ metricsPath, boundariesPath })
     const cacheKey = `${regionCode}:${indicator}`;
     if (cache.has(cacheKey)) return cache.get(cacheKey);
 
-    const { metrics, boundaries, stations } = loadSources();
+    const { metrics, boundaries, stations, highres } = loadSources();
     const features = boundaryFeaturesForRegion(boundaries, regionCode);
     if (!features.length) throw new Error(`No boundary found for region ${regionCode}`);
     const polygons = features.flatMap((feature) => projectGeometry(feature.geometry));
@@ -112,6 +157,8 @@ export function createObservedHazardGridBuilder({ metricsPath, boundariesPath })
     if (!Number.isFinite(cellCount) || cellCount <= 0 || cellCount > 3_000_000) {
       throw new Error(`Region grid is too large (${cellCount} cells)`);
     }
+
+    const highresSample = indicator === 'H01' ? createHighresSampler(highres, { xmin, ymin, xmax, ymax }) : null;
 
     const rawValues = new Float64Array(cellCount);
     rawValues.fill(Number.NaN);
@@ -134,7 +181,7 @@ export function createObservedHazardGridBuilder({ metricsPath, boundariesPath })
           if (Number.isFinite(rawValues[index])) continue;
           const x = xmin + ((column + 0.5) * 100);
           if (!pointInPolygons(x, y, [polygon])) continue;
-          const value = idwAt(x, y, stations, indicator);
+          const value = highresSample ? highresSample(x, y) : idwAt(x, y, stations, indicator);
           if (!Number.isFinite(value)) continue;
           rawValues[index] = value;
           rawMin = Math.min(rawMin, value);
@@ -170,8 +217,10 @@ export function createObservedHazardGridBuilder({ metricsPath, boundariesPath })
       sparseValues,
       unit: metrics.units?.[indicator] || '',
       rawUnit: metrics.units?.[indicator] || '',
-      sourceResolution: 'ASOS 69개 관측소 IDW 공간보간(최근접 8개, power 2) → EPSG:5179 100m 셀 중심',
-      observedPeriod: metrics.observedPeriod,
+      sourceResolution: indicator === 'H01'
+        ? 'KMA 500m 고해상도 관측격자 2021~2025 평균 → EPSG:5179 100m 최근접 정렬'
+        : 'ASOS 69개 관측소 IDW 공간보간(최근접 8개, power 2) → EPSG:5179 100m 셀 중심',
+      observedPeriod: indicator === 'H01' ? highres.metadata.period : metrics.observedPeriod,
       baselinePeriod: metrics.baselinePeriod,
       stats: {
         validCells,

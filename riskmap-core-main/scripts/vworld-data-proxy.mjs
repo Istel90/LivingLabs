@@ -42,7 +42,10 @@ const staticRoot = staticRootArgument ? resolve(workspaceRoot, staticRootArgumen
 const buildObservedHazardGrid = createObservedHazardGridBuilder({
   metricsPath: resolve(root, 'static', 'analysis-data', 'climate', 'kma-asos-hazard-station-metrics-2021-2025.json'),
   boundariesPath: resolve(workspaceRoot, 'public', 'data', 'climate', 'admin-boundaries.geojson'),
-});const cadastrePool = new Pool({
+  highresBinaryPath: resolve(root, 'static', 'analysis-data', 'climate', 'kma-highres-ta-2021-2025-500m.f32.gz'),
+  highresMetadataPath: resolve(root, 'static', 'analysis-data', 'climate', 'kma-highres-ta-2021-2025-500m.json'),
+});
+const cadastrePool = new Pool({
   host: process.env.VWORLD_POSTGIS_HOST || env.VWORLD_POSTGIS_HOST || '127.0.0.1',
   port: Number(process.env.VWORLD_POSTGIS_PORT || env.VWORLD_POSTGIS_PORT || 55432),
   database: process.env.VWORLD_POSTGIS_DATABASE || env.VWORLD_POSTGIS_DATABASE || 'vworld_cadastral',

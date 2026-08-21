@@ -239,7 +239,9 @@
                     : null;
                 const available = Boolean(observedPath || lstAvailable || futurePath);
                 const description = observedPath
-                    ? 'KMA ASOS 2021~2025 일자료 · 관측소 69개를 공간보간한 선택 지역 100m 셀 중심값'
+                    ? item.indicatorCode === 'H01'
+                        ? 'KMA 2021~2025 연평균 500m 고해상도 관측격자 · 선택 지역 100m 분석 셀에 최근접 정렬'
+                        : 'KMA ASOS 2021~2025 일자료 · 관측소 69개를 공간보간한 선택 지역 100m 셀 중심값'
                     : lstAvailable
                         ? '2021~2025 여름철 P90 평균 · Landsat 30m를 집계한 수원시 100m 격자'
                         : futurePath
@@ -252,7 +254,7 @@
                     ...item,
                     description,
                     sourceType: observedPath
-                        ? 'KMA-ASOS-IDW-100m'
+                        ? item.indicatorCode === 'H01' ? 'KMA-observed-500m-to-100m' : 'KMA-ASOS-IDW-100m'
                         : lstAvailable
                             ? 'Landsat-LST-100m'
                             : futurePath

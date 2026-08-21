@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "kma-highres-temperature-grid/v1",
+  "source": "KMA API Hub high-resolution observation grid annual statistics",
+  "sourceApi": "sfc_grid_nc_sts_down.php?var=ta_avg",
+  "sourceResolution": "500m",
+  "sourceCrs": "KMA 2049x2049 observation grid",
+  "outputCrs": "EPSG:5179",
+  "period": "2021-2025",
+  "years": [
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "recordLayout": [
+    "x",
+    "y",
+    "temperatureC"
+  ],
+  "recordType": "Float32LE",
+  "recordBytes": 12,
+  "recordCount": 678347,
+  "validYearMinimum": 4,
+  "stats": {
+    "rawMin": 4.3,
+    "rawMax": 18.75,
+    "rawMean": 13.3503
+  }
+}
