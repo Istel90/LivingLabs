@@ -76,6 +76,7 @@
     let adaptationSiteLayer;
     let visibleAnalysisLayerIds = $state([]);
     let riskGridVisible = $state(true);
+    let activeGridScale = $state(null);
     let selectedGridLayer = $state(activeGridLayer);
     let visibleLayerScopeKey = $state('');
     let selectedBoundaryVisible = $state(true);
@@ -1615,84 +1616,101 @@
         return grid.values || [];
     }
 
-    function gridColor(value, layer) {
-        if (layer === 'H') {
-            if (value >= 0.75) return '#991b1b';
-            if (value >= 0.6) return '#dc2626';
-            if (value >= 0.45) return '#f97316';
-            if (value >= 0.3) return '#facc15';
-            return '#fde68a';
+    function gridPalette(layer) {
+        if (layer === 'H') return ['#fde68a', '#facc15', '#f97316', '#dc2626', '#991b1b'];
+        if (layer === 'E') return ['#bae6fd', '#38bdf8', '#0284c7', '#1d4ed8', '#0f172a'];
+        if (layer === 'V') return ['#e9d5ff', '#c084fc', '#a855f7', '#7e22ce', '#581c87'];
+        if (layer === 'Hotspot') return ['#fecaca', '#f87171', '#ef4444', '#b91c1c', '#7f1d1d'];
+        return ['#22c55e', '#84cc16', '#facc15', '#f97316', '#b91c1c'];
+    }
+
+    function quantile(sortedValues, probability) {
+        if (!sortedValues.length) return NaN;
+        const position = (sortedValues.length - 1) * probability;
+        const lowerIndex = Math.floor(position);
+        const upperIndex = Math.ceil(position);
+        const weight = position - lowerIndex;
+        const lower = sortedValues[lowerIndex];
+        const upper = sortedValues[upperIndex];
+        return lower + ((upper - lower) * weight);
+    }
+
+    function createLocalGridScale(values, drawableCells, layer, hotspotThreshold = null) {
+        const localValues = drawableCells
+            .map((cell) => Number(values[cell.index]))
+            .filter((value) =>
+                Number.isFinite(value) &&
+                (!Number.isFinite(hotspotThreshold) || value >= hotspotThreshold)
+            )
+            .sort((left, right) => left - right);
+        if (!localValues.length) return null;
+
+        const minimum = localValues[0];
+        const maximum = localValues.at(-1);
+        const singleValue = Math.abs(maximum - minimum) <= 1e-9;
+        const uniqueCount = new Set(localValues.map((value) => value.toPrecision(12))).size;
+        const probabilities = [0.2, 0.4, 0.6, 0.8];
+        return {
+            layer,
+            minimum,
+            maximum,
+            singleValue,
+            thresholds: singleValue
+                ? []
+                : uniqueCount >= 5
+                    ? probabilities.map((probability) => quantile(localValues, probability))
+                    : probabilities.map((probability) => minimum + ((maximum - minimum) * probability)),
+            count: localValues.length,
+            method: uniqueCount >= 5 ? 'quantile' : 'equal-interval'
+        };
+    }
+
+    function gridColor(value, layer, scale = null) {
+        const palette = gridPalette(layer);
+        if (scale?.singleValue) return palette[Math.floor(palette.length / 2)];
+        if (scale?.thresholds?.length) {
+            if (value <= scale.minimum) return palette[0];
+            if (value >= scale.maximum) return palette.at(-1);
+            const classIndex = scale.thresholds.findIndex((threshold) => value <= threshold);
+            return palette[classIndex < 0 ? palette.length - 1 : classIndex];
         }
-        if (layer === 'E') {
-            if (value >= 0.75) return '#0f172a';
-            if (value >= 0.6) return '#1d4ed8';
-            if (value >= 0.45) return '#0284c7';
-            if (value >= 0.3) return '#38bdf8';
-            return '#bae6fd';
-        }
-        if (layer === 'V') {
-            if (value >= 0.75) return '#581c87';
-            if (value >= 0.6) return '#7e22ce';
-            if (value >= 0.45) return '#a855f7';
-            if (value >= 0.3) return '#c084fc';
-            return '#e9d5ff';
-        }
-        if (layer === 'Hotspot') {
-            if (value >= 0.75) return '#7f1d1d';
-            if (value >= 0.6) return '#b91c1c';
-            return '#ef4444';
-        }
-        if (value >= 0.75) return '#b91c1c';
-        if (value >= 0.6) return '#dc2626';
-        if (value >= 0.45) return '#f97316';
-        if (value >= 0.3) return '#facc15';
-        if (value >= 0.15) return '#84cc16';
-        return '#22c55e';
+
+        const normalizedClass = Math.min(palette.length - 1, Math.floor(clamp01(value) * palette.length));
+        return palette[normalizedClass];
+    }
+
+    function formatScaleValue(value) {
+        if (!Number.isFinite(value)) return '-';
+        if (Math.abs(value) >= 100) return value.toFixed(0);
+        if (Math.abs(value) >= 10) return value.toFixed(1);
+        return value.toFixed(2);
     }
 
     function legendStops(layer) {
-        if (layer === 'H') {
-            return [
-                { color: '#fde68a', range: '0.30 미만', label: '매우 낮음' },
-                { color: '#facc15', range: '0.30 ~ 0.45', label: '낮음' },
-                { color: '#f97316', range: '0.45 ~ 0.60', label: '보통' },
-                { color: '#dc2626', range: '0.60 ~ 0.75', label: '높음' },
-                { color: '#991b1b', range: '0.75 이상', label: '매우 높음' }
-            ];
+        const palette = gridPalette(layer);
+        const scale = activeGridScale?.layer === layer ? activeGridScale : null;
+        if (!scale) {
+            return palette.map((color, index) => ({
+                color,
+                range: Math.round(index * 100 / palette.length) + ' ~ ' + Math.round((index + 1) * 100 / palette.length) + '%',
+                label: index === 0 ? '낮음' : index === palette.length - 1 ? '높음' : '정규화'
+            }));
         }
-        if (layer === 'E') {
-            return [
-                { color: '#bae6fd', range: '0.30 미만', label: '매우 낮음' },
-                { color: '#38bdf8', range: '0.30 ~ 0.45', label: '낮음' },
-                { color: '#0284c7', range: '0.45 ~ 0.60', label: '보통' },
-                { color: '#1d4ed8', range: '0.60 ~ 0.75', label: '높음' },
-                { color: '#0f172a', range: '0.75 이상', label: '매우 높음' }
-            ];
+        if (scale.singleValue) {
+            return [{
+                color: palette[Math.floor(palette.length / 2)],
+                range: '단일값 ' + formatScaleValue(scale.minimum),
+                label: '공간 차이 없음'
+            }];
         }
-        if (layer === 'V') {
-            return [
-                { color: '#e9d5ff', range: '0.30 미만', label: '매우 낮음' },
-                { color: '#c084fc', range: '0.30 ~ 0.45', label: '낮음' },
-                { color: '#a855f7', range: '0.45 ~ 0.60', label: '보통' },
-                { color: '#7e22ce', range: '0.60 ~ 0.75', label: '높음' },
-                { color: '#581c87', range: '0.75 이상', label: '매우 높음' }
-            ];
-        }
-        if (layer === 'Hotspot') {
-            return [
-                { color: '#ef4444', range: '0.60 미만', label: '핫스팟 후보' },
-                { color: '#b91c1c', range: '0.60 ~ 0.75', label: '주요 핫스팟' },
-                { color: '#7f1d1d', range: '0.75 이상', label: '최우선 핫스팟' }
-            ];
-        }
-        return [
-            { color: '#22c55e', range: '0.15 미만', label: '매우 낮음' },
-            { color: '#84cc16', range: '0.15 ~ 0.30', label: '낮음' },
-            { color: '#facc15', range: '0.30 ~ 0.45', label: '보통' },
-            { color: '#f97316', range: '0.45 ~ 0.60', label: '다소 높음' },
-            { color: '#dc2626', range: '0.60 ~ 0.75', label: '높음' },
-            { color: '#b91c1c', range: '0.75 이상', label: '매우 높음' }
-        ];
+
+        const bounds = [scale.minimum, ...scale.thresholds, scale.maximum];
+        const labels = ['하위 20%', '20~40%', '40~60%', '60~80%', '상위 20%'];
+        return palette.map((color, index) => ({
+            color,
+            range: formatScaleValue(bounds[index]) + ' ~ ' + formatScaleValue(bounds[index + 1]),
+            label: labels[index]
+        }));
     }
 
     function createRiskGridLayer(L, grid) {
@@ -1739,6 +1757,9 @@
             for (let index = 0; index < rows * columns; index += 1) addDrawableCell(index);
         }
 
+        const localScale = createLocalGridScale(values, drawableCells, layer, hotspotThreshold);
+        activeGridScale = localScale;
+
         const RiskCanvasLayer = L.Layer.extend({
             onAdd(mapInstance) {
                 this._map = mapInstance;
@@ -1779,7 +1800,7 @@
                     const topLeft = this._map.latLngToContainerPoint(cell.northwest);
                     const bottomRight = this._map.latLngToContainerPoint(cell.southeast);
 
-                    context.fillStyle = gridColor(value, layer);
+                    context.fillStyle = gridColor(value, layer, localScale);
                     context.fillRect(
                         Math.floor(topLeft.x),
                         Math.floor(topLeft.y),
@@ -1828,6 +1849,7 @@
     function removeRiskGridLayer() {
         riskGridLayer?.remove();
         riskGridLayer = null;
+        activeGridScale = null;
     }
 
     function renderRiskGridLayer() {
@@ -2195,10 +2217,10 @@
                         <b>100m {gridLayerLabels[selectedGridLayer] || selectedGridLayer} 격자</b>
                         <span>{riskGridVisible ? `${riskGrid.stats.validCells?.toLocaleString()}셀 표시 중` : '숨김'}</span>
                         <div class="risk-ramp" aria-hidden="true"></div>
-                        <small>낮음 → 높음</small>
+                        <small>{activeGridScale?.singleValue ? '단일값 · 공간 차이 없음' : '대상지 내 하위 20% → 상위 20%'}</small>
                     </label>
                     <div class="risk-scale-legend" aria-label={`${gridLayerLabels[selectedGridLayer] || selectedGridLayer} 색상 스케일 범례`}>
-                        <b>{gridLayerLabels[selectedGridLayer] || selectedGridLayer} 색상 스케일</b>
+                        <b>{gridLayerLabels[selectedGridLayer] || selectedGridLayer} · 대상지 맞춤 색상</b>
                         <div class="risk-scale-stops">
                             {#each legendStops(selectedGridLayer) as stop}
                                 <div class="risk-scale-stop">
