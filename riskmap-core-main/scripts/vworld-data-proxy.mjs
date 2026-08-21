@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import * as h5wasm from 'h5wasm/node';
 import proj4 from 'proj4';
 import pg from 'pg';
+import { createObservedHazardGridBuilder } from './hazard-grid.mjs';
 
 const { Pool } = pg;
 
@@ -38,7 +39,10 @@ const httpsAgent = allowInsecureTls ? new HttpsAgent({ rejectUnauthorized: false
 const port = Number(process.env.VWORLD_PROXY_PORT || process.argv.find((arg) => arg.startsWith('--port='))?.split('=')[1] || 5176);
 const staticRootArgument = process.argv.find((arg) => arg.startsWith('--static-root='))?.slice('--static-root='.length);
 const staticRoot = staticRootArgument ? resolve(workspaceRoot, staticRootArgument) : '';
-const cadastrePool = new Pool({
+const buildObservedHazardGrid = createObservedHazardGridBuilder({
+  metricsPath: resolve(root, 'static', 'analysis-data', 'climate', 'kma-asos-hazard-station-metrics-2021-2025.json'),
+  boundariesPath: resolve(workspaceRoot, 'public', 'data', 'climate', 'admin-boundaries.geojson'),
+});const cadastrePool = new Pool({
   host: process.env.VWORLD_POSTGIS_HOST || env.VWORLD_POSTGIS_HOST || '127.0.0.1',
   port: Number(process.env.VWORLD_POSTGIS_PORT || env.VWORLD_POSTGIS_PORT || 55432),
   database: process.env.VWORLD_POSTGIS_DATABASE || env.VWORLD_POSTGIS_DATABASE || 'vworld_cadastral',
@@ -791,8 +795,17 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (routePath === '/cadastre/health') {
+  if (routePath === '/hazard-grid') {
     try {
+      send(response, 200, JSON.stringify(buildObservedHazardGrid(url.searchParams)));
+    } catch (error) {
+      const status = /must be|No boundary|too large/.test(error?.message || '') ? 400 : 503;
+      send(response, status, JSON.stringify({ ok: false, error: error?.message || 'Hazard grid generation failed' }));
+    }
+    return;
+  }
+
+  if (routePath === '/cadastre/health') {    try {
       const result = await cadastrePool.query(`
         SELECT current_database() AS database,
                to_regclass('cadastre.parcels') IS NOT NULL AS ready,

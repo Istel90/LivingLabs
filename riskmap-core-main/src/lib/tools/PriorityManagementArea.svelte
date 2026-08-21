@@ -38,18 +38,6 @@
     const requiredGroups = ['기후위험', '노출', '민감도', '적응역량'];
     const vLambda = 0.5;
     const asset = (path) => `${base}${path}`;
-    const IC4_ADMIN_DATA_PATH = '/analysis-data/climate/ic4-admin-projections.json';
-    const ic4IndicatorSpecs = {
-        H01: { metricCode: 'TA', unit: '°C' },
-        H02: { derived: 'estimatedMeanMaximum', unit: '°C' },
-        H03: { derived: 'estimatedMeanMinimum', unit: '°C' },
-        H04: { metricCode: 'HW33' },
-        H05: { metricCode: 'TR25' },
-        H06: { metricCode: 'WSDI' },
-        H07: { metricCode: 'TXx', unit: '°C' },
-        H08: { metricCode: 'TX90P' },
-        H09: { metricCode: 'WSDIx' }
-    };
     const ar6MetricByIndicator = { H04: 'HW33', H05: 'TR25', H06: 'WSDI' };
     let ic4DatasetPromise = null;
     const DEPARTMENT_HANDOFF_KEY = 'livinglabs.priorityManagementHandoff';
@@ -68,8 +56,8 @@
             projectSuffix: '폭염 위험지역 분석',
             heroEmphasis: '우선 대응지를 찾습니다.',
             heroDescription: '기후위험(H), 노출(E), 취약성(V) 지표를 직접 구성하고 공간 분석 결과를 의사결정으로 연결하세요.',
-            sampleNotice: 'IC4 행정구역 기후값과 수원시 100m 공간격자를 분석에 사용할 수 있습니다.',
-            mapSource: 'IC4 RCP45 2020 행정구역 기후값 / 수원시 AR6·Landsat 100m 격자',
+            sampleNotice: '기상청 ASOS 관측값을 공간보간한 전국 100m 셀별 기후위험 자료를 사용할 수 있습니다.',
+            mapSource: 'KMA ASOS 2021~2025 관측소 기반 100m 셀별 보간 / 수원시 AR6·Landsat 100m 격자',
             rasterPath: null,
             dataSummaryPath: '/analysis-data/suwon-heatwave-data-summary.json',
             rasterReadyPrefix: '선택 행정구역 100m Hazard 격자',
@@ -96,8 +84,8 @@
             ],
             indicators: [
                 { id: 101, indicatorCode: 'H01', icon: '🌡', label: 'H01 · 평균기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#f59e0b' },
-                { id: 102, indicatorCode: 'H02', icon: '↗', label: 'H02 · 평균최고기온(추정)', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#ef4444' },
-                { id: 103, indicatorCode: 'H03', icon: '↘', label: 'H03 · 평균최저기온(추정)', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#3b82f6' },
+                { id: 102, indicatorCode: 'H02', icon: '↗', label: 'H02 · 평균최고기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#ef4444' },
+                { id: 103, indicatorCode: 'H03', icon: '↘', label: 'H03 · 평균최저기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#3b82f6' },
                 { id: 104, indicatorCode: 'H04', icon: '☀', label: 'H04 · 폭염일수', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#dc2626' },
                 { id: 105, indicatorCode: 'H05', icon: '🌙', label: 'H05 · 열대야일수', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#be123c' },
                 { id: 106, indicatorCode: 'H06', icon: '↗', label: 'H06 · 온난일 계속기간 WSDI', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#ea580c' },
@@ -234,21 +222,24 @@
         return '/analysis-data/ar6-hazard/H_climate_' + metricCode + '_' + scenario.toUpperCase() + '_' + period + '_100m_z.json';
     }
 
+    function observedHazardDataPath(indicatorCode, code) {
+        if (!code || !/^H0[1-9]$/.test(indicatorCode || '')) return null;
+        const route = `/hazard-grid?regionCode=${encodeURIComponent(code)}&indicator=${encodeURIComponent(indicatorCode)}`;
+        return vworldProxyUrl ? new URL(route, vworldProxyUrl).toString() : route;
+    }
+
     function configureIndicatorsForRegion(sourceIndicators, code, datasetMode = hazardDatasetMode) {
         return sourceIndicators.map((item) => {
             if (item.indicatorCode) {
                 const observed = datasetMode === 'observed';
-                const ic4Spec = observed ? ic4IndicatorSpecs[item.indicatorCode] : null;
+                const observedPath = observed ? observedHazardDataPath(item.indicatorCode, code) : null;
                 const lstAvailable = observed && item.indicatorCode === 'H10' && code === '41110';
                 const futurePath = !observed && code === '41110'
                     ? ar6DataPath(item.indicatorCode, hazardScenario, hazardFuturePeriod)
                     : null;
-                const available = Boolean(code) && Boolean(ic4Spec || lstAvailable || futurePath);
-                const estimated = Boolean(ic4Spec?.derived);
-                const description = ic4Spec
-                    ? estimated
-                        ? 'IC4 RCP45 2020 평균기온·일교차 기반 추정값 · 분석용 100m 격자에 동일값 할당'
-                        : 'IC4 RCP45 2020 행정구역 평균값 · 분석용 100m 격자에 동일값 할당'
+                const available = Boolean(observedPath || lstAvailable || futurePath);
+                const description = observedPath
+                    ? 'KMA ASOS 2021~2025 일자료 · 관측소 69개를 공간보간한 선택 지역 100m 셀 중심값'
                     : lstAvailable
                         ? '2021~2025 여름철 P90 평균 · Landsat 30m를 집계한 수원시 100m 격자'
                         : futurePath
@@ -259,18 +250,16 @@
 
                 return {
                     ...item,
-                    ic4Spec,
                     description,
-                    sourceType: ic4Spec
-                        ? estimated ? 'KMA-IC4-admin-derived-100m-proxy' : 'KMA-IC4-admin-100m-proxy'
+                    sourceType: observedPath
+                        ? 'KMA-ASOS-IDW-100m'
                         : lstAvailable
                             ? 'Landsat-LST-100m'
                             : futurePath
                                 ? 'KMA-AR6-region-100m'
                                 : item.sourceType,
-                    dataPath: ic4Spec ? IC4_ADMIN_DATA_PATH
-                        : lstAvailable ? '/analysis-data/suwon-lst-100m-epsg5179-grid.json'
-                        : futurePath,
+                    dataPath: observedPath
+                        || (lstAvailable ? '/analysis-data/suwon-lst-100m-epsg5179-grid.json' : futurePath),
                     dataStatus: available ? 'available' : 'missing',
                     enabled: available && item.indicatorCode === (observed ? 'H01' : 'H04')
                 };
@@ -281,7 +270,6 @@
             return { ...item };
         });
     }
-
     function isGridValueCollection(values) {
         return Array.isArray(values) || ArrayBuffer.isView(values);
     }
@@ -1007,70 +995,12 @@
         };
     }
 
-    async function loadIc4Dataset() {
-        if (!ic4DatasetPromise) {
-            ic4DatasetPromise = fetch(asset(IC4_ADMIN_DATA_PATH)).then((response) => {
-                if (!response.ok) throw new Error(`IC4 HTTP ${response.status}`);
-                return response.json();
-            });
-        }
-        return ic4DatasetPromise;
-    }
-
-    function ic4ValueForSpec(regionData, spec, scenario = 'RCP45', year = '2020') {
-        const values = regionData?.[scenario]?.[year];
-        if (!values || !spec) return NaN;
-        if (spec.metricCode) return Number(values[spec.metricCode]);
-
-        const meanTemperature = Number(values.TA);
-        const dailyTemperatureRange = Number(values.DTR);
-        if (!Number.isFinite(meanTemperature) || !Number.isFinite(dailyTemperatureRange)) return NaN;
-        if (spec.derived === 'estimatedMeanMaximum') return meanTemperature + (dailyTemperatureRange / 2);
-        if (spec.derived === 'estimatedMeanMinimum') return meanTemperature - (dailyTemperatureRange / 2);
-        return NaN;
-    }
-
-    function resolveIc4AdminIndicator(item, dataset) {
-        const scenario = 'RCP45';
-        const year = '2020';
-        const spec = item.ic4Spec;
-        const rawValue = ic4ValueForSpec(dataset?.data?.[regionCode], spec, scenario, year);
-        if (!Number.isFinite(rawValue)) throw new Error(item.indicatorCode + ' IC4 value is missing');
-
-        const nationwideValues = Object.values(dataset?.data || {})
-            .map((regionData) => ic4ValueForSpec(regionData, spec, scenario, year))
-            .filter(Number.isFinite);
-        const minimum = Math.min(...nationwideValues);
-        const maximum = Math.max(...nationwideValues);
-        const normalizedValue = maximum > minimum ? (rawValue - minimum) / (maximum - minimum) : 0.5;
-        const metric = spec?.metricCode
-            ? (dataset?.metrics || []).find((entry) => entry.code === spec.metricCode)
-            : null;
-        const estimated = Boolean(spec?.derived);
-
-        return {
-            ...item,
-            publicFallbackPending: true,
-            adminNormalizedValue: clamp01(normalizedValue),
-            adminRawValue: Number(rawValue.toFixed(2)),
-            adminRawUnit: spec?.unit || metric?.unit || '일/년',
-            adminSourceResolution: estimated
-                ? 'IC4 RCP45 2020 시군구 평균기온 ± 일교차/2 추정 → 분석용 100m 동일값 할당'
-                : 'IC4 RCP45 2020 시군구 평균 → 분석용 100m 동일값 할당',
-            loadError: ''
-        };
-    }
-
     async function loadIndicatorInputs(sourceIndicators) {
         const loaded = await Promise.all(sourceIndicators.map(async (item) => {
             if (!usableIndicator(item) || !item.dataPath) return item;
 
             try {
-                if (item.ic4Spec) {
-                    return resolveIc4AdminIndicator(item, await loadIc4Dataset());
-                }
-
-                const dataUrl = asset(item.dataPath);
+                const dataUrl = /^https?:\/\//.test(item.dataPath) ? item.dataPath : asset(item.dataPath);
                 const response = await fetch(dataUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const grid = await response.json();
@@ -1542,7 +1472,7 @@
         hazardDatasetMode = value === 'future' ? 'future' : 'observed';
         await refreshHazardDataset(
             hazardDatasetMode === 'observed'
-                ? 'IC4 RCP45 2020 기후값으로 전환했습니다. H01~H09를 사용할 수 있고 H10은 수원시 Landsat 격자를 사용합니다.'
+                ? 'KMA ASOS 2021~2025 관측소 기반 셀별 기후값으로 전환했습니다. H01~H09를 사용할 수 있고 H10은 수원시 Landsat 격자를 사용합니다.'
                 : `미래 ${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 수원시 100m 자료로 전환했습니다. 원자료가 있는 H04~H06을 사용할 수 있습니다.`
         );
     }

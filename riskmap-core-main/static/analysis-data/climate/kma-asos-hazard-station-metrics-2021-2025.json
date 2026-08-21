@@ -1,0 +1,1344 @@
+{
+  "schemaVersion": "kma-asos-hazard-stations/v1",
+  "generatedAt": "2026-08-21T15:53:25.963Z",
+  "source": "KMA API Hub ASOS daily observations (kma_sfcdd.php)",
+  "observedPeriod": "2021-01-01/2025-12-31",
+  "baselinePeriod": "1991-01-01/2020-12-31",
+  "method": {
+    "spatialization": "IDW using nearest 8 eligible ASOS stations, power 2",
+    "H01": "mean daily mean temperature",
+    "H02": "mean daily maximum temperature",
+    "H03": "mean daily minimum temperature",
+    "H04": "mean annual count of days with TX >= 33C",
+    "H05": "mean annual count of days with TN >= 25C",
+    "H06": "mean annual WSDI, runs >= 6 days above calendar-day TX90",
+    "H07": "mean annual maximum daily maximum temperature (TXx)",
+    "H08": "mean annual count above calendar-day TX90 (TX90p)",
+    "H09": "mean annual maximum warm-spell run length (WSDIx)"
+  },
+  "units": {
+    "H01": "°C",
+    "H02": "°C",
+    "H03": "°C",
+    "H04": "일/년",
+    "H05": "일/년",
+    "H06": "일/년",
+    "H07": "°C",
+    "H08": "일/년",
+    "H09": "일/년"
+  },
+  "stationCount": 69,
+  "stations": [
+    {
+      "id": "90",
+      "longitude": 128.56473,
+      "latitude": 38.25085,
+      "name": "속초",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.584,
+        "H02": 17.723,
+        "H03": 9.613,
+        "H04": 10.6,
+        "H05": 12.8,
+        "H06": 6,
+        "H07": 35.5,
+        "H08": 63.6,
+        "H09": 6
+      }
+    },
+    {
+      "id": "95",
+      "longitude": 127.3042,
+      "latitude": 38.14787,
+      "name": "철원",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 11.453,
+        "H02": 17.51,
+        "H03": 5.859,
+        "H04": 11.6,
+        "H05": 2.2,
+        "H06": 15,
+        "H07": 35.06,
+        "H08": 71.6,
+        "H09": 7
+      }
+    },
+    {
+      "id": "100",
+      "longitude": 128.71834,
+      "latitude": 37.67713,
+      "name": "대관령",
+      "targetCompleteness": 0.9973,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 8.333,
+        "H02": 13.759,
+        "H03": 3.136,
+        "H04": 0.4,
+        "H05": 0,
+        "H06": 15.2,
+        "H07": 31.44,
+        "H08": 75,
+        "H09": 7
+      }
+    },
+    {
+      "id": "101",
+      "longitude": 127.7357,
+      "latitude": 37.90262,
+      "name": "춘천",
+      "targetCompleteness": 0.9978,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 12.505,
+        "H02": 18.509,
+        "H03": 7.254,
+        "H04": 22.8,
+        "H05": 8.4,
+        "H06": 10,
+        "H07": 35.88,
+        "H08": 68.6,
+        "H09": 7.2
+      }
+    },
+    {
+      "id": "105",
+      "longitude": 128.89099,
+      "latitude": 37.75147,
+      "name": "강릉",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 15.099,
+        "H02": 19.56,
+        "H03": 11.133,
+        "H04": 25.2,
+        "H05": 25,
+        "H06": 8.6,
+        "H07": 37.78,
+        "H08": 77.4,
+        "H09": 7.8
+      }
+    },
+    {
+      "id": "106",
+      "longitude": 129.12433,
+      "latitude": 37.50709,
+      "name": "동해",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 0.9556,
+      "metrics": {
+        "H01": 14.175,
+        "H02": 18.421,
+        "H03": 10.29,
+        "H04": 10.2,
+        "H05": 10.6,
+        "H06": 12.6,
+        "H07": 35.76,
+        "H08": 72.2,
+        "H09": 8.8
+      }
+    },
+    {
+      "id": "108",
+      "longitude": 126.9658,
+      "latitude": 37.57142,
+      "name": "서울",
+      "targetCompleteness": 0.9995,
+      "baselineCompleteness": 0.9999,
+      "metrics": {
+        "H01": 14.037,
+        "H02": 18.722,
+        "H03": 10.019,
+        "H04": 21.6,
+        "H05": 29.2,
+        "H06": 14.4,
+        "H07": 36.56,
+        "H08": 76.6,
+        "H09": 7.6
+      }
+    },
+    {
+      "id": "112",
+      "longitude": 126.6249,
+      "latitude": 37.47772,
+      "name": "인천",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 0.9999,
+      "metrics": {
+        "H01": 13.432,
+        "H02": 17.18,
+        "H03": 10.19,
+        "H04": 7.4,
+        "H05": 26.4,
+        "H06": 9.4,
+        "H07": 35.1,
+        "H08": 55,
+        "H09": 6.6
+      }
+    },
+    {
+      "id": "114",
+      "longitude": 127.94659,
+      "latitude": 37.33749,
+      "name": "원주",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.401,
+        "H02": 18.637,
+        "H03": 8.697,
+        "H04": 20.2,
+        "H05": 10.8,
+        "H06": 12.4,
+        "H07": 35.4,
+        "H08": 59.8,
+        "H09": 7
+      }
+    },
+    {
+      "id": "115",
+      "longitude": 130.89863,
+      "latitude": 37.48129,
+      "name": "울릉도",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 14.237,
+        "H02": 17.368,
+        "H03": 11.641,
+        "H04": 1.2,
+        "H05": 19.8,
+        "H06": 10,
+        "H07": 33.18,
+        "H08": 75.8,
+        "H09": 7.6
+      }
+    },
+    {
+      "id": "119",
+      "longitude": 126.983,
+      "latitude": 37.25746,
+      "name": "수원",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.444,
+        "H02": 18.606,
+        "H03": 8.874,
+        "H04": 18,
+        "H05": 17.4,
+        "H06": 12.6,
+        "H07": 35.76,
+        "H08": 63.8,
+        "H09": 7.4
+      }
+    },
+    {
+      "id": "121",
+      "longitude": 128.45743,
+      "latitude": 37.18126,
+      "name": "영월",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 0.8667,
+      "metrics": {
+        "H01": 12.381,
+        "H02": 18.878,
+        "H03": 7.041,
+        "H04": 24.2,
+        "H05": 0.4,
+        "H06": 12.4,
+        "H07": 36.64,
+        "H08": 68,
+        "H09": 8.2
+      }
+    },
+    {
+      "id": "127",
+      "longitude": 127.9525,
+      "latitude": 36.97045,
+      "name": "충주",
+      "targetCompleteness": 0.9995,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 12.818,
+        "H02": 18.812,
+        "H03": 7.469,
+        "H04": 23.4,
+        "H05": 5.6,
+        "H06": 15.8,
+        "H07": 35.28,
+        "H08": 65.4,
+        "H09": 6.6
+      }
+    },
+    {
+      "id": "129",
+      "longitude": 126.4939,
+      "latitude": 36.77658,
+      "name": "서산",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 0.9998,
+      "metrics": {
+        "H01": 13.275,
+        "H02": 18.49,
+        "H03": 8.616,
+        "H04": 16.6,
+        "H05": 12.8,
+        "H06": 14.6,
+        "H07": 35.56,
+        "H08": 72.4,
+        "H09": 8.2
+      }
+    },
+    {
+      "id": "130",
+      "longitude": 129.41278,
+      "latitude": 36.99176,
+      "name": "울진",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.938,
+        "H02": 18.576,
+        "H03": 9.735,
+        "H04": 8.4,
+        "H05": 8.4,
+        "H06": 3,
+        "H07": 36.16,
+        "H08": 61,
+        "H09": 5.2
+      }
+    },
+    {
+      "id": "131",
+      "longitude": 127.44066,
+      "latitude": 36.63924,
+      "name": "청주",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 14.754,
+        "H02": 19.71,
+        "H03": 10.412,
+        "H04": 34,
+        "H05": 31.8,
+        "H06": 25,
+        "H07": 36.56,
+        "H08": 81,
+        "H09": 7.8
+      }
+    },
+    {
+      "id": "133",
+      "longitude": 127.3721,
+      "latitude": 36.37199,
+      "name": "대전",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 14.293,
+        "H02": 19.877,
+        "H03": 9.513,
+        "H04": 31,
+        "H05": 18.2,
+        "H06": 25.6,
+        "H07": 36.16,
+        "H08": 82.2,
+        "H09": 9.4
+      }
+    },
+    {
+      "id": "135",
+      "longitude": 127.99458,
+      "latitude": 36.22025,
+      "name": "추풍령",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 12.69,
+        "H02": 18.177,
+        "H03": 7.528,
+        "H04": 11.2,
+        "H05": 0.4,
+        "H06": 4.2,
+        "H07": 34.18,
+        "H08": 47,
+        "H09": 6
+      }
+    },
+    {
+      "id": "136",
+      "longitude": 128.70733,
+      "latitude": 36.57293,
+      "name": "안동",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.286,
+        "H02": 19.277,
+        "H03": 7.892,
+        "H04": 29.8,
+        "H05": 5.8,
+        "H06": 10.4,
+        "H07": 36.3,
+        "H08": 61.4,
+        "H09": 5.8
+      }
+    },
+    {
+      "id": "138",
+      "longitude": 129.38002,
+      "latitude": 36.03201,
+      "name": "포항",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 15.599,
+        "H02": 19.757,
+        "H03": 11.913,
+        "H04": 25.2,
+        "H05": 30.2,
+        "H06": 7,
+        "H07": 36.86,
+        "H08": 54,
+        "H09": 6.2
+      }
+    },
+    {
+      "id": "140",
+      "longitude": 126.76135,
+      "latitude": 36.0053,
+      "name": "군산",
+      "targetCompleteness": 0.9995,
+      "baselineCompleteness": 0.9997,
+      "metrics": {
+        "H01": 13.995,
+        "H02": 18.873,
+        "H03": 9.83,
+        "H04": 14.8,
+        "H05": 15.4,
+        "H06": 16.2,
+        "H07": 35.44,
+        "H08": 77.8,
+        "H09": 8.8
+      }
+    },
+    {
+      "id": "143",
+      "longitude": 128.65296,
+      "latitude": 35.87797,
+      "name": "대구",
+      "targetCompleteness": 0.9995,
+      "baselineCompleteness": 0.9999,
+      "metrics": {
+        "H01": 15.126,
+        "H02": 20.698,
+        "H03": 10.3,
+        "H04": 40.4,
+        "H05": 19.6,
+        "H06": 14.2,
+        "H07": 37.46,
+        "H08": 59.6,
+        "H09": 7.6
+      }
+    },
+    {
+      "id": "146",
+      "longitude": 127.11718,
+      "latitude": 35.84092,
+      "name": "전주",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 14.881,
+        "H02": 20.168,
+        "H03": 10.466,
+        "H04": 30,
+        "H05": 21.2,
+        "H06": 16.6,
+        "H07": 36.44,
+        "H08": 68.4,
+        "H09": 8
+      }
+    },
+    {
+      "id": "152",
+      "longitude": 129.33469,
+      "latitude": 35.58237,
+      "name": "울산",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 15.075,
+        "H02": 19.819,
+        "H03": 10.92,
+        "H04": 14.8,
+        "H05": 13.2,
+        "H06": 6,
+        "H07": 35.3,
+        "H08": 48.4,
+        "H09": 6.4
+      }
+    },
+    {
+      "id": "155",
+      "longitude": 128.57282,
+      "latitude": 35.17019,
+      "name": "창원",
+      "targetCompleteness": 0.9989,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 15.341,
+        "H02": 20.349,
+        "H03": 11.269,
+        "H04": 25.2,
+        "H05": 22.6,
+        "H06": 20.8,
+        "H07": 35.94,
+        "H08": 70.8,
+        "H09": 11
+      }
+    },
+    {
+      "id": "156",
+      "longitude": 126.89156,
+      "latitude": 35.17294,
+      "name": "광주",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 15.321,
+        "H02": 20.521,
+        "H03": 11.12,
+        "H04": 26.2,
+        "H05": 20,
+        "H06": 18.4,
+        "H07": 35.9,
+        "H08": 68.2,
+        "H09": 9.6
+      }
+    },
+    {
+      "id": "159",
+      "longitude": 129.03203,
+      "latitude": 35.10468,
+      "name": "부산",
+      "targetCompleteness": 0.9995,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 15.995,
+        "H02": 20.243,
+        "H03": 12.7,
+        "H04": 10.2,
+        "H05": 35.2,
+        "H06": 20.8,
+        "H07": 34.72,
+        "H08": 72,
+        "H09": 11.2
+      }
+    },
+    {
+      "id": "162",
+      "longitude": 128.43561,
+      "latitude": 34.84541,
+      "name": "통영",
+      "targetCompleteness": 0.9984,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 15.574,
+        "H02": 20.142,
+        "H03": 11.947,
+        "H04": 10.2,
+        "H05": 22.6,
+        "H06": 22.6,
+        "H07": 34.92,
+        "H08": 79.2,
+        "H09": 11.6
+      }
+    },
+    {
+      "id": "165",
+      "longitude": 126.38151,
+      "latitude": 34.81732,
+      "name": "목포",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 15.069,
+        "H02": 18.922,
+        "H03": 11.814,
+        "H04": 9.8,
+        "H05": 30.2,
+        "H06": 12.6,
+        "H07": 34.36,
+        "H08": 57,
+        "H09": 9.8
+      }
+    },
+    {
+      "id": "168",
+      "longitude": 127.74063,
+      "latitude": 34.73929,
+      "name": "여수",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 15.646,
+        "H02": 19.224,
+        "H03": 12.706,
+        "H04": 4.2,
+        "H05": 34.8,
+        "H06": 22.4,
+        "H07": 33.66,
+        "H08": 76.8,
+        "H09": 11.6
+      }
+    },
+    {
+      "id": "170",
+      "longitude": 126.70182,
+      "latitude": 34.3959,
+      "name": "완도",
+      "targetCompleteness": 0.9962,
+      "baselineCompleteness": 0.9998,
+      "metrics": {
+        "H01": 15.774,
+        "H02": 20.541,
+        "H03": 11.909,
+        "H04": 22,
+        "H05": 19,
+        "H06": 40.4,
+        "H07": 35.3,
+        "H08": 99.4,
+        "H09": 15
+      }
+    },
+    {
+      "id": "184",
+      "longitude": 126.52969,
+      "latitude": 33.51411,
+      "name": "제주",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 17.589,
+        "H02": 21.034,
+        "H03": 14.69,
+        "H04": 27,
+        "H05": 56.8,
+        "H06": 30.8,
+        "H07": 36.16,
+        "H08": 93.8,
+        "H09": 12.4
+      }
+    },
+    {
+      "id": "185",
+      "longitude": 126.16283,
+      "latitude": 33.29382,
+      "name": "고산",
+      "targetCompleteness": 0.9967,
+      "baselineCompleteness": 0.9998,
+      "metrics": {
+        "H01": 16.901,
+        "H02": 19.79,
+        "H03": 14.403,
+        "H04": 3.8,
+        "H05": 37.6,
+        "H06": 25,
+        "H07": 34.2,
+        "H08": 82,
+        "H09": 12.4
+      }
+    },
+    {
+      "id": "188",
+      "longitude": 126.8802,
+      "latitude": 33.38677,
+      "name": "성산",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 0.9995,
+      "metrics": {
+        "H01": 16.803,
+        "H02": 20.379,
+        "H03": 13.387,
+        "H04": 5,
+        "H05": 37.8,
+        "H06": 30,
+        "H07": 33.16,
+        "H08": 80.6,
+        "H09": 11.8
+      }
+    },
+    {
+      "id": "189",
+      "longitude": 126.5653,
+      "latitude": 33.24616,
+      "name": "서귀포",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 17.762,
+        "H02": 21.127,
+        "H03": 14.899,
+        "H04": 11,
+        "H05": 50,
+        "H06": 23.4,
+        "H07": 34.16,
+        "H08": 75,
+        "H09": 13.8
+      }
+    },
+    {
+      "id": "192",
+      "longitude": 128.04004,
+      "latitude": 35.16378,
+      "name": "진주",
+      "targetCompleteness": 0.9989,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 14.307,
+        "H02": 20.677,
+        "H03": 8.782,
+        "H04": 24.2,
+        "H05": 8.6,
+        "H06": 13.2,
+        "H07": 36.38,
+        "H08": 61,
+        "H09": 9
+      }
+    },
+    {
+      "id": "201",
+      "longitude": 126.44634,
+      "latitude": 37.70739,
+      "name": "강화",
+      "targetCompleteness": 0.9984,
+      "baselineCompleteness": 0.9999,
+      "metrics": {
+        "H01": 12.249,
+        "H02": 17.049,
+        "H03": 7.674,
+        "H04": 4.4,
+        "H05": 5,
+        "H06": 9.4,
+        "H07": 34.34,
+        "H08": 55.4,
+        "H09": 7
+      }
+    },
+    {
+      "id": "202",
+      "longitude": 127.49446,
+      "latitude": 37.48863,
+      "name": "양평",
+      "targetCompleteness": 0.9995,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.024,
+        "H02": 18.54,
+        "H03": 8.319,
+        "H04": 16.4,
+        "H05": 6.6,
+        "H06": 8.6,
+        "H07": 35.14,
+        "H08": 50,
+        "H09": 6.4
+      }
+    },
+    {
+      "id": "203",
+      "longitude": 127.48421,
+      "latitude": 37.26399,
+      "name": "이천",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 0.9999,
+      "metrics": {
+        "H01": 13.021,
+        "H02": 19.02,
+        "H03": 7.703,
+        "H04": 23.4,
+        "H05": 6.4,
+        "H06": 11.8,
+        "H07": 35.82,
+        "H08": 68.4,
+        "H09": 7
+      }
+    },
+    {
+      "id": "211",
+      "longitude": 128.16811,
+      "latitude": 38.05991,
+      "name": "인제",
+      "targetCompleteness": 0.9995,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 11.624,
+        "H02": 17.797,
+        "H03": 6.495,
+        "H04": 16,
+        "H05": 2,
+        "H06": 15.2,
+        "H07": 35.54,
+        "H08": 67.8,
+        "H09": 9.4
+      }
+    },
+    {
+      "id": "212",
+      "longitude": 127.88043,
+      "latitude": 37.6836,
+      "name": "홍천",
+      "targetCompleteness": 0.9978,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 12.109,
+        "H02": 18.422,
+        "H03": 6.955,
+        "H04": 21.2,
+        "H05": 2.2,
+        "H06": 6.6,
+        "H07": 36.52,
+        "H08": 52.2,
+        "H09": 6
+      }
+    },
+    {
+      "id": "216",
+      "longitude": 128.98929,
+      "latitude": 37.17038,
+      "name": "태백",
+      "targetCompleteness": 0.9995,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 10.009,
+        "H02": 15.771,
+        "H03": 4.856,
+        "H04": 4.8,
+        "H05": 0,
+        "H06": 16.8,
+        "H07": 33.58,
+        "H08": 71.4,
+        "H09": 7.4
+      }
+    },
+    {
+      "id": "221",
+      "longitude": 128.19433,
+      "latitude": 37.15928,
+      "name": "제천",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 11.426,
+        "H02": 17.578,
+        "H03": 5.846,
+        "H04": 10.8,
+        "H05": 0.2,
+        "H06": 7.2,
+        "H07": 34.62,
+        "H08": 54.2,
+        "H09": 6.6
+      }
+    },
+    {
+      "id": "226",
+      "longitude": 127.73415,
+      "latitude": 36.48761,
+      "name": "보은",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 12.512,
+        "H02": 18.56,
+        "H03": 7.174,
+        "H04": 11.8,
+        "H05": 1.4,
+        "H06": 10.6,
+        "H07": 34.44,
+        "H08": 52.2,
+        "H09": 6.6
+      }
+    },
+    {
+      "id": "232",
+      "longitude": 127.29282,
+      "latitude": 36.76217,
+      "name": "천안",
+      "targetCompleteness": 0.9989,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 12.935,
+        "H02": 18.77,
+        "H03": 7.604,
+        "H04": 15.6,
+        "H05": 3.6,
+        "H06": 13.2,
+        "H07": 34.84,
+        "H08": 56,
+        "H09": 6.8
+      }
+    },
+    {
+      "id": "235",
+      "longitude": 126.55744,
+      "latitude": 36.32724,
+      "name": "보령",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.989,
+        "H02": 18.878,
+        "H03": 9.726,
+        "H04": 14,
+        "H05": 16.2,
+        "H06": 27.2,
+        "H07": 35.64,
+        "H08": 87.4,
+        "H09": 9.2
+      }
+    },
+    {
+      "id": "236",
+      "longitude": 126.92079,
+      "latitude": 36.27242,
+      "name": "부여",
+      "targetCompleteness": 0.9984,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.588,
+        "H02": 19.72,
+        "H03": 8.386,
+        "H04": 25.6,
+        "H05": 7.4,
+        "H06": 15.2,
+        "H07": 35.64,
+        "H08": 65.6,
+        "H09": 7.6
+      }
+    },
+    {
+      "id": "238",
+      "longitude": 127.48175,
+      "latitude": 36.10563,
+      "name": "금산",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.159,
+        "H02": 19.428,
+        "H03": 7.717,
+        "H04": 22.8,
+        "H05": 2.6,
+        "H06": 15,
+        "H07": 35.52,
+        "H08": 64.8,
+        "H09": 8.2
+      }
+    },
+    {
+      "id": "243",
+      "longitude": 126.71657,
+      "latitude": 35.72961,
+      "name": "부안",
+      "targetCompleteness": 0.9978,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 14.338,
+        "H02": 19.519,
+        "H03": 9.959,
+        "H04": 19.8,
+        "H05": 15.2,
+        "H06": 13.6,
+        "H07": 35.62,
+        "H08": 70.2,
+        "H09": 9.2
+      }
+    },
+    {
+      "id": "244",
+      "longitude": 127.28556,
+      "latitude": 35.61203,
+      "name": "임실",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 12.974,
+        "H02": 19.146,
+        "H03": 7.667,
+        "H04": 12.4,
+        "H05": 1.2,
+        "H06": 13.4,
+        "H07": 34.3,
+        "H08": 58,
+        "H09": 9.2
+      }
+    },
+    {
+      "id": "245",
+      "longitude": 126.83904,
+      "latitude": 35.56333,
+      "name": "정읍",
+      "targetCompleteness": 0.9995,
+      "baselineCompleteness": 0.9997,
+      "metrics": {
+        "H01": 14.252,
+        "H02": 19.694,
+        "H03": 9.547,
+        "H04": 29,
+        "H05": 12.4,
+        "H06": 15.6,
+        "H07": 36.22,
+        "H08": 63.8,
+        "H09": 9.2
+      }
+    },
+    {
+      "id": "247",
+      "longitude": 127.39652,
+      "latitude": 35.4213,
+      "name": "남원",
+      "targetCompleteness": 0.9973,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.764,
+        "H02": 19.82,
+        "H03": 8.562,
+        "H04": 27,
+        "H05": 6.8,
+        "H06": 12.6,
+        "H07": 35.78,
+        "H08": 56,
+        "H09": 8.4
+      }
+    },
+    {
+      "id": "248",
+      "longitude": 127.52031,
+      "latitude": 35.65696,
+      "name": "장수",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 11.925,
+        "H02": 18.2,
+        "H03": 6.329,
+        "H04": 5.4,
+        "H05": 0.4,
+        "H06": 15.4,
+        "H07": 33.68,
+        "H08": 68,
+        "H09": 9.2
+      }
+    },
+    {
+      "id": "260",
+      "longitude": 126.91951,
+      "latitude": 34.68886,
+      "name": "장흥",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 14.51,
+        "H02": 20.301,
+        "H03": 9.23,
+        "H04": 18.2,
+        "H05": 10.2,
+        "H06": 23.8,
+        "H07": 35.1,
+        "H08": 72.2,
+        "H09": 9
+      }
+    },
+    {
+      "id": "261",
+      "longitude": 126.56907,
+      "latitude": 34.55375,
+      "name": "해남",
+      "targetCompleteness": 0.9962,
+      "baselineCompleteness": 0.9994,
+      "metrics": {
+        "H01": 14.47,
+        "H02": 20.008,
+        "H03": 9.441,
+        "H04": 18.4,
+        "H05": 13,
+        "H06": 23,
+        "H07": 35.12,
+        "H08": 71,
+        "H09": 10.6
+      }
+    },
+    {
+      "id": "262",
+      "longitude": 127.27572,
+      "latitude": 34.61826,
+      "name": "고흥",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 0.9998,
+      "metrics": {
+        "H01": 14.732,
+        "H02": 20.324,
+        "H03": 9.683,
+        "H04": 20.6,
+        "H05": 8.2,
+        "H06": 33,
+        "H07": 35.22,
+        "H08": 73.8,
+        "H09": 10.8
+      }
+    },
+    {
+      "id": "271",
+      "longitude": 128.91449,
+      "latitude": 36.94361,
+      "name": "봉화",
+      "targetCompleteness": 0.9995,
+      "baselineCompleteness": 0.9997,
+      "metrics": {
+        "H01": 11.3,
+        "H02": 17.606,
+        "H03": 5.703,
+        "H04": 6.2,
+        "H05": 0,
+        "H06": 14.8,
+        "H07": 33.36,
+        "H08": 47.8,
+        "H09": 7
+      }
+    },
+    {
+      "id": "272",
+      "longitude": 128.51687,
+      "latitude": 36.87183,
+      "name": "영주",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 12.449,
+        "H02": 18.217,
+        "H03": 7.079,
+        "H04": 14.2,
+        "H05": 0.2,
+        "H06": 9.4,
+        "H07": 34.96,
+        "H08": 51.2,
+        "H09": 6.6
+      }
+    },
+    {
+      "id": "273",
+      "longitude": 128.14879,
+      "latitude": 36.62727,
+      "name": "문경",
+      "targetCompleteness": 0.9973,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.114,
+        "H02": 18.761,
+        "H03": 7.997,
+        "H04": 19,
+        "H05": 0.6,
+        "H06": 9.4,
+        "H07": 35.16,
+        "H08": 58.8,
+        "H09": 6.8
+      }
+    },
+    {
+      "id": "277",
+      "longitude": 129.40926,
+      "latitude": 36.53337,
+      "name": "영덕",
+      "targetCompleteness": 0.9984,
+      "baselineCompleteness": 0.9997,
+      "metrics": {
+        "H01": 13.97,
+        "H02": 19.17,
+        "H03": 9.392,
+        "H04": 17,
+        "H05": 4.6,
+        "H06": 5.4,
+        "H07": 36.06,
+        "H08": 53.4,
+        "H09": 6.4
+      }
+    },
+    {
+      "id": "278",
+      "longitude": 128.68864,
+      "latitude": 36.3561,
+      "name": "의성",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 12.99,
+        "H02": 20.238,
+        "H03": 6.825,
+        "H04": 39.2,
+        "H05": 2,
+        "H06": 15.2,
+        "H07": 37.34,
+        "H08": 63.6,
+        "H09": 7.2
+      }
+    },
+    {
+      "id": "279",
+      "longitude": 128.32055,
+      "latitude": 36.13055,
+      "name": "구미",
+      "targetCompleteness": 0.9989,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 14.426,
+        "H02": 20.438,
+        "H03": 9.313,
+        "H04": 36.8,
+        "H05": 6.8,
+        "H06": 20.4,
+        "H07": 36.66,
+        "H08": 73.2,
+        "H09": 8.8
+      }
+    },
+    {
+      "id": "281",
+      "longitude": 128.9514,
+      "latitude": 35.97742,
+      "name": "영천",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 0.9999,
+      "metrics": {
+        "H01": 13.859,
+        "H02": 19.949,
+        "H03": 8.407,
+        "H04": 27,
+        "H05": 5.6,
+        "H06": 13.2,
+        "H07": 36.28,
+        "H08": 50.6,
+        "H09": 6.6
+      }
+    },
+    {
+      "id": "284",
+      "longitude": 127.9099,
+      "latitude": 35.66739,
+      "name": "거창",
+      "targetCompleteness": 0.9978,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 13.043,
+        "H02": 19.848,
+        "H03": 7.164,
+        "H04": 23.4,
+        "H05": 0.8,
+        "H06": 9.6,
+        "H07": 35.56,
+        "H08": 62.6,
+        "H09": 7.8
+      }
+    },
+    {
+      "id": "285",
+      "longitude": 128.16994,
+      "latitude": 35.56505,
+      "name": "합천",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 0.9997,
+      "metrics": {
+        "H01": 14.441,
+        "H02": 20.956,
+        "H03": 8.954,
+        "H04": 35.2,
+        "H05": 8,
+        "H06": 11.4,
+        "H07": 36.88,
+        "H08": 55.4,
+        "H09": 6.8
+      }
+    },
+    {
+      "id": "288",
+      "longitude": 128.74412,
+      "latitude": 35.49147,
+      "name": "밀양",
+      "targetCompleteness": 0.9989,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 15.035,
+        "H02": 21.417,
+        "H03": 9.641,
+        "H04": 42.8,
+        "H05": 16.6,
+        "H06": 17,
+        "H07": 37.72,
+        "H08": 69.8,
+        "H09": 8.4
+      }
+    },
+    {
+      "id": "289",
+      "longitude": 127.8791,
+      "latitude": 35.413,
+      "name": "산청",
+      "targetCompleteness": 0.9989,
+      "baselineCompleteness": 0.9999,
+      "metrics": {
+        "H01": 13.926,
+        "H02": 20.22,
+        "H03": 8.667,
+        "H04": 25.4,
+        "H05": 3,
+        "H06": 10.6,
+        "H07": 36.3,
+        "H08": 61.6,
+        "H09": 7.6
+      }
+    },
+    {
+      "id": "294",
+      "longitude": 128.60459,
+      "latitude": 34.88818,
+      "name": "거제",
+      "targetCompleteness": 1,
+      "baselineCompleteness": 0.9999,
+      "metrics": {
+        "H01": 15.33,
+        "H02": 19.676,
+        "H03": 11.504,
+        "H04": 7.4,
+        "H05": 15.8,
+        "H06": 11.6,
+        "H07": 34.18,
+        "H08": 50.6,
+        "H09": 8
+      }
+    },
+    {
+      "id": "295",
+      "longitude": 127.92641,
+      "latitude": 34.81662,
+      "name": "남해",
+      "targetCompleteness": 0.9978,
+      "baselineCompleteness": 1,
+      "metrics": {
+        "H01": 15.319,
+        "H02": 20.022,
+        "H03": 11.314,
+        "H04": 14.2,
+        "H05": 16.2,
+        "H06": 14.6,
+        "H07": 35.06,
+        "H08": 49.6,
+        "H09": 8.8
+      }
+    }
+  ]
+}
