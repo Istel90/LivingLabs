@@ -150,7 +150,7 @@ async function createLandsatSampler(landsatImagePromise, bounds) {
   const pixelHeight = Math.abs(resolutionY);
   const imageWidth = image.getWidth();
   const imageHeight = image.getHeight();
-  const fillRadius = 5000;
+  const fillRadius = 20000;
   const firstColumn = Math.max(0, Math.floor((bounds.xmin - fillRadius - originX) / pixelWidth));
   const lastColumnExclusive = Math.min(imageWidth, Math.ceil((bounds.xmax + fillRadius - originX) / pixelWidth));
   const firstRow = Math.max(0, Math.floor((originY - bounds.ymax - fillRadius) / pixelHeight));
@@ -186,15 +186,20 @@ async function createLandsatSampler(landsatImagePromise, bounds) {
     const bucketY = Math.floor(y / bucketSize);
     let nearestDistance2 = fillRadius ** 2;
     let nearestValue = NaN;
-    for (let dy = -5; dy <= 5; dy += 1) {
-      for (let dx = -5; dx <= 5; dx += 1) {
-        for (const entry of buckets.get(`${bucketX + dx}:${bucketY + dy}`) || []) {
-          const distance2 = ((x - entry.x) ** 2) + ((y - entry.y) ** 2);
-          if (distance2 > nearestDistance2) continue;
-          nearestDistance2 = distance2;
-          nearestValue = entry.value;
+    const bucketRadius = Math.ceil(fillRadius / bucketSize);
+    for (let radius = 0; radius <= bucketRadius; radius += 1) {
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          if (radius > 0 && Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+          for (const entry of buckets.get(`${bucketX + dx}:${bucketY + dy}`) || []) {
+            const distance2 = ((x - entry.x) ** 2) + ((y - entry.y) ** 2);
+            if (distance2 > nearestDistance2) continue;
+            nearestDistance2 = distance2;
+            nearestValue = entry.value;
+          }
         }
       }
+      if (Number.isFinite(nearestValue) && ((radius - 1) * bucketSize) ** 2 > nearestDistance2) break;
     }
     return nearestValue;
   };
@@ -255,6 +260,7 @@ export function createObservedHazardGridBuilder({ metricsPath, boundariesPath, h
 
     const rawValues = new Float64Array(cellCount);
     rawValues.fill(Number.NaN);
+    const insideMask = indicator === 'H10' ? new Uint8Array(cellCount) : null;
     let rawMin = Infinity;
     let rawMax = -Infinity;
     let rawSum = 0;
@@ -274,6 +280,7 @@ export function createObservedHazardGridBuilder({ metricsPath, boundariesPath, h
           if (Number.isFinite(rawValues[index])) continue;
           const x = xmin + ((column + 0.5) * 100);
           if (!pointInPolygons(x, y, [polygon])) continue;
+          if (insideMask) insideMask[index] = 1;
           const value = sampleValue(x, y);
           if (!Number.isFinite(value)) continue;
           rawValues[index] = value;
@@ -285,12 +292,47 @@ export function createObservedHazardGridBuilder({ metricsPath, boundariesPath, h
       }
     }
     if (!validCells) throw new Error(`No valid cells generated for ${regionCode}`);
+    if (insideMask) {
+      const queue = new Int32Array(cellCount);
+      let head = 0;
+      let tail = 0;
+      rawValues.forEach((value, index) => {
+        if (Number.isFinite(value)) queue[tail++] = index;
+      });
+      while (head < tail) {
+        const index = queue[head++];
+        const row = Math.floor(index / columns);
+        const column = index % columns;
+        const neighbors = [
+          column > 0 ? index - 1 : -1,
+          column + 1 < columns ? index + 1 : -1,
+          row > 0 ? index - columns : -1,
+          row + 1 < rows ? index + columns : -1,
+        ];
+        for (const neighbor of neighbors) {
+          if (neighbor < 0 || Number.isFinite(rawValues[neighbor])) continue;
+          rawValues[neighbor] = rawValues[index];
+          queue[tail++] = neighbor;
+        }
+      }
+      rawMin = Infinity;
+      rawMax = -Infinity;
+      rawSum = 0;
+      validCells = 0;
+      rawValues.forEach((value, index) => {
+        if (!insideMask[index] || !Number.isFinite(value)) return;
+        rawMin = Math.min(rawMin, value);
+        rawMax = Math.max(rawMax, value);
+        rawSum += value;
+        validCells += 1;
+      });
+    }
 
     const range = rawMax - rawMin;
     let normalizedSum = 0;
     const sparseValues = [];
     rawValues.forEach((value, index) => {
-      if (!Number.isFinite(value)) return;
+      if (!Number.isFinite(value) || (insideMask && !insideMask[index])) return;
       const normalized = range > 0 ? (value - rawMin) / range : 0.5;
       normalizedSum += normalized;
       sparseValues.push(index, Number(normalized.toFixed(6)));
@@ -306,7 +348,7 @@ export function createObservedHazardGridBuilder({ metricsPath, boundariesPath, h
       sourceResolution: indicator === 'H01'
         ? 'KMA 500m 고해상도 관측격자 2021~2025 평균 → EPSG:5179 100m 최근접 정렬'
         : indicator === 'H10'
-          ? 'Landsat 2021~2025 여름철 LST P90 전국 EPSG:5179 100m 원격자 · 결측은 5km 이내 최근접 유효 픽셀 보완'
+          ? 'Landsat 2021~2025 여름철 LST P90 전국 EPSG:5179 100m 원격자 · 결측은 20km 이내 원자료 탐색 후 지역 내 최근접 유효 픽셀 보완'
           : 'KMA 500m 평균기온 지형패턴 + ASOS 69개소 지표 잔차보정 → EPSG:5179 100m 정렬',
       observedPeriod: indicator === 'H10' ? '2021-01-01/2025-12-31' : indicator === 'H01' ? highres.metadata.period : metrics.observedPeriod,
       baselinePeriod: indicator === 'H10' ? null : metrics.baselinePeriod,

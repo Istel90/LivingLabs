@@ -241,7 +241,7 @@
                     ? item.indicatorCode === 'H01'
                         ? 'KMA 2021~2025 연평균 500m 고해상도 관측격자 · 선택 지역 100m 분석 셀에 최근접 정렬'
                         : item.indicatorCode === 'H10'
-                            ? '2021~2025 여름철 P90 · Landsat 전국 100m 원격자, 결측 셀은 5km 이내 최근접 유효 픽셀로 보완'
+                            ? '2021~2025 여름철 P90 · Landsat 전국 100m 원격자, 결측 셀은 20km 이내 원자료 탐색 후 지역 내 최근접 유효 픽셀로 보완'
                             : 'KMA 500m 평균기온 지형패턴과 ASOS 69개소 지표 잔차를 결합한 통계적 상세화 · 선택 지역 100m 분석 셀'
                     : futurePath
                         ? hazardScenario.toUpperCase() + ' ' + hazardFuturePeriod + '(' + ar6PeriodForYear(hazardFuturePeriod) + ') 수원시 100m 격자'

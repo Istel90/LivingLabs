@@ -75,39 +75,53 @@ export function createHevGridStore({ pool, datasetKey = DATASET_KEY }) {
     return { ...metadata, sparseValues, storage: 'postgis' };
   }
 
-  async function put(payload) {
-    const regionCode = String(payload?.regionCode || '');
-    const indicator = String(payload?.indicator || '').toUpperCase();
-    assertLookup(regionCode, indicator);
-    const column = INDICATOR_COLUMNS[indicator];
-    if (!Array.isArray(payload.sparseValues) || payload.sparseValues.length % 2 !== 0) {
-      throw new Error('sparseValues must contain index/value pairs');
+  async function putMany(payloads) {
+    if (!Array.isArray(payloads) || !payloads.length) throw new Error('At least one HEV payload is required');
+    const regionCode = String(payloads[0]?.regionCode || '');
+    const basePayload = payloads[0];
+    const columns = Number(basePayload.columns);
+    const { originX, originY, pixelWidth, pixelHeight } = basePayload.transform || {};
+    const cells = new Map();
+    const metadataByIndicator = new Map();
+
+    for (const payload of payloads) {
+      const indicator = String(payload?.indicator || '').toUpperCase();
+      assertLookup(String(payload?.regionCode || ''), indicator);
+      if (payload.regionCode !== regionCode) throw new Error('All HEV payloads must use the same regionCode');
+      if (!Array.isArray(payload.sparseValues) || payload.sparseValues.length % 2 !== 0) {
+        throw new Error('sparseValues must contain index/value pairs');
+      }
+      const column = INDICATOR_COLUMNS[indicator];
+      const rawMin = Number(payload.stats?.rawMin);
+      const rawMax = Number(payload.stats?.rawMax);
+      const range = rawMax - rawMin;
+      metadataByIndicator.set(indicator, compactPayload(payload));
+      for (let offset = 0; offset < payload.sparseValues.length; offset += 2) {
+        const cellIndex = Number(payload.sparseValues[offset]);
+        const normalizedValue = Number(payload.sparseValues[offset + 1]);
+        const row = Math.floor(cellIndex / columns);
+        const columnIndex = cellIndex % columns;
+        const cell = cells.get(cellIndex) || {
+          cellIndex,
+          x: Math.round(originX + ((columnIndex + 0.5) * pixelWidth)),
+          y: Math.round(originY - ((row + 0.5) * pixelHeight)),
+          values: {},
+        };
+        cell.values[column] = range > 0 ? rawMin + (normalizedValue * range) : rawMin;
+        cells.set(cellIndex, cell);
+      }
     }
 
-    const indices = [];
-    const xs = [];
-    const ys = [];
-    const values = [];
-    const rawMin = Number(payload.stats?.rawMin);
-    const rawMax = Number(payload.stats?.rawMax);
-    const range = rawMax - rawMin;
-    const columns = Number(payload.columns);
-    const { originX, originY, pixelWidth, pixelHeight } = payload.transform || {};
-    for (let offset = 0; offset < payload.sparseValues.length; offset += 2) {
-      const cellIndex = Number(payload.sparseValues[offset]);
-      const value = Number(payload.sparseValues[offset + 1]);
-      const row = Math.floor(cellIndex / columns);
-      const columnIndex = cellIndex % columns;
-      indices.push(cellIndex);
-      xs.push(Math.round(originX + ((columnIndex + 0.5) * pixelWidth)));
-      ys.push(Math.round(originY - ((row + 0.5) * pixelHeight)));
-      values.push(range > 0 ? rawMin + (value * range) : rawMin);
-    }
+    const orderedCells = [...cells.values()].sort((left, right) => left.cellIndex - right.cellIndex);
+    const indices = orderedCells.map((cell) => cell.cellIndex);
+    const xs = orderedCells.map((cell) => cell.x);
+    const ys = orderedCells.map((cell) => cell.y);
+    const indicatorArrays = Object.values(INDICATOR_COLUMNS).map((column) => orderedCells.map((cell) => cell.values[column] ?? null));
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query("SET LOCAL statement_timeout = '60s'");
+      await client.query("SET LOCAL statement_timeout = '120s'");
       const activeVersionId = await versionId(client);
       if (!activeVersionId) throw new Error(`HEV dataset version is not initialized: ${datasetKey}`);
 
@@ -132,44 +146,65 @@ export function createHevGridStore({ pool, datasetKey = DATASET_KEY }) {
           FROM input i
           JOIN analysis.grid_cells_100m c ON c.x = i.x AND c.y = i.y
           ON CONFLICT (region_code, cell_index) DO UPDATE SET cell_id = EXCLUDED.cell_id
+          WHERE analysis.region_grid_cells_100m.cell_id IS DISTINCT FROM EXCLUDED.cell_id
         `,
         values: [regionCode, indices, xs, ys],
       });
       await client.query({
         text: `
           WITH input AS (
-            SELECT * FROM unnest($3::integer[], $4::real[]) AS t(cell_index, value)
+            SELECT * FROM unnest(
+              $3::integer[], $4::real[], $5::real[], $6::real[], $7::real[], $8::real[],
+              $9::real[], $10::real[], $11::real[], $12::real[], $13::real[]
+            ) AS t(cell_index, h01, h02, h03, h04, h05, h06, h07, h08, h09, h10)
           )
-          INSERT INTO analysis.hev_values_100m (version_id, cell_id, ${column})
-          SELECT $1, r.cell_id, i.value
+          INSERT INTO analysis.hev_values_100m
+            (version_id, cell_id, h01, h02, h03, h04, h05, h06, h07, h08, h09, h10)
+          SELECT $1, r.cell_id, i.h01, i.h02, i.h03, i.h04, i.h05, i.h06, i.h07, i.h08, i.h09, i.h10
           FROM input i
           JOIN analysis.region_grid_cells_100m r
             ON r.region_code = $2 AND r.cell_index = i.cell_index
           ON CONFLICT (version_id, cell_id) DO UPDATE SET
-            ${column} = EXCLUDED.${column},
+            h01 = COALESCE(EXCLUDED.h01, analysis.hev_values_100m.h01),
+            h02 = COALESCE(EXCLUDED.h02, analysis.hev_values_100m.h02),
+            h03 = COALESCE(EXCLUDED.h03, analysis.hev_values_100m.h03),
+            h04 = COALESCE(EXCLUDED.h04, analysis.hev_values_100m.h04),
+            h05 = COALESCE(EXCLUDED.h05, analysis.hev_values_100m.h05),
+            h06 = COALESCE(EXCLUDED.h06, analysis.hev_values_100m.h06),
+            h07 = COALESCE(EXCLUDED.h07, analysis.hev_values_100m.h07),
+            h08 = COALESCE(EXCLUDED.h08, analysis.hev_values_100m.h08),
+            h09 = COALESCE(EXCLUDED.h09, analysis.hev_values_100m.h09),
+            h10 = COALESCE(EXCLUDED.h10, analysis.hev_values_100m.h10),
             updated_at = now()
         `,
-        values: [activeVersionId, regionCode, indices, values],
+        values: [activeVersionId, regionCode, indices, ...indicatorArrays],
       });
-      await client.query({
-        text: `
-          INSERT INTO analysis.region_indicator_stats
-            (version_id, region_code, indicator_code, payload, updated_at)
-          VALUES ($1, $2, $3, $4::jsonb, now())
-          ON CONFLICT (version_id, region_code, indicator_code) DO UPDATE SET
-            payload = EXCLUDED.payload,
-            updated_at = now()
-        `,
-        values: [activeVersionId, regionCode, indicator, JSON.stringify(compactPayload(payload))],
-      });
+      for (const [indicator, metadata] of metadataByIndicator) {
+        await client.query({
+          text: `
+            INSERT INTO analysis.region_indicator_stats
+              (version_id, region_code, indicator_code, payload, updated_at)
+            VALUES ($1, $2, $3, $4::jsonb, now())
+            ON CONFLICT (version_id, region_code, indicator_code) DO UPDATE SET
+              payload = EXCLUDED.payload,
+              updated_at = now()
+          `,
+          values: [activeVersionId, regionCode, indicator, JSON.stringify(metadata)],
+        });
+      }
       await client.query('COMMIT');
-      return { regionCode, indicator, cells: values.length, versionId: activeVersionId };
+      return { regionCode, indicators: [...metadataByIndicator.keys()], cells: orderedCells.length, versionId: activeVersionId };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally {
       client.release();
     }
+  }
+
+  async function put(payload) {
+    const result = await putMany([payload]);
+    return { ...result, indicator: payload.indicator };
   }
 
   async function status() {
@@ -187,7 +222,7 @@ export function createHevGridStore({ pool, datasetKey = DATASET_KEY }) {
     return result.rows[0] || { dataset_key: datasetKey, regions: 0, region_indicators: 0, cells: 0 };
   }
 
-  return { ready, get, put, status };
+  return { ready, get, put, putMany, status };
 }
 
 export { DATASET_KEY as DEFAULT_HEV_DATASET_KEY };

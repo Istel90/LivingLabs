@@ -23,7 +23,7 @@ npm run climate:load-hev-postgis -- --region=11680 --indicator=H10
 npm run climate:load-hev-postgis -- --all
 ```
 
-`--all`은 전국 행정경계의 모든 5자리 지역코드와 H01~H10을 순차 적재한다. 반복 실행해도 UPSERT로 갱신된다.
+`--all`은 화면에서 선택 가능한 직접 시·군·구, 통합시, 인천광역시를 포함한 전국 269개 지역의 H01~H10을 순차 적재한다. 반복 실행해도 UPSERT로 갱신된다.
 
 ## API 동작
 
