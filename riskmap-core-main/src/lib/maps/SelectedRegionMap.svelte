@@ -30,6 +30,7 @@
         onGridLayerChange = () => {},
         onParcelCandidatesChange = () => {},
         onParcelCandidateFocus = () => {},
+        onParcelDerivationComplete = () => {},
         parcelCandidates = [],
         candidateContextKey = '',
         mapResetKey = 0,
@@ -1433,7 +1434,10 @@
                 onParcelCandidatesChange([], message, runCandidateContextKey);
             }
         } finally {
-            if (parcelCandidateRunId === runId) parcelCandidateRunning = false;
+            if (parcelCandidateRunId === runId) {
+                parcelCandidateRunning = false;
+                onParcelDerivationComplete();
+            }
         }
     }
 

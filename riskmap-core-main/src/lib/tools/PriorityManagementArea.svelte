@@ -1,5 +1,5 @@
 <script>
-    import { onDestroy, onMount } from 'svelte';
+    import { onDestroy, onMount, tick } from 'svelte';
     import { base } from '$app/paths';
     import proj4 from 'proj4';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
@@ -296,7 +296,70 @@
     $: projectName = `${region} ${config.projectSuffix}`;
     let analysisDone = false;
     let running = false;
-    let bottomPanelTab = '03';
+    let mapSectionEl;
+    let candidatesSectionEl;
+    let lastUserScrollAt = 0;
+    let previousRunning = false;
+
+    function markUserScroll() {
+        lastUserScrollAt = Date.now();
+    }
+
+    function isSectionInView(el) {
+        if (!el) return true;
+        const rect = el.getBoundingClientRect();
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        return rect.bottom > 0 && rect.top < viewportHeight;
+    }
+
+    async function scrollResultIntoView(el) {
+        if (!el) return;
+        await tick();
+        if (Date.now() - lastUserScrollAt < 800) return;
+        if (isSectionInView(el)) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    $: {
+        if (previousRunning && !running && analysisDone) {
+            scrollResultIntoView(mapSectionEl);
+        }
+        previousRunning = running;
+    }
+
+    function handleParcelDerivationComplete() {
+        scrollResultIntoView(candidatesSectionEl);
+    }
+
+    const baseMapHeight = 760;
+    let viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+    let viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 1000;
+
+    function updateViewportSize() {
+        viewportWidth = window.innerWidth;
+        viewportHeight = window.innerHeight;
+    }
+
+    $: mapAreaHeight = viewportWidth < 1401
+        ? baseMapHeight
+        : (() => {
+            const oldBudget = viewportHeight - 254;
+            const newBudget = viewportHeight * 0.85 - 190;
+            const ratio = oldBudget > 0 ? newBudget / oldBudget : 1;
+            return Math.max(320, Math.round(baseMapHeight * ratio));
+        })();
+
+    onMount(() => {
+        updateViewportSize();
+        window.addEventListener('resize', updateViewportSize);
+        window.addEventListener('wheel', markUserScroll, { passive: true });
+        window.addEventListener('touchmove', markUserScroll, { passive: true });
+        return () => {
+            window.removeEventListener('resize', updateViewportSize);
+            window.removeEventListener('wheel', markUserScroll);
+            window.removeEventListener('touchmove', markUserScroll);
+        };
+    });
     let selectedCandidate = 0;
     let activeAlternative = 0;
     let gridUnit = '100m';
@@ -2523,7 +2586,7 @@
             <section class="hero">
                 <div>
                     <span class="eyebrow">LOCAL CLIMATE RISK ASSESSMENT</span>
-                    <h1>지역의 위험을 읽고,<br /><em>{config.heroEmphasis}</em></h1>
+                    <h1>지역의 위험을 읽고, <em>{config.heroEmphasis}</em></h1>
                     <p>{config.heroDescription}</p>
                 </div>
                 <div class="hero-actions">
@@ -2719,7 +2782,7 @@
                 </div>
 
                 <div class="right-column">
-                    <div class="panel analysis-map-panel">
+                    <div class="panel analysis-map-panel" bind:this={mapSectionEl}>
                         <div class="panel-head map-head">
                             <div><span class="section-number">02</span><h2>{alternatives[activeAlternative]?.name} 분석 지도</h2><p>{alternatives[activeAlternative]?.description} · {region} · 행정구역 코드 {regionCode}</p></div>
                             <div class="map-toolbar">
@@ -2761,7 +2824,7 @@
                             <SelectedRegionMap
                                 {regionCode}
                                 regionName={region}
-                                height="760px"
+                                height={`${mapAreaHeight}px`}
                                 showCadastral={false}
                                 analysisIndicators={analysisDone ? appliedIndicators : previewAnalysisIndicators}
                                 riskGrid={analysisResult?.gridResult || indicatorPreviewGrid}
@@ -2774,6 +2837,7 @@
                                 {focusedCandidate}
                                 onParcelCandidatesChange={handleParcelCandidates}
                                 onParcelCandidateFocus={handleMapParcelCandidateFocus}
+                                onParcelDerivationComplete={handleParcelDerivationComplete}
                             />
                             <section class="score-row map-score-overlay" aria-label="리스크 평가 결과">
                                 <div class="score-card risk"><span>{analysisResult?.hazardOnly ? '예비 위험도' : '종합 위험도'}</span><strong>{formatScore(resultRiskScore)}</strong><small>{analysisDone ? `${analysisResult.gridUnit} · ${analysisResult.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk'}` : '분석 실행 대기'}</small></div>
@@ -2783,12 +2847,11 @@
                             </section>
                         </div>
                     </div>
-                    <div class="map-bottom-panel">
-                        <div class="map-bottom-tab-bar" role="tablist">
-                            <button type="button" role="tab" class:active={bottomPanelTab === '03'} aria-selected={bottomPanelTab === '03'} onclick={() => (bottomPanelTab = '03')}>03 실천권역</button>
-                            <button type="button" role="tab" class:active={bottomPanelTab === '04'} aria-selected={bottomPanelTab === '04'} onclick={() => (bottomPanelTab = '04')}>04 검토 요청</button>
-                        </div>
-            <section class="panel candidates wide-candidates map-bottom-tab-panel" class:tab-hidden={bottomPanelTab !== '03'}>
+                </div>
+            </section>
+
+            <section class="post-analysis-phase">
+            <section class="panel candidates wide-candidates" bind:this={candidatesSectionEl}>
                 <div class="panel-head">
                     <div><span class="section-number">03</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
                     <span class="count-badge">실천지구 {candidateList.length}개</span>
@@ -2849,7 +2912,7 @@
                 {/if}
             </section>
 
-            <section class="decision-panel decision-transfer-summary map-bottom-tab-panel" id="decision-transfer-summary" class:tab-hidden={bottomPanelTab !== '04'}>
+            <section class="decision-panel decision-transfer-summary" id="decision-transfer-summary">
                 <div class="decision-title">
                     <span class="section-number">04</span>
                     <div>
@@ -2890,8 +2953,6 @@
                     </button>
                 </div>
             </section>
-                    </div>
-                </div>
             </section>
         </main>
     </div>
