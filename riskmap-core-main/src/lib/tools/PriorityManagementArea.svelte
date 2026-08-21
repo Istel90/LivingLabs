@@ -33,13 +33,24 @@
 
     const steps = ['프로젝트 설정', '입력자료', '가중치 설정', '분석 실행', '결과 지도', '의사결정 지원'];
     const gridOptions = ['100m', '50m', '10m', '5m'];
-    const hazardScenarios = ['ssp126', 'ssp245', 'ssp370', 'ssp585'];
+    const hazardScenarios = ['ssp126', 'ssp245', 'ssp370'];
     const hazardFuturePeriods = ['2026', '2027', '2028', '2029', '2030', '2040', '2050', '2060', '2070', '2080', '2090', '2100'];
     const requiredGroups = ['기후위험', '노출', '민감도', '적응역량'];
     const vLambda = 0.5;
     const asset = (path) => `${base}${path}`;
     const IC4_ADMIN_DATA_PATH = '/analysis-data/climate/ic4-admin-projections.json';
-    const ic4MetricByIndicator = { H06: 'WSDI', H08: 'TX90P', H09: 'WSDIx' };
+    const ic4IndicatorSpecs = {
+        H01: { metricCode: 'TA', unit: '°C' },
+        H02: { derived: 'estimatedMeanMaximum', unit: '°C' },
+        H03: { derived: 'estimatedMeanMinimum', unit: '°C' },
+        H04: { metricCode: 'HW33' },
+        H05: { metricCode: 'TR25' },
+        H06: { metricCode: 'WSDI' },
+        H07: { metricCode: 'TXx', unit: '°C' },
+        H08: { metricCode: 'TX90P' },
+        H09: { metricCode: 'WSDIx' }
+    };
+    const ar6MetricByIndicator = { H04: 'HW33', H05: 'TR25', H06: 'WSDI' };
     let ic4DatasetPromise = null;
     const DEPARTMENT_HANDOFF_KEY = 'livinglabs.priorityManagementHandoff';
     const priorityHandoffInboxUrl = import.meta.env.VITE_PRIORITY_HANDOFF_INBOX_URL || '/priority-handoff';
@@ -57,8 +68,8 @@
             projectSuffix: '폭염 위험지역 분석',
             heroEmphasis: '우선 대응지를 찾습니다.',
             heroDescription: '기후위험(H), 노출(E), 취약성(V) 지표를 직접 구성하고 공간 분석 결과를 의사결정으로 연결하세요.',
-            sampleNotice: '전국 행정구역별 H01~H10 100m 분석격자를 확인할 수 있습니다.',
-            mapSource: '전국 최근 5년 H01~H05·H07·H10 / SSP245 H01~H09 100m 격자',
+            sampleNotice: 'IC4 행정구역 기후값과 수원시 100m 공간격자를 분석에 사용할 수 있습니다.',
+            mapSource: 'IC4 RCP45 2020 행정구역 기후값 / 수원시 AR6·Landsat 100m 격자',
             rasterPath: null,
             dataSummaryPath: '/analysis-data/suwon-heatwave-data-summary.json',
             rasterReadyPrefix: '선택 행정구역 100m Hazard 격자',
@@ -85,8 +96,8 @@
             ],
             indicators: [
                 { id: 101, indicatorCode: 'H01', icon: '🌡', label: 'H01 · 평균기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#f59e0b' },
-                { id: 102, indicatorCode: 'H02', icon: '↗', label: 'H02 · 평균최고기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#ef4444' },
-                { id: 103, indicatorCode: 'H03', icon: '↘', label: 'H03 · 평균최저기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#3b82f6' },
+                { id: 102, indicatorCode: 'H02', icon: '↗', label: 'H02 · 평균최고기온(추정)', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#ef4444' },
+                { id: 103, indicatorCode: 'H03', icon: '↘', label: 'H03 · 평균최저기온(추정)', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#3b82f6' },
                 { id: 104, indicatorCode: 'H04', icon: '☀', label: 'H04 · 폭염일수', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#dc2626' },
                 { id: 105, indicatorCode: 'H05', icon: '🌙', label: 'H05 · 열대야일수', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#be123c' },
                 { id: 106, indicatorCode: 'H06', icon: '↗', label: 'H06 · 온난일 계속기간 WSDI', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#ea580c' },
@@ -209,53 +220,57 @@
     };
 
     const config = hazardConfigs[hazard] || hazardConfigs.heatwave;
+    function ar6PeriodForYear(year) {
+        const numericYear = Number(year);
+        if (numericYear <= 2040) return 'ST';
+        if (numericYear <= 2060) return 'MT';
+        return 'LT';
+    }
+
+    function ar6DataPath(indicatorCode, scenario, year) {
+        const metricCode = ar6MetricByIndicator[indicatorCode];
+        if (!metricCode || !hazardScenarios.includes(scenario)) return null;
+        const period = ar6PeriodForYear(year);
+        return '/analysis-data/ar6-hazard/H_climate_' + metricCode + '_' + scenario.toUpperCase() + '_' + period + '_100m_z.json';
+    }
+
     function configureIndicatorsForRegion(sourceIndicators, code, datasetMode = hazardDatasetMode) {
-        const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09', 'H10']);
         return sourceIndicators.map((item) => {
             if (item.indicatorCode) {
                 const observed = datasetMode === 'observed';
-                const availableForDataset = observed
-                    ? observedCodes.has(item.indicatorCode)
-                    : item.indicatorCode !== 'H10';
-                const available = Boolean(code) && availableForDataset;
-                const dataQuery = new URLSearchParams({
-                    regionCode: code,
-                    mode: observed ? 'observed' : 'future',
-                    indicator: item.indicatorCode,
-                    scenario: hazardScenario,
-                    period: hazardFuturePeriod
-                });
-                const ic4MetricCode = observed ? ic4MetricByIndicator[item.indicatorCode] : null;
+                const ic4Spec = observed ? ic4IndicatorSpecs[item.indicatorCode] : null;
+                const lstAvailable = observed && item.indicatorCode === 'H10' && code === '41110';
+                const futurePath = !observed && code === '41110'
+                    ? ar6DataPath(item.indicatorCode, hazardScenario, hazardFuturePeriod)
+                    : null;
+                const available = Boolean(code) && Boolean(ic4Spec || lstAvailable || futurePath);
+                const estimated = Boolean(ic4Spec?.derived);
+                const description = ic4Spec
+                    ? estimated
+                        ? 'IC4 RCP45 2020 평균기온·일교차 기반 추정값 · 분석용 100m 격자에 동일값 할당'
+                        : 'IC4 RCP45 2020 행정구역 평균값 · 분석용 100m 격자에 동일값 할당'
+                    : lstAvailable
+                        ? '2021~2025 여름철 P90 평균 · Landsat 30m를 집계한 수원시 100m 격자'
+                        : futurePath
+                            ? hazardScenario.toUpperCase() + ' ' + hazardFuturePeriod + '(' + ar6PeriodForYear(hazardFuturePeriod) + ') 수원시 100m 격자'
+                            : observed && item.indicatorCode === 'H10'
+                                ? '현재 연결된 Landsat 원자료는 수원시만 제공'
+                                : '현재 연결된 원자료 없음';
+
                 return {
                     ...item,
-                    ic4MetricCode,
-                    description: ic4MetricCode
-                        ? 'IC4 2020 행정구역 평균값 · 분석용 100m 격자에 동일값 할당'
-                        : observed
-                        ? item.indicatorCode === 'H01'
-                            ? '2021~2025 평균 · 500m 원자료를 정렬한 지역 100m 분석격자'
-                            : item.indicatorCode === 'H10'
-                                ? '2021~2025 여름철 P90 평균 · Landsat 30m를 집계한 지역 100m 격자'
-                                : observedCodes.has(item.indicatorCode)
-                                    ? '2021~2025 ASOS 95개소 지표를 IDW 공간화한 지역 100m 분석격자'
-                                    : '1991~2020 기준자료 수집 후 100m 공간모델 구축 예정'
-                        : item.indicatorCode === 'H10'
-                            ? 'SSP 기반 직접 미래 전망자료 없음'
-                            : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 지역 100m 분석격자`,
-                    sourceType: ic4MetricCode
-                        ? 'KMA-IC4-admin-100m-proxy'
-                        : observed
-                        ? item.indicatorCode === 'H10'
+                    ic4Spec,
+                    description,
+                    sourceType: ic4Spec
+                        ? estimated ? 'KMA-IC4-admin-derived-100m-proxy' : 'KMA-IC4-admin-100m-proxy'
+                        : lstAvailable
                             ? 'Landsat-LST-100m'
-                            : item.indicatorCode === 'H01'
-                                ? 'KMA-observed-100m'
-                                : 'KMA-ASOS-IDW-100m'
-                        : 'KMA-AR6-region-100m',
-                    dataPath: available
-                        ? ic4MetricCode
-                            ? IC4_ADMIN_DATA_PATH
-                            : `/hazard-grid?${dataQuery.toString()}`
-                        : null,
+                            : futurePath
+                                ? 'KMA-AR6-region-100m'
+                                : item.sourceType,
+                    dataPath: ic4Spec ? IC4_ADMIN_DATA_PATH
+                        : lstAvailable ? '/analysis-data/suwon-lst-100m-epsg5179-grid.json'
+                        : futurePath,
                     dataStatus: available ? 'available' : 'missing',
                     enabled: available && item.indicatorCode === (observed ? 'H01' : 'H04')
                 };
@@ -1002,28 +1017,46 @@
         return ic4DatasetPromise;
     }
 
+    function ic4ValueForSpec(regionData, spec, scenario = 'RCP45', year = '2020') {
+        const values = regionData?.[scenario]?.[year];
+        if (!values || !spec) return NaN;
+        if (spec.metricCode) return Number(values[spec.metricCode]);
+
+        const meanTemperature = Number(values.TA);
+        const dailyTemperatureRange = Number(values.DTR);
+        if (!Number.isFinite(meanTemperature) || !Number.isFinite(dailyTemperatureRange)) return NaN;
+        if (spec.derived === 'estimatedMeanMaximum') return meanTemperature + (dailyTemperatureRange / 2);
+        if (spec.derived === 'estimatedMeanMinimum') return meanTemperature - (dailyTemperatureRange / 2);
+        return NaN;
+    }
+
     function resolveIc4AdminIndicator(item, dataset) {
         const scenario = 'RCP45';
         const year = '2020';
-        const metricCode = item.ic4MetricCode;
-        const rawValue = Number(dataset?.data?.[regionCode]?.[scenario]?.[year]?.[metricCode]);
-        if (!Number.isFinite(rawValue)) throw new Error(`${metricCode} IC4 value is missing`);
+        const spec = item.ic4Spec;
+        const rawValue = ic4ValueForSpec(dataset?.data?.[regionCode], spec, scenario, year);
+        if (!Number.isFinite(rawValue)) throw new Error(item.indicatorCode + ' IC4 value is missing');
 
         const nationwideValues = Object.values(dataset?.data || {})
-            .map((regionData) => Number(regionData?.[scenario]?.[year]?.[metricCode]))
+            .map((regionData) => ic4ValueForSpec(regionData, spec, scenario, year))
             .filter(Number.isFinite);
         const minimum = Math.min(...nationwideValues);
         const maximum = Math.max(...nationwideValues);
         const normalizedValue = maximum > minimum ? (rawValue - minimum) / (maximum - minimum) : 0.5;
-        const metric = (dataset?.metrics || []).find((entry) => entry.code === metricCode);
+        const metric = spec?.metricCode
+            ? (dataset?.metrics || []).find((entry) => entry.code === spec.metricCode)
+            : null;
+        const estimated = Boolean(spec?.derived);
 
         return {
             ...item,
             publicFallbackPending: true,
             adminNormalizedValue: clamp01(normalizedValue),
-            adminRawValue: rawValue,
-            adminRawUnit: metric?.unit || '일/년',
-            adminSourceResolution: 'IC4 2020 시군구 평균 → 분석용 100m 동일값 할당',
+            adminRawValue: Number(rawValue.toFixed(2)),
+            adminRawUnit: spec?.unit || metric?.unit || '일/년',
+            adminSourceResolution: estimated
+                ? 'IC4 RCP45 2020 시군구 평균기온 ± 일교차/2 추정 → 분석용 100m 동일값 할당'
+                : 'IC4 RCP45 2020 시군구 평균 → 분석용 100m 동일값 할당',
             loadError: ''
         };
     }
@@ -1033,11 +1066,11 @@
             if (!usableIndicator(item) || !item.dataPath) return item;
 
             try {
-                if (item.ic4MetricCode) {
+                if (item.ic4Spec) {
                     return resolveIc4AdminIndicator(item, await loadIc4Dataset());
                 }
 
-                const dataUrl = item.dataPath.startsWith('/hazard-grid') ? item.dataPath : asset(item.dataPath);
+                const dataUrl = asset(item.dataPath);
                 const response = await fetch(dataUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const grid = await response.json();
@@ -1509,8 +1542,8 @@
         hazardDatasetMode = value === 'future' ? 'future' : 'observed';
         await refreshHazardDataset(
             hazardDatasetMode === 'observed'
-                ? '최근 5년(2021~2025) 100m 자료로 전환했습니다. H01~H05·H07·H10을 사용할 수 있습니다.'
-                : `미래 ${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 100m 자료로 전환했습니다. H01~H09를 사용할 수 있습니다.`
+                ? 'IC4 RCP45 2020 기후값으로 전환했습니다. H01~H09를 사용할 수 있고 H10은 수원시 Landsat 격자를 사용합니다.'
+                : `미래 ${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 수원시 100m 자료로 전환했습니다. 원자료가 있는 H04~H06을 사용할 수 있습니다.`
         );
     }
 
@@ -1535,12 +1568,12 @@
 
     async function setHazardScenario(value) {
         hazardScenario = hazardScenarios.includes(value) ? value : 'ssp245';
-        await refreshHazardDataset(`${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 전국 100m 미래지표로 전환했습니다.`);
+        await refreshHazardDataset(`${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 수원시 100m 미래지표로 전환했습니다.`);
     }
 
     async function setHazardFuturePeriod(value) {
         hazardFuturePeriod = hazardFuturePeriods.includes(value) ? value : '2050';
-        await refreshHazardDataset(`${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 전국 100m 미래지표로 전환했습니다.`);
+        await refreshHazardDataset(`${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 수원시 100m 미래지표로 전환했습니다.`);
     }
 
     async function setNationalRegion(nextCode) {
@@ -2710,7 +2743,7 @@
                 <section class="lab-analysis-runner" class:complete={analysisDone} aria-label="기후위험 실험실 분석 실행">
                     <div class="lab-analysis-runner-copy">
                         <span>기존 실천권역 분석 기능</span>
-                        <strong>{region} · {hazardDatasetMode === 'observed' ? '2021~2025 최근 5년' : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod}`}</strong>
+                        <strong>{region} · {hazardDatasetMode === 'observed' ? 'IC4 RCP45 · 2020' : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod}`}</strong>
                         <small>{analysisDone ? analysisMessage : 'H01~H10 기후위험 지표와 기존 노출·취약성·적응역량 지표를 결합해 Risk를 계산합니다.'}</small>
                     </div>
                     <div class="lab-analysis-flow" aria-label="분석 흐름">
@@ -2740,7 +2773,7 @@
                         </div>
                         <label>Hazard 기준기간
                             <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
-                                <option value="observed">최근 5년 · 2021~2025</option>
+                                <option value="observed">IC4 기준값 · RCP45 2020</option>
                                 <option value="future">미래 시나리오 · 2026~2100</option>
                             </select>
                         </label>
