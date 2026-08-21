@@ -44,6 +44,7 @@ const buildObservedHazardGrid = createObservedHazardGridBuilder({
   boundariesPath: resolve(workspaceRoot, 'public', 'data', 'climate', 'admin-boundaries.geojson'),
   highresBinaryPath: resolve(root, 'static', 'analysis-data', 'climate', 'kma-highres-ta-2021-2025-500m.f32.gz'),
   highresMetadataPath: resolve(root, 'static', 'analysis-data', 'climate', 'kma-highres-ta-2021-2025-500m.json'),
+  landsatPath: resolve(root, 'static', 'analysis-data', 'climate', 'kor_lst_summer_p90_2021_2025_100m_epsg5179.tif'),
 });
 const cadastrePool = new Pool({
   host: process.env.VWORLD_POSTGIS_HOST || env.VWORLD_POSTGIS_HOST || '127.0.0.1',
@@ -800,7 +801,7 @@ const server = createServer(async (request, response) => {
 
   if (routePath === '/hazard-grid') {
     try {
-      send(response, 200, JSON.stringify(buildObservedHazardGrid(url.searchParams)));
+      send(response, 200, JSON.stringify(await buildObservedHazardGrid(url.searchParams)));
     } catch (error) {
       const status = /must be|No boundary|too large/.test(error?.message || '') ? 400 : 503;
       send(response, status, JSON.stringify({ ok: false, error: error?.message || 'Hazard grid generation failed' }));

@@ -223,7 +223,7 @@
     }
 
     function observedHazardDataPath(indicatorCode, code) {
-        if (!code || !/^H0[1-9]$/.test(indicatorCode || '')) return null;
+        if (!code || !/^H(?:0[1-9]|10)$/.test(indicatorCode || '')) return null;
         const route = `/hazard-grid?regionCode=${encodeURIComponent(code)}&indicator=${encodeURIComponent(indicatorCode)}`;
         return vworldProxyUrl ? new URL(route, vworldProxyUrl).toString() : route;
     }
@@ -233,35 +233,33 @@
             if (item.indicatorCode) {
                 const observed = datasetMode === 'observed';
                 const observedPath = observed ? observedHazardDataPath(item.indicatorCode, code) : null;
-                const lstAvailable = observed && item.indicatorCode === 'H10' && code === '41110';
                 const futurePath = !observed && code === '41110'
                     ? ar6DataPath(item.indicatorCode, hazardScenario, hazardFuturePeriod)
                     : null;
-                const available = Boolean(observedPath || lstAvailable || futurePath);
+                const available = Boolean(observedPath || futurePath);
                 const description = observedPath
                     ? item.indicatorCode === 'H01'
                         ? 'KMA 2021~2025 연평균 500m 고해상도 관측격자 · 선택 지역 100m 분석 셀에 최근접 정렬'
-                        : 'KMA ASOS 2021~2025 일자료 · 관측소 69개를 공간보간한 선택 지역 100m 셀 중심값'
-                    : lstAvailable
-                        ? '2021~2025 여름철 P90 평균 · Landsat 30m를 집계한 수원시 100m 격자'
-                        : futurePath
-                            ? hazardScenario.toUpperCase() + ' ' + hazardFuturePeriod + '(' + ar6PeriodForYear(hazardFuturePeriod) + ') 수원시 100m 격자'
-                            : observed && item.indicatorCode === 'H10'
-                                ? '현재 연결된 Landsat 원자료는 수원시만 제공'
-                                : '현재 연결된 원자료 없음';
+                        : item.indicatorCode === 'H10'
+                            ? '2021~2025 여름철 P90 · Landsat 전국 100m 원격자, 결측 셀은 5km 이내 최근접 유효 픽셀로 보완'
+                            : 'KMA 500m 평균기온 지형패턴과 ASOS 69개소 지표 잔차를 결합한 통계적 상세화 · 선택 지역 100m 분석 셀'
+                    : futurePath
+                        ? hazardScenario.toUpperCase() + ' ' + hazardFuturePeriod + '(' + ar6PeriodForYear(hazardFuturePeriod) + ') 수원시 100m 격자'
+                        : '현재 연결된 원자료 없음';
 
                 return {
                     ...item,
                     description,
                     sourceType: observedPath
-                        ? item.indicatorCode === 'H01' ? 'KMA-observed-500m-to-100m' : 'KMA-ASOS-IDW-100m'
-                        : lstAvailable
-                            ? 'Landsat-LST-100m'
-                            : futurePath
-                                ? 'KMA-AR6-region-100m'
-                                : item.sourceType,
-                    dataPath: observedPath
-                        || (lstAvailable ? '/analysis-data/suwon-lst-100m-epsg5179-grid.json' : futurePath),
+                        ? item.indicatorCode === 'H01'
+                            ? 'KMA-observed-500m-to-100m'
+                            : item.indicatorCode === 'H10'
+                                ? 'Landsat-LST-100m'
+                                : 'KMA-ASOS-statistical-downscaling-500m'
+                        : futurePath
+                            ? 'KMA-AR6-region-100m'
+                            : item.sourceType,
+                    dataPath: observedPath || futurePath,
                     dataStatus: available ? 'available' : 'missing',
                     enabled: available && item.indicatorCode === (observed ? 'H01' : 'H04')
                 };
