@@ -6,6 +6,9 @@ import { extname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as h5wasm from 'h5wasm/node';
 import proj4 from 'proj4';
+import pg from 'pg';
+
+const { Pool } = pg;
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const workspaceRoot = resolve(root, '..');
@@ -35,6 +38,16 @@ const httpsAgent = allowInsecureTls ? new HttpsAgent({ rejectUnauthorized: false
 const port = Number(process.env.VWORLD_PROXY_PORT || process.argv.find((arg) => arg.startsWith('--port='))?.split('=')[1] || 5176);
 const staticRootArgument = process.argv.find((arg) => arg.startsWith('--static-root='))?.slice('--static-root='.length);
 const staticRoot = staticRootArgument ? resolve(workspaceRoot, staticRootArgument) : '';
+const cadastrePool = new Pool({
+  host: process.env.VWORLD_POSTGIS_HOST || env.VWORLD_POSTGIS_HOST || '127.0.0.1',
+  port: Number(process.env.VWORLD_POSTGIS_PORT || env.VWORLD_POSTGIS_PORT || 55432),
+  database: process.env.VWORLD_POSTGIS_DATABASE || env.VWORLD_POSTGIS_DATABASE || 'vworld_cadastral',
+  user: process.env.VWORLD_POSTGIS_USER || env.VWORLD_POSTGIS_USER || 'postgres',
+  password: process.env.VWORLD_POSTGIS_PASSWORD || env.VWORLD_POSTGIS_PASSWORD || undefined,
+  max: 4,
+  connectionTimeoutMillis: 3000,
+  idleTimeoutMillis: 30000,
+});
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -68,6 +81,76 @@ function send(response, status, body, contentType = 'application/json; charset=u
     'Content-Type': contentType,
   });
   response.end(body);
+}
+
+function featureCollection(rows) {
+  return {
+    type: 'FeatureCollection',
+    features: rows.map(({ geometry, ...properties }) => ({
+      type: 'Feature',
+      id: properties.pnu,
+      geometry: typeof geometry === 'string' ? JSON.parse(geometry) : geometry,
+      properties,
+    })),
+  };
+}
+
+async function fetchCadastreParcel(searchParams) {
+  const pnu = (searchParams.get('pnu') || '').trim();
+  if (!/^\d{19}$/.test(pnu)) throw new Error('pnu must be exactly 19 digits');
+
+  const result = await cadastrePool.query({
+    text: `
+      SELECT pnu, legal_dong_code, legal_dong_name, lot_number,
+             lot_number_land_category, reference_date, sigungu_code,
+             ST_AsGeoJSON(ST_Transform(geom, 4326), 7) AS geometry
+      FROM cadastre.parcels_readable
+      WHERE pnu = $1
+      LIMIT 10
+    `,
+    values: [pnu],
+  });
+  return featureCollection(result.rows);
+}
+
+async function fetchCadastreBbox(searchParams) {
+  const bbox = (searchParams.get('bbox') || '').split(',').map(Number);
+  if (bbox.length !== 4 || bbox.some((value) => !Number.isFinite(value))) {
+    throw new Error('bbox must be minLng,minLat,maxLng,maxLat');
+  }
+
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+  if (minLng >= maxLng || minLat >= maxLat || minLng < 124 || maxLng > 132 || minLat < 32 || maxLat > 39.5) {
+    throw new Error('bbox must be a valid extent within Korea');
+  }
+  if ((maxLng - minLng) * (maxLat - minLat) > 0.04) {
+    throw new Error('bbox is too large; zoom in before requesting parcels');
+  }
+
+  const limit = Math.min(Math.max(Number.parseInt(searchParams.get('limit') || '500', 10) || 500, 1), 1000);
+  const simplifyMeters = Math.min(Math.max(Number(searchParams.get('simplifyMeters') || 0) || 0, 0), 20);
+  const result = await cadastrePool.query({
+    text: `
+      WITH bounds AS (
+        SELECT ST_Transform(ST_MakeEnvelope($1, $2, $3, $4, 4326), 5186) AS geom
+      )
+      SELECT p.pnu, p.legal_dong_code, p.legal_dong_name, p.lot_number,
+             p.lot_number_land_category, p.reference_date, p.sigungu_code,
+             ST_AsGeoJSON(
+               ST_Transform(
+                 CASE WHEN $6 > 0 THEN ST_SimplifyPreserveTopology(p.geom, $6) ELSE p.geom END,
+                 4326
+               ), 7
+             ) AS geometry
+      FROM cadastre.parcels_readable p
+      CROSS JOIN bounds b
+      WHERE p.geom && b.geom AND ST_Intersects(p.geom, b.geom)
+      ORDER BY p.pnu
+      LIMIT $5
+    `,
+    values: [minLng, minLat, maxLng, maxLat, limit, simplifyMeters],
+  });
+  return featureCollection(result.rows);
 }
 
 function readJsonBody(request) {
@@ -705,6 +788,44 @@ const server = createServer(async (request, response) => {
       service: staticRoot ? 'living-labs-platform' : 'vworld-data-proxy',
       unified: Boolean(staticRoot),
     }));
+    return;
+  }
+
+  if (routePath === '/cadastre/health') {
+    try {
+      const result = await cadastrePool.query(`
+        SELECT current_database() AS database,
+               to_regclass('cadastre.parcels') IS NOT NULL AS ready,
+               (SELECT count(*) FROM cadastre.import_log WHERE status = 'loaded') AS loaded_files
+      `);
+      send(response, 200, JSON.stringify({ ok: true, ...result.rows[0] }));
+    } catch (error) {
+      send(response, 503, JSON.stringify({ ok: false, error: error?.message || 'PostGIS unavailable' }));
+    }
+    return;
+  }
+
+  if (routePath === '/cadastre/parcel') {
+    try {
+      send(response, 200, JSON.stringify(await fetchCadastreParcel(url.searchParams)));
+    } catch (error) {
+      send(response, /must be/.test(error?.message || '') ? 400 : 503, JSON.stringify({
+        ok: false,
+        error: error?.message || 'Parcel lookup failed',
+      }));
+    }
+    return;
+  }
+
+  if (routePath === '/cadastre/bbox') {
+    try {
+      send(response, 200, JSON.stringify(await fetchCadastreBbox(url.searchParams)));
+    } catch (error) {
+      send(response, /bbox/.test(error?.message || '') ? 400 : 503, JSON.stringify({
+        ok: false,
+        error: error?.message || 'Parcel extent lookup failed',
+      }));
+    }
     return;
   }
 

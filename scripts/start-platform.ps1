@@ -8,6 +8,14 @@ if (-not (Test-Path $runtimeDir)) {
   New-Item -ItemType Directory -Path $runtimeDir | Out-Null
 }
 
+$postgisStartScript = Join-Path $PSScriptRoot "start-vworld-postgis.ps1"
+if (Test-Path -LiteralPath $postgisStartScript) {
+  & $postgisStartScript
+  if ($LASTEXITCODE -ne 0) {
+    throw "VWorld PostGIS failed to start."
+  }
+}
+
 $unifiedIndex = Join-Path $root "pages-dist\index.html"
 if (-not (Test-Path $unifiedIndex)) {
   Write-Host "Unified build output is missing. Building the platform first..."
@@ -39,6 +47,24 @@ function Get-PortProcessId($port) {
     return $null
   }
   return [int]$lines[0].Matches[0].Groups[1].Value
+}
+
+function Test-PlatformEndpoint($path) {
+  $url = "http://127.0.0.1:4173$path"
+  try {
+    $response = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 10
+    return [pscustomobject]@{
+      Path = $path
+      Status = [int]$response.StatusCode
+      Ready = $response.StatusCode -eq 200
+    }
+  } catch {
+    return [pscustomobject]@{
+      Path = $path
+      Status = "No response"
+      Ready = $false
+    }
+  }
 }
 
 function Quote-PSString($value) {
@@ -103,5 +129,22 @@ $records | ConvertTo-Json -Depth 4 | Set-Content -Path $processFile -Encoding UT
 Write-Host ""
 Write-Host "Platform server"
 $records | Select-Object label, url, port, pid | Format-Table -AutoSize
+
+$healthChecks = @(
+  Test-PlatformEndpoint "/"
+  Test-PlatformEndpoint "/tools"
+  Test-PlatformEndpoint "/internal-tools/priority-management-area"
+  Test-PlatformEndpoint "/internal-tools/climate-hazard-lab"
+  Test-PlatformEndpoint "/health"
+  Test-PlatformEndpoint "/cadastre/health"
+)
+
+Write-Host "Critical route checks"
+$healthChecks | Select-Object Path, Status, Ready | Format-Table -AutoSize
+
+if ($healthChecks.Where({ -not $_.Ready }).Count) {
+  throw "Platform started, but one or more critical routes are unavailable. Check .runtime-logs."
+}
+
 Write-Host "Check status: npm run platform:status"
 Write-Host "Stop all:     npm run platform:stop"
