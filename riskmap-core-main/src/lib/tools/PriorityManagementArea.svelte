@@ -333,21 +333,12 @@
 
     const baseMapHeight = 760;
     let viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
-    let viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 1000;
 
     function updateViewportSize() {
         viewportWidth = window.innerWidth;
-        viewportHeight = window.innerHeight;
     }
 
-    $: mapAreaHeight = viewportWidth < 1401
-        ? baseMapHeight
-        : (() => {
-            const oldBudget = viewportHeight - 254;
-            const newBudget = viewportHeight * 0.85 - 190;
-            const ratio = oldBudget > 0 ? newBudget / oldBudget : 1;
-            return Math.max(320, Math.round(baseMapHeight * ratio));
-        })();
+    $: mapAreaHeight = viewportWidth < 1401 ? `${baseMapHeight}px` : '100%';
 
     onMount(() => {
         updateViewportSize();
@@ -362,6 +353,7 @@
     });
     let selectedCandidate = 0;
     let activeAlternative = 0;
+    let pendingDeleteIndex = null;
     let gridUnit = '100m';
     let dimensionWeights = { H: 1, E: 1, V: 1 };
     let mapSource = config.mapSource;
@@ -2130,31 +2122,6 @@
         schedulePriorityDraftSave();
     }
 
-    function resetActiveAlternative() {
-        const nextMessage = '현재 대안의 Risk 분석 결과와 실천권역을 초기화했습니다. 지표 설정을 확인한 뒤 다시 실행하세요.';
-
-        analysisResult = null;
-        appliedIndicators = [];
-        analysisDone = false;
-        analysisMessage = nextMessage;
-        parcelCandidateMessage = 'Risk 분석 후 지도에서 실천권역도출하기를 실행하세요.';
-        selectedCandidate = 0;
-        detailCandidateKey = null;
-        focusedCandidate = null;
-        mapResetKey += 1;
-        activeLayer = 'Risk';
-        activeStep = Math.min(activeStep, 2);
-
-        persistAlternative(activeAlternative, {
-            id: `alternative-${Date.now()}-${activeAlternative}`,
-            status: '검토중'
-        });
-        handoffMessage = latestHandoffPackage
-            ? '현재 대안을 초기화했습니다. 이미 전달한 요청은 필요하면 별도로 회수하세요.'
-            : '현재 대안을 초기화했습니다. Risk 분석 후 다시 전달할 수 있습니다.';
-        schedulePriorityDraftSave();
-    }
-
     function resetAllAlternatives() {
         handoffDialog = null;
         activeAlternative = 0;
@@ -2486,7 +2453,7 @@
         schedulePriorityDraftSave();
     }
 
-    function deleteActiveAlternative() {
+    function deleteAlternativeAt(index) {
         if (alternatives.length <= 1) {
             const replacementAlternative = {
                 ...createDefaultAlternative(0),
@@ -2505,16 +2472,38 @@
             return;
         }
 
-        const deletedAlternative = alternatives[activeAlternative];
-        const nextAlternatives = alternatives.filter((_, index) => index !== activeAlternative);
-        const nextIndex = Math.min(activeAlternative, nextAlternatives.length - 1);
+        const deletedAlternative = alternatives[index];
+        const wasActive = index === activeAlternative;
+        const nextAlternatives = alternatives.filter((_, i) => i !== index);
+        const nextIndex = wasActive
+            ? Math.min(index, nextAlternatives.length - 1)
+            : index < activeAlternative
+                ? activeAlternative - 1
+                : activeAlternative;
         alternatives = nextAlternatives;
         activeAlternative = nextIndex;
-        loadAlternative(nextIndex);
+        if (wasActive) {
+            loadAlternative(nextIndex);
+        }
         handoffMessage = latestHandoffPackage
             ? `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다. 이미 전달한 요청은 필요하면 별도로 회수하세요.`
             : `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다.`;
         schedulePriorityDraftSave();
+    }
+
+    function requestDeleteAlternative(index) {
+        if (alternatives.length <= 1) return;
+        pendingDeleteIndex = index;
+    }
+
+    function cancelDeleteAlternative() {
+        pendingDeleteIndex = null;
+    }
+
+    function confirmDeleteAlternative() {
+        if (pendingDeleteIndex === null) return;
+        deleteAlternativeAt(pendingDeleteIndex);
+        pendingDeleteIndex = null;
     }
 
     function confirmAlternative() {
@@ -2783,48 +2772,67 @@
 
                 <div class="right-column">
                     <div class="panel analysis-map-panel" bind:this={mapSectionEl}>
-                        <div class="panel-head map-head">
-                            <div><span class="section-number">02</span><h2>{alternatives[activeAlternative]?.name} 분석 지도</h2><p>{alternatives[activeAlternative]?.description} · {region} · 행정구역 코드 {regionCode}</p></div>
-                            <div class="map-toolbar">
-                                <div class="database-actions">
-                                    <label>
-                                        <span>작업자</span>
-                                        <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="Supabase 저장 작업자" />
-                                    </label>
-                                    <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy}>
-                                        {supabaseBusy ? '처리 중' : '저장'}
-                                    </button>
-                                    <button class="db-load-action" onclick={toggleSupabaseHistory} disabled={supabaseBusy}>
-                                        {supabaseHistoryOpen ? '목록닫기' : '불러오기'}
-                                    </button>
-                                    <span>{supabaseStatus}</span>
-                                </div>
-                                <div class="handoff-actions">
-                                    <div class="handoff-button-row">
-                                        <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
-                                        <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 회수</button>
-                                        <button class="secondary-action muted" onclick={resetAllAlternatives}>전체 대안 초기화</button>
-                                    </div>
-                                    <span class="handoff-note">{handoffStatusText}</span>
-                                </div>
-                                <div class="alternative-tabs" aria-label="기후적응실천권역 대안">
-                                    <button class="reset-alt" onclick={resetActiveAlternative} title="현재 대안 초기화">초기화</button>
-                                    <button class="delete-alt" onclick={deleteActiveAlternative} title="현재 대안 삭제">삭제</button>
-                                    <button class="add-alt" onclick={addAlternative} title="대안 추가">대안추가</button>
-                                    {#each alternatives as alternative, index}
-                                        <button class:active={activeAlternative === index} onclick={() => switchAlternative(index)}>
-                                            <span>{alternative.name}</span>
-                                            <small>{alternativeStatusLabel(alternative)}</small>
-                                        </button>
-                                    {/each}
+                        <div class="panel-head">
+                            <div><span class="section-number">02</span><h2>분석 지도</h2><p>{region} · 행정구역 코드 {regionCode}</p></div>
+                        </div>
+                        <div class="map-actions-band">
+                            <div class="database-actions">
+                                <label>
+                                    <span>작업자</span>
+                                    <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="Supabase 저장 작업자" />
+                                </label>
+                                <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy}>
+                                    {supabaseBusy ? '처리 중' : '저장'}
+                                </button>
+                                <button class="db-load-action" onclick={toggleSupabaseHistory} disabled={supabaseBusy}>
+                                    {supabaseHistoryOpen ? '목록닫기' : '불러오기'}
+                                </button>
+                                <span>{supabaseStatus}</span>
+                            </div>
+                            <div class="handoff-actions">
+                                <div class="handoff-button-row">
+                                    <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
+                                    <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 회수</button>
+                                    <button class="secondary-action muted" onclick={resetAllAlternatives}>전체 대안 초기화</button>
                                 </div>
                             </div>
                         </div>
+                        <div class="map-tabs-row">
+                            <div class="alternative-tabs browser-tabs" aria-label="기후적응실천권역 대안">
+                                {#each alternatives as alternative, index}
+                                    <div class="browser-tab" class:active={activeAlternative === index}>
+                                        <button class="browser-tab-select" onclick={() => switchAlternative(index)}>
+                                            <span>{alternative.name}</span>
+                                            <small>{alternativeStatusLabel(alternative)}</small>
+                                        </button>
+                                        <button
+                                            class="browser-tab-close"
+                                            onclick={(event) => { event.stopPropagation(); requestDeleteAlternative(index); }}
+                                            disabled={alternatives.length <= 1}
+                                            title="{alternative.name} 삭제"
+                                            aria-label="{alternative.name} 삭제"
+                                        >×</button>
+                                    </div>
+                                {/each}
+                                <button class="browser-tab-add" onclick={addAlternative} title="대안 추가" aria-label="대안 추가">+</button>
+                            </div>
+                        </div>
+                        {#if pendingDeleteIndex !== null}
+                            <div class="alt-delete-confirm-backdrop" onclick={cancelDeleteAlternative}>
+                                <div class="alt-delete-confirm" onclick={(event) => event.stopPropagation()}>
+                                    <p>'{alternatives[pendingDeleteIndex]?.name}'을(를) 삭제하시겠습니까?<br />대안 데이터가 사라지며 되돌릴 수 없습니다.</p>
+                                    <div class="alt-delete-confirm-actions">
+                                        <button class="secondary-action" onclick={cancelDeleteAlternative}>취소</button>
+                                        <button class="secondary-action danger" onclick={confirmDeleteAlternative}>삭제</button>
+                                    </div>
+                                </div>
+                            </div>
+                        {/if}
                         <div class="map-result-wrap">
                             <SelectedRegionMap
                                 {regionCode}
                                 regionName={region}
-                                height={`${mapAreaHeight}px`}
+                                height={mapAreaHeight}
                                 showCadastral={false}
                                 analysisIndicators={analysisDone ? appliedIndicators : previewAnalysisIndicators}
                                 riskGrid={analysisResult?.gridResult || indicatorPreviewGrid}

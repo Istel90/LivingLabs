@@ -76,6 +76,8 @@
     let visibleLayerScopeKey = $state('');
     let selectedBoundaryVisible = $state(true);
     let layerPanelOpen = $state(false);
+    let legendDescriptionOpen = $state(false);
+    let legendCollapsed = $state(false);
     let sidoBoundaryVisible = $state(showSidoBoundary);
     let sigunguBoundaryVisible = $state(showSigunguBoundary);
     let cadastralVisible = $state(false);
@@ -2036,14 +2038,38 @@
     {/if}
     {#if showAnalysisLegend}
         <div class="analysis-overlay-stack">
-            <div class="analysis-legend" aria-label="분석 범례">
-                <strong>분석 범례</strong>
-                <span class="legend-note">
-                    {riskGrid?.preview
-                        ? '분석 전 미리보기 · H·E·V 탭과 눈 아이콘으로 01 지표 데이터를 확인합니다.'
-                        : 'H·E·V 탭과 눈 아이콘으로 지도 시각화를 켜고 끌 수 있습니다.'}
-                    <br />눈 아이콘은 지도 표시만 제어하며, 분석 결과(Risk 계산)에는 영향을 주지 않습니다. 분석 포함 여부는 01 분석 지표 구성에서 설정하세요.
-                </span>
+            <div class="analysis-legend" class:legend-collapsed={legendCollapsed} aria-label="분석 범례">
+                <div class="legend-head">
+                    <strong>분석 범례</strong>
+                    <div class="legend-head-actions">
+                        <button
+                            type="button"
+                            class="legend-info-toggle"
+                            class:active={legendDescriptionOpen}
+                            aria-pressed={legendDescriptionOpen}
+                            aria-label={`분석 범례 설명 ${legendDescriptionOpen ? '숨기기' : '보기'}`}
+                            title="설명 보기"
+                            onclick={() => (legendDescriptionOpen = !legendDescriptionOpen)}
+                        >ⓘ</button>
+                        <button
+                            type="button"
+                            class="legend-collapse-toggle"
+                            aria-expanded={!legendCollapsed}
+                            aria-label={`분석 범례 ${legendCollapsed ? '펼치기' : '접기'}`}
+                            title={legendCollapsed ? '펼치기' : '접기'}
+                            onclick={() => (legendCollapsed = !legendCollapsed)}
+                        >{legendCollapsed ? '▸' : '▾'}</button>
+                    </div>
+                </div>
+                {#if legendDescriptionOpen}
+                    <span class="legend-note">
+                        {riskGrid?.preview
+                            ? '분석 전 미리보기 · H·E·V 탭과 눈 아이콘으로 01 지표 데이터를 확인합니다.'
+                            : 'H·E·V 탭과 눈 아이콘으로 지도 시각화를 켜고 끌 수 있습니다.'}
+                        <br />눈 아이콘은 지도 표시만 제어하며, 분석 결과(Risk 계산)에는 영향을 주지 않습니다. 분석 포함 여부는 01 분석 지표 구성에서 설정하세요.
+                    </span>
+                {/if}
+                {#if !legendCollapsed}
                 {#if riskGrid?.stats}
                     <label class="risk-surface-summary">
                         <input
@@ -2128,6 +2154,7 @@
                 {/if}
                 {#if enabledAnalysisIndicators().length && !enabledAnalysisIndicators().some((item) => item.geojson) && !riskGrid?.values?.length}
                     <p>실제 공간 결과 레이어는 아직 연결 전입니다.</p>
+                {/if}
                 {/if}
             </div>
             {#if riskGrid?.stats}
@@ -2377,23 +2404,63 @@
 
     .analysis-legend {
         width: 100%;
-        max-height: 16rem;
+        max-height: 11rem;
         overflow: auto;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .9rem;
         background: rgb(255 255 255 / 96%);
-        padding: .8rem .9rem;
+        padding: .55rem .7rem;
         box-shadow: 0 22px 46px rgb(15 23 42 / 18%);
         color: #0f172a;
         backdrop-filter: blur(10px);
         pointer-events: auto;
     }
 
-    .analysis-legend > strong {
+    .analysis-legend.legend-collapsed {
+        max-height: none;
+        overflow: visible;
+    }
+
+    .legend-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+    }
+
+    .legend-head > strong {
         display: block;
         color: #073b52;
         font-size: .88rem;
         font-weight: 900;
+    }
+
+    .legend-head-actions {
+        display: flex;
+        align-items: center;
+        gap: .25rem;
+        flex: 0 0 auto;
+    }
+
+    .legend-info-toggle,
+    .legend-collapse-toggle {
+        width: 1.3rem;
+        height: 1.3rem;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgb(15 23 42 / 14%);
+        border-radius: 50%;
+        background: #fff;
+        color: #64748b;
+        font-size: .7rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .legend-info-toggle.active {
+        border-color: #0f766e;
+        background: #ecfdf5;
+        color: #0f766e;
     }
 
     .legend-note {
