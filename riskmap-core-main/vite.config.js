@@ -14,6 +14,7 @@ export default defineConfig({
             '/priority-handoff': 'http://127.0.0.1:5176',
             '/responsible-handoff': 'http://127.0.0.1:5176',
             '/responsible-review-response': 'http://127.0.0.1:5176',
+            '/cadastre': 'http://127.0.0.1:5176',
             '/vworld-data': 'http://127.0.0.1:5176'
         },
         fs: {

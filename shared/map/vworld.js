@@ -24,8 +24,12 @@ export function hasVWorldApiKey() {
   return Boolean(getVWorldApiKey());
 }
 
-export function canUseVWorldData() {
+export function canUseRemoteVWorldData() {
   return Boolean(getVWorldProxyUrl() || getVWorldApiKey());
+}
+
+export function canUseVWorldData() {
+  return Boolean(getCadastreApiBaseUrl() || canUseRemoteVWorldData());
 }
 
 export function getVWorldDomain() {
@@ -34,6 +38,33 @@ export function getVWorldDomain() {
 
 export function getVWorldProxyUrl() {
   return import.meta.env.VITE_VWORLD_PROXY_URL || '';
+}
+
+export function getCadastreApiBaseUrl() {
+  const configuredUrl = import.meta.env.VITE_CADASTRE_API_URL || '';
+  if (configuredUrl) return configuredUrl;
+
+  const location = globalThis.location;
+  if (!location || !['127.0.0.1', 'localhost'].includes(location.hostname)) return '';
+
+  // The Vite development server proxies /cadastre to the local data service.
+  // The combined production server exposes the same route on its own origin.
+  return location.origin;
+}
+
+export function canUseLocalCadastre() {
+  return Boolean(getCadastreApiBaseUrl());
+}
+
+export function createCadastreBboxUrl(box, options = {}) {
+  const baseUrl = getCadastreApiBaseUrl();
+  if (!baseUrl) return '';
+
+  const url = new URL('/cadastre/bbox', baseUrl);
+  url.searchParams.set('bbox', [box.minLng, box.minLat, box.maxLng, box.maxLat].join(','));
+  url.searchParams.set('limit', String(options.limit ?? 1000));
+  url.searchParams.set('simplifyMeters', String(options.simplifyMeters ?? 0));
+  return url.toString();
 }
 
 export function createVWorldWmsOptions(layer, options = {}) {
