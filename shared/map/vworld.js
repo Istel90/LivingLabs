@@ -1,5 +1,6 @@
 export const VWORLD_WMS_URL = 'https://api.vworld.kr/req/wms';
 export const VWORLD_DATA_URL = 'https://api.vworld.kr/req/data';
+export const VWORLD_BASE_TILE_URL = 'https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png';
 export const VWORLD_DEFAULT_DOMAIN = 'https://istel90.github.io/LivingLabs/';
 
 export const VWORLD_WMS_LAYERS = {

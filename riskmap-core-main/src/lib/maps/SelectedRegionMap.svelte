@@ -15,6 +15,7 @@
         createVWorldDataUrl,
         createVWorldWmsOptions,
         hasVWorldApiKey,
+        VWORLD_BASE_TILE_URL,
         VWORLD_DATASETS,
         VWORLD_WMS_LAYERS,
         VWORLD_WMS_URL
@@ -1976,7 +1977,8 @@
             minZoom: 7,
             maxZoom: 18,
             zoomSnap: locked ? 0.25 : 1,
-            zoomDelta: locked ? 0.25 : 1
+            zoomDelta: locked ? 0.25 : 1,
+            fadeAnimation: false
         });
 
         if (!locked) {
@@ -1993,10 +1995,29 @@
             map.getPane('selectedBoundaryPane').style.pointerEvents = 'none';
         }
 
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        const baseTileOptions = {
+            maxZoom: 19,
+            updateWhenIdle: true,
+            updateWhenZooming: false,
+            keepBuffer: 1
+        };
+        const vworldBaseLayer = L.tileLayer(VWORLD_BASE_TILE_URL, {
+            ...baseTileOptions,
+            attribution: '&copy; VWorld'
+        });
+        const osmFallbackLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            ...baseTileOptions,
             attribution: '&copy; OpenStreetMap contributors',
-            maxZoom: 19
-        }).addTo(map);
+            referrerPolicy: 'strict-origin-when-cross-origin'
+        });
+        let baseFallbackActivated = false;
+        vworldBaseLayer.on('tileerror', () => {
+            if (baseFallbackActivated || !map) return;
+            baseFallbackActivated = true;
+            vworldBaseLayer.remove();
+            osmFallbackLayer.addTo(map);
+        });
+        vworldBaseLayer.addTo(map);
 
         if (hasVWorldApiKey()) {
             sidoLayer = L.tileLayer
