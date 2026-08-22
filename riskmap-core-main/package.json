@@ -12,12 +12,16 @@
         "flood:download-national": "python ./scripts/download-flood-national.py --all",
         "flood:load-postgis": "node ./scripts/load-flood-grid-postgis.mjs",
         "flood:load-floating-population": "node ./scripts/load-floating-population-postgis.mjs",
+        "flood:collect-national-facilities": "node ./scripts/collect-national-facilities-postgis.mjs",
+        "flood:collect-history": "node ./scripts/collect-flood-history-postgis.mjs",
         "preview": "vite preview",
         "preview:local": "vite preview --host 0.0.0.0 --port 4175 --strictPort",
         "vworld:proxy": "node ./scripts/vworld-data-proxy.mjs --port=4176",
         "prepare": "svelte-kit sync || echo ''",
         "format": "prettier --write .",
-        "lint": "prettier --check ."
+        "lint": "prettier --check .",
+        "flood:load-national-roads": "node ./scripts/load-national-roads-postgis.mjs",
+        "flood:collect-national-roads": "node ./scripts/collect-national-roads.mjs"
     },
     "devDependencies": {
         "@sveltejs/adapter-auto": "^4.0.0",

@@ -2,44 +2,57 @@
 
 ## 현재 적재 범위
 
-공통 기준은 EPSG:5179, 100m 셀입니다. 기존 `analysis.grid_cells_100m` 및 `analysis.region_grid_cells_100m`을 재사용합니다.
+공통 기준은 EPSG:5179, 100m 셀입니다. `analysis.grid_cells_100m` 및 `analysis.region_grid_cells_100m`을 재사용합니다.
 
-| 화면 코드 | 내부 API 키 | 구분 | 원자료                                | 서비스 값               |
-| --------- | ----------- | ---- | ------------------------------------- | ----------------------- |
-| H01       | FH01        | H    | 도시침수 30년 위험등급                | 등급별 침수심 중간값(m) |
-| H02       | FH02        | H    | 국가하천 범람 100년 위험등급          | 등급별 침수심 중간값(m) |
-| H03       | FH03        | H    | 지방하천 범람 50년 위험등급           | 등급별 침수심 중간값(m) |
-| E01       | FE01        | E    | 2024 전국 총인구 100m                 | 명/셀                   |
-| E02       | FE02        | E    | 2024 전국 주택 100m                   | 호/셀                   |
-| E03       | FE03        | E    | 2021 수원시 실제 일평균 유동인구 100m | 명/셀·일평균            |
+| 화면 코드 | 내부 API 키 | 구분 | 원자료 | 서비스 값 |
+| --- | --- | --- | --- | --- |
+| H01 | FH01 | H | 도시침수 30년 위험등급 | 등급별 침수심 중간값(m) |
+| H02 | FH02 | H | 국가하천 범람 100년 위험등급 | 등급별 침수심 중간값(m) |
+| H03 | FH03 | H | 지방하천 범람 50년 위험등급 | 등급별 침수심 중간값(m) |
+| H04 | - | H | 2002~2022 공개 침수이력 | 셀별 관측 기왕최대 침수심(m) |
+| E01 | FE01 | E | 2024 전국 총인구 100m | 명/셀 |
+| E02 | FE02 | E | 2024 전국 주택 100m | 호/셀 |
+| E03 | FE03 | E | 2021 수원시 실제 일평균 유동인구 100m | 명/셀·일평균 |
 
-화면에는 H/E 코드만 표시하고, 내부 API 키는 재해별 충돌을 피하기 위해 FH/FE를 유지합니다.
+화면에는 H/E 코드를 표시하고 기존 API 호환을 위해 내부 키 FH/FE를 유지합니다. 침수등급 중간값은 1=0.25m, 2=0.75m, 3=1.5m, 4=3.5m, 5=5.0m입니다.
 
-침수등급 중간값은 1=0.25m, 2=0.75m, 3=1.5m, 4=3.5m, 5=5.0m입니다. 원자료의 0값은 비침수 또는 비집계 셀로 보고 희소 저장에서 생략합니다.
+## PostGIS 테이블
 
-## 재구축 순서
+- `analysis.flood_observed_history`: 2002~2022 침수이력 폴리곤 38,003건
+- `analysis.flood_observed_max_100m`: 침수이력과 겹치는 100m 셀별 최대 침수심·사건 수·최근 연도
 
-1. `lh_gis` Conda 환경을 활성화합니다. `rasterio`, `requests`, GDAL 명령 도구가 필요합니다.
-2. `python riskmap-core-main/scripts/download-flood-national.py --all`을 실행합니다.
-3. `scripts/prepare-flood-postgis.ps1`을 실행합니다.
-4. `node --max-old-space-size=2048 riskmap-core-main/scripts/load-flood-grid-postgis.mjs --replace`를 실행합니다.
-5. 수원시 공식 유동인구 SHP를 받은 뒤 `node riskmap-core-main/scripts/load-floating-population-postgis.mjs --shp=<SHP 경로> --replace`를 실행합니다.
-6. `GET /flood-grid/health`로 적재 상태를 확인합니다.
+기왕최대 파생값은 2002~2022, 0m 초과 20m 이하만 사용합니다. 원본의 연도 0(257건), 0 이하 수심(15건), 20m 초과 수심(15건)은 원본 테이블에 보존하되 파생 계산에서는 품질 이상치로 제외합니다.
+- `analysis.national_facilities`: 전국 민방위 대피시설과 도시철도 역사
+- `analysis.national_road_links`: 전국 ITS 도로 링크 2,112,346건(도시부·비도시부·도시고속·고속도로)
+- 기존 `analysis.flood_indicator_values_100m`: 도시침수·하천범람·인구·주택 격자 값
 
-원자료 TIFF와 다운로드 타일은 `data/LivingLabs_flood_national`에 저장되며 Git에는 포함하지 않습니다. 다운로드 스크립트는 중단된 타일을 재사용하고, GDAL VRT/warp로 7,000×7,000 전국 격자를 스트리밍 생성합니다.
+대량 입력은 JSONB 배치 적재를 사용하며, 공간 조회에는 GiST 인덱스, 출처·유형 조회에는 복합 B-tree 인덱스를 사용합니다.
 
-## API
+## 재구축 명령
 
-- `GET /flood-grid/health`
-- `GET /flood-grid?regionCode=41110&indicator=FH01`
-- `GET /flood-grid?regionCode=41110&indicator=FE03`
+1. `python riskmap-core-main/scripts/download-flood-national.py --all`
+2. `scripts/prepare-flood-postgis.ps1`
+3. `node --max-old-space-size=2048 riskmap-core-main/scripts/load-flood-grid-postgis.mjs --replace`
+4. `pnpm --dir riskmap-core-main flood:collect-history`
+5. `pnpm --dir riskmap-core-main flood:collect-national-roads`
+6. `pnpm --dir riskmap-core-main flood:load-national-roads`
+7. `pnpm --dir riskmap-core-main flood:collect-national-facilities`
+8. `GET /flood-grid/health`로 상태 확인
 
-응답은 `livinglabs-flood-grid/v1`의 `sparse-index-value` 형식입니다. 지역 내부에서 값이 0인 셀은 희소 배열에 포함하지 않습니다.
+원자료 TIFF·GeoJSON 스냅샷은 `data/LivingLabs_flood_national`에 저장하며 Git에는 포함하지 않습니다.
 
-## 유동인구 범위
+## 건물과 연속지적도
 
-E03은 수원시정연구원의 2021년 실제 일평균 유동인구 100m GIS 원자료만 사용합니다. PostGIS 공통 셀에는 10,790개가 정렬되며, 서비스 활성 범위는 수원시·4개 구(`4111*`)입니다. 공개 전국 단일 100m 유동인구 자료가 없으므로 다른 지역에는 추정값을 만들지 않습니다. 다른 지자체 또는 통신사 원자료를 확보하면 같은 적재기로 지역별 확장합니다.
+연속지적도는 토지 필지 자료이므로 실제 건물 외곽선을 직접 추출할 수 없습니다. 지목이 `대`인 필지를 건물 후보지로 거르는 것은 가능하지만 빈 필지·주차장·한 필지 내 여러 건물을 구분하지 못하므로 분석용 건물 데이터로 사용하지 않습니다.
 
-## 미확보 지표
+건물은 GIS 건물통합정보(수치지형도 건물 레이어와 건축물대장 속성의 결합)를 별도로 수집합니다. 노후주택 비율은 이 자료의 사용승인일과 주용도를 100m 셀로 집계해 파생해야 합니다. 공개 MOIS 건물 FeatureServer에는 사용승인일이 없어 건물 외곽선·층수 보조 자료로만 사용합니다.
 
-첨부 번들에는 고령·유아·장애인, 반지하·노후주택, 취약시설, 빗물받이·배수펌프장·저류시설·대피시설 원자료가 없습니다. 따라서 현재 UI에서는 이 V/A 지표를 `미확보`로 표시하고 가짜 값으로 계산하지 않습니다. V/A가 연결되기 전 분석 결과는 H-only 예비 위험도로 명시합니다.
+## 아직 원자료가 필요한 지표
+
+- 65세 이상 및 유아·유소년 전국 100m: 국토지리정보원 B100 로그인/대용량 원자료 필요
+- 장애인 전국 100m: 공개 원자료의 공간 단위가 달라 변환 기준 확정 필요
+- 노후주택: GIS 건물통합정보 전국 파일 필요
+- DEM/TWI/Flow accumulation/Depression: DEM 원천과 해상도 확정 필요
+- 전국 유동인구: 공개 단일 100m 원자료가 없어 지역·통신사 자료별 확장 필요
+
+읍면동 통계나 임의 추정값을 100m 실제값처럼 채우지 않습니다. 원자료가 없는 V/A 지표는 `미확보`로 유지합니다.
