@@ -116,8 +116,8 @@
             projectSuffix: '홍수 위험지역 분석',
             heroEmphasis: '우선 대응 침수권역을 찾습니다.',
             heroDescription: '침수위험(H), 노출(E), 취약성(V) 지표를 구성하고 배수·저류·대피 대안을 공간적으로 비교하세요.',
-            sampleNotice: '전국 도시·하천 홍수위험도와 2024 인구·주택을 EPSG:5179 100m 공통 격자로 사용할 수 있습니다.',
-            mapSource: '전국 도시침수·국가하천·지방하천 위험도 및 2024 인구·주택 100m PostGIS',
+            sampleNotice: '전국 도시·하천 홍수위험도와 2024 상주인구·주택, 수원시 2021 실제 유동인구를 EPSG:5179 100m 공통 격자로 사용할 수 있습니다.',
+            mapSource: '전국 홍수위험·2024 상주인구·주택 및 수원시 2021 유동인구 100m PostGIS',
             rasterPath: null,
             dataSummaryPath: null,
             rasterReadyPrefix: '홍수 위험 래스터',
@@ -143,11 +143,12 @@
                 { name: '대안3', status: '검토중', description: '반지하·취약시설 보호 중심 대응안' }
             ],
             indicators: [
-                { id: 201, indicatorCode: 'FH01', icon: '≈', label: 'FH01 · 도시침수 30년', description: '도시침수 위험등급을 100m 셀별 침수심 중간값으로 변환', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#2563eb' },
-                { id: 202, indicatorCode: 'FH02', icon: '≋', label: 'FH02 · 국가하천 범람 100년', description: '국가하천 범람 위험등급을 100m 셀별 침수심 중간값으로 변환', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#0284c7' },
-                { id: 203, indicatorCode: 'FH03', icon: '≋', label: 'FH03 · 지방하천 범람 50년', description: '지방하천 범람 위험등급을 100m 셀별 침수심 중간값으로 변환', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#0891b2' },
-                { id: 204, indicatorCode: 'FE01', icon: '♟', label: 'FE01 · 2024 상주인구', description: '전국 총인구 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#d4af42' },
-                { id: 205, indicatorCode: 'FE02', icon: '⌂', label: 'FE02 · 2024 주택 수', description: '전국 주택 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#db9d3e' },
+                { id: 201, indicatorCode: 'FH01', icon: '≈', label: 'H01 · 도시침수 30년', description: '도시침수 위험등급을 100m 셀별 침수심 중간값으로 변환', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#2563eb' },
+                { id: 202, indicatorCode: 'FH02', icon: '≋', label: 'H02 · 국가하천 범람 100년', description: '국가하천 범람 위험등급을 100m 셀별 침수심 중간값으로 변환', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#0284c7' },
+                { id: 203, indicatorCode: 'FH03', icon: '≋', label: 'H03 · 지방하천 범람 50년', description: '지방하천 범람 위험등급을 100m 셀별 침수심 중간값으로 변환', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#0891b2' },
+                { id: 204, indicatorCode: 'FE01', icon: '♟', label: 'E01 · 2024 상주인구', description: '전국 총인구 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#d4af42' },
+                { id: 205, indicatorCode: 'FE02', icon: '⌂', label: 'E02 · 2024 주택 수', description: '전국 주택 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#db9d3e' },
+                { id: 213, indicatorCode: 'FE03', icon: '♟', label: 'E03 · 2021 일평균 유동인구', description: '수원시 실제 일평균 유동인구 EPSG:5186 100m 격자를 공통 EPSG:5179 셀에 정렬', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], supportedRegionPrefixes: ['4111'], color: '#c68a2f' },
                 { id: 206, icon: '🛣', label: '주요 도로', description: '전국 도로 링크의 침수영향도 파생 필요', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'road-grid', value: 0.5, color: '#b7791f' },
                 { id: 207, icon: '⌄', label: '반지하 주거', description: '반지하·지하층 주거 원자료 확보 필요', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'building-grid', value: 0.5, color: '#e45662' },
                 { id: 208, icon: '🏚', label: '노후건축물', description: '건축물대장 기반 30년 이상 주택 비율 구축 필요', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'building-grid', value: 0.5, color: '#cf6576' },
@@ -226,14 +227,15 @@
     }
 
     function floodDataPath(indicatorCode, code) {
-        if (!code || !/^F(?:H0[1-3]|E0[1-2])$/.test(indicatorCode || '')) return null;
+        if (!code || !/^F(?:H0[1-3]|E0[1-3])$/.test(indicatorCode || '')) return null;
         const route = `/flood-grid?regionCode=${encodeURIComponent(code)}&indicator=${encodeURIComponent(indicatorCode)}`;
         return vworldProxyUrl ? new URL(route, vworldProxyUrl).toString() : route;
     }
     function configureIndicatorsForRegion(sourceIndicators, code, datasetMode = hazardDatasetMode) {
         return sourceIndicators.map((item) => {
             if (hazard === 'flood' && item.indicatorCode) {
-                const dataPath = floodDataPath(item.indicatorCode, code);
+                const regionSupported = !item.supportedRegionPrefixes || item.supportedRegionPrefixes.some((prefix) => code.startsWith(prefix));
+                const dataPath = regionSupported ? floodDataPath(item.indicatorCode, code) : null;
                 return {
                     ...item,
                     dataPath,

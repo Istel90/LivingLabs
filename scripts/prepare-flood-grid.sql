@@ -19,18 +19,27 @@ CREATE TABLE IF NOT EXISTS analysis.flood_values_100m (
   fh03 real,
   fe01 real,
   fe02 real,
+  fe03 real,
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (version_id, cell_id)
 );
 
+ALTER TABLE analysis.flood_values_100m ADD COLUMN IF NOT EXISTS fe03 real;
+
 CREATE TABLE IF NOT EXISTS analysis.flood_region_indicator_stats (
   version_id bigint NOT NULL REFERENCES analysis.flood_dataset_versions(version_id) ON DELETE CASCADE,
   region_code text NOT NULL CHECK (region_code ~ '^[0-9]{5}$'),
-  indicator_code text NOT NULL CHECK (indicator_code IN ('FH01', 'FH02', 'FH03', 'FE01', 'FE02')),
+  indicator_code text NOT NULL CHECK (indicator_code IN ('FH01', 'FH02', 'FH03', 'FE01', 'FE02', 'FE03')),
   payload jsonb NOT NULL,
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (version_id, region_code, indicator_code)
 );
+
+ALTER TABLE analysis.flood_region_indicator_stats
+  DROP CONSTRAINT IF EXISTS flood_region_indicator_stats_indicator_code_check;
+ALTER TABLE analysis.flood_region_indicator_stats
+  ADD CONSTRAINT flood_region_indicator_stats_indicator_code_check
+  CHECK (indicator_code IN ('FH01', 'FH02', 'FH03', 'FE01', 'FE02', 'FE03'));
 
 CREATE INDEX IF NOT EXISTS flood_values_100m_cell_idx
   ON analysis.flood_values_100m (cell_id, version_id);
@@ -44,7 +53,7 @@ VALUES (
   '전국 홍수 H/E 100m 서비스 격자',
   '2024 / 공개 홍수위험지도 기준',
   true,
-  '{"grid":"EPSG:5179 100m","indicators":["FH01","FH02","FH03","FE01","FE02"],"hazard_depth_midpoints_m":{"1":0.25,"2":0.75,"3":1.5,"4":3.5,"5":5.0}}'::jsonb
+  '{"grid":"EPSG:5179 100m","indicators":["FH01","FH02","FH03","FE01","FE02","FE03"],"hazard_depth_midpoints_m":{"1":0.25,"2":0.75,"3":1.5,"4":3.5,"5":5.0}}'::jsonb
 )
 ON CONFLICT (dataset_key) DO UPDATE SET
   label = EXCLUDED.label,
