@@ -1,5 +1,5 @@
 <script>
-    import { onDestroy, onMount } from 'svelte';
+    import { onDestroy, onMount, tick } from 'svelte';
     import { base } from '$app/paths';
     import proj4 from 'proj4';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
@@ -296,8 +296,64 @@
     $: projectName = `${region} ${config.projectSuffix}`;
     let analysisDone = false;
     let running = false;
+    let mapSectionEl;
+    let candidatesSectionEl;
+    let lastUserScrollAt = 0;
+    let previousRunning = false;
+
+    function markUserScroll() {
+        lastUserScrollAt = Date.now();
+    }
+
+    function isSectionInView(el) {
+        if (!el) return true;
+        const rect = el.getBoundingClientRect();
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        return rect.bottom > 0 && rect.top < viewportHeight;
+    }
+
+    async function scrollResultIntoView(el) {
+        if (!el) return;
+        await tick();
+        if (Date.now() - lastUserScrollAt < 800) return;
+        if (isSectionInView(el)) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    $: {
+        if (previousRunning && !running && analysisDone) {
+            scrollResultIntoView(mapSectionEl);
+        }
+        previousRunning = running;
+    }
+
+    function handleParcelDerivationComplete() {
+        scrollResultIntoView(candidatesSectionEl);
+    }
+
+    const baseMapHeight = 760;
+    let viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+
+    function updateViewportSize() {
+        viewportWidth = window.innerWidth;
+    }
+
+    $: mapAreaHeight = viewportWidth < 1401 ? `${baseMapHeight}px` : '100%';
+
+    onMount(() => {
+        updateViewportSize();
+        window.addEventListener('resize', updateViewportSize);
+        window.addEventListener('wheel', markUserScroll, { passive: true });
+        window.addEventListener('touchmove', markUserScroll, { passive: true });
+        return () => {
+            window.removeEventListener('resize', updateViewportSize);
+            window.removeEventListener('wheel', markUserScroll);
+            window.removeEventListener('touchmove', markUserScroll);
+        };
+    });
     let selectedCandidate = 0;
     let activeAlternative = 0;
+    let pendingDeleteIndex = null;
     let gridUnit = '100m';
     let dimensionWeights = { H: 1, E: 1, V: 1 };
     let mapSource = config.mapSource;
@@ -354,6 +410,31 @@
         '민감도': { english: 'Sensitivity', dimension: 'V', direction: 'positive', color: '#a855a8', icon: '◇' },
         '적응역량': { english: 'Adaptive Capacity', dimension: 'V', direction: 'negative', color: '#2f9b73', icon: '✚' }
     };
+    let groupExpanded = Object.fromEntries(
+        Object.keys(indicatorGroupMeta).map((group) => {
+            const available = indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length;
+            const selected = selectedIndicatorsFor(group).length;
+            return [group, selected > available / 2];
+        })
+    );
+
+    function toggleGroupExpanded(group) {
+        groupExpanded = { ...groupExpanded, [group]: !groupExpanded[group] };
+    }
+
+    function collapsedGroupSummary(group) {
+        const selected = selectedIndicatorsFor(group);
+        if (!selected.length) return '';
+        const shown = selected.slice(0, 2).map((item) => item.label).join(', ');
+        const remaining = selected.length - 2;
+        return remaining > 0 ? `${shown} 외 ${remaining}개` : shown;
+    }
+
+    let expandedDescriptions = {};
+
+    function toggleIndicatorDescription(id) {
+        expandedDescriptions = { ...expandedDescriptions, [id]: !expandedDescriptions[id] };
+    }
     $: previewAnalysisIndicators = indicators.map((item) => {
         const loaded = loadedPreviewIndicators.find((previewItem) => previewItem.id === item.id);
         return loaded
@@ -2041,31 +2122,6 @@
         schedulePriorityDraftSave();
     }
 
-    function resetActiveAlternative() {
-        const nextMessage = '현재 대안의 Risk 분석 결과와 실천권역을 초기화했습니다. 지표 설정을 확인한 뒤 다시 실행하세요.';
-
-        analysisResult = null;
-        appliedIndicators = [];
-        analysisDone = false;
-        analysisMessage = nextMessage;
-        parcelCandidateMessage = 'Risk 분석 후 지도에서 실천권역도출하기를 실행하세요.';
-        selectedCandidate = 0;
-        detailCandidateKey = null;
-        focusedCandidate = null;
-        mapResetKey += 1;
-        activeLayer = 'Risk';
-        activeStep = Math.min(activeStep, 2);
-
-        persistAlternative(activeAlternative, {
-            id: `alternative-${Date.now()}-${activeAlternative}`,
-            status: '검토중'
-        });
-        handoffMessage = latestHandoffPackage
-            ? '현재 대안을 초기화했습니다. 이미 전달한 요청은 필요하면 별도로 회수하세요.'
-            : '현재 대안을 초기화했습니다. Risk 분석 후 다시 전달할 수 있습니다.';
-        schedulePriorityDraftSave();
-    }
-
     function resetAllAlternatives() {
         handoffDialog = null;
         activeAlternative = 0;
@@ -2397,7 +2453,7 @@
         schedulePriorityDraftSave();
     }
 
-    function deleteActiveAlternative() {
+    function deleteAlternativeAt(index) {
         if (alternatives.length <= 1) {
             const replacementAlternative = {
                 ...createDefaultAlternative(0),
@@ -2416,16 +2472,38 @@
             return;
         }
 
-        const deletedAlternative = alternatives[activeAlternative];
-        const nextAlternatives = alternatives.filter((_, index) => index !== activeAlternative);
-        const nextIndex = Math.min(activeAlternative, nextAlternatives.length - 1);
+        const deletedAlternative = alternatives[index];
+        const wasActive = index === activeAlternative;
+        const nextAlternatives = alternatives.filter((_, i) => i !== index);
+        const nextIndex = wasActive
+            ? Math.min(index, nextAlternatives.length - 1)
+            : index < activeAlternative
+                ? activeAlternative - 1
+                : activeAlternative;
         alternatives = nextAlternatives;
         activeAlternative = nextIndex;
-        loadAlternative(nextIndex);
+        if (wasActive) {
+            loadAlternative(nextIndex);
+        }
         handoffMessage = latestHandoffPackage
             ? `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다. 이미 전달한 요청은 필요하면 별도로 회수하세요.`
             : `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다.`;
         schedulePriorityDraftSave();
+    }
+
+    function requestDeleteAlternative(index) {
+        if (alternatives.length <= 1) return;
+        pendingDeleteIndex = index;
+    }
+
+    function cancelDeleteAlternative() {
+        pendingDeleteIndex = null;
+    }
+
+    function confirmDeleteAlternative() {
+        if (pendingDeleteIndex === null) return;
+        deleteAlternativeAt(pendingDeleteIndex);
+        pendingDeleteIndex = null;
     }
 
     function confirmAlternative() {
@@ -2497,7 +2575,7 @@
             <section class="hero">
                 <div>
                     <span class="eyebrow">LOCAL CLIMATE RISK ASSESSMENT</span>
-                    <h1>지역의 위험을 읽고,<br /><em>{config.heroEmphasis}</em></h1>
+                    <h1>지역의 위험을 읽고, <em>{config.heroEmphasis}</em></h1>
                     <p>{config.heroDescription}</p>
                 </div>
                 <div class="hero-actions">
@@ -2641,72 +2719,120 @@
                         <button class="primary" onclick={runAnalysis} disabled={running}>{running ? '계산 중...' : 'Risk 분석 실행'}</button>
                     </div>
                     {#each ['기후위험', '노출', '민감도', '적응역량'] as group}
-                        <div class="indicator-group">
-                            <div class="group-label">{group} ({indicatorGroupMeta[group].english})<span>{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span></div>
-                            {#each indicators.filter((item) => item.group === group) as item}
-                                <div class="indicator-item" class:disabled={!item.enabled} class:unavailable={!isIndicatorAvailable(item)}>
-                                    <input
-                                        type="checkbox"
-                                        checked={item.enabled}
-                                        disabled={!isIndicatorAvailable(item)}
-                                        onchange={(event) => setIndicatorEnabled(item.id, event.currentTarget.checked)}
-                                    />
-                                    <div class="indicator-icon" style={`--icon-color:${item.color}`}>
-                                        {#if item.iconPath}<img src={item.iconPath} alt="" />{:else}{item.icon}{/if}
+                        <div class="indicator-group" class:collapsed={!groupExpanded[group]}>
+                            <button
+                                type="button"
+                                class="group-label"
+                                aria-expanded={groupExpanded[group]}
+                                onclick={() => toggleGroupExpanded(group)}
+                            >
+                                <span class="group-chevron" aria-hidden="true">▾</span>
+                                <span class="group-name">{group} ({indicatorGroupMeta[group].english})</span>
+                                {#if !groupExpanded[group] && collapsedGroupSummary(group)}
+                                    <span class="group-collapsed-summary">{collapsedGroupSummary(group)}</span>
+                                {/if}
+                                <span class="group-count">{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span>
+                            </button>
+                            {#if groupExpanded[group]}
+                                {#each indicators.filter((item) => item.group === group) as item}
+                                    <div class="indicator-item" class:disabled={!item.enabled} class:unavailable={!isIndicatorAvailable(item)}>
+                                        <input
+                                            type="checkbox"
+                                            checked={item.enabled}
+                                            disabled={!isIndicatorAvailable(item)}
+                                            onchange={(event) => setIndicatorEnabled(item.id, event.currentTarget.checked)}
+                                        />
+                                        <div class="indicator-icon" style={`--icon-color:${item.color}`}>
+                                            {#if item.iconPath}<img src={item.iconPath} alt="" />{:else}{item.icon}{/if}
+                                        </div>
+                                        <div class="indicator-copy">
+                                            <span class="indicator-name-row">
+                                                <strong>{item.label}</strong>
+                                                <button
+                                                    type="button"
+                                                    class="info-toggle"
+                                                    class:active={expandedDescriptions[item.id]}
+                                                    aria-expanded={!!expandedDescriptions[item.id]}
+                                                    aria-label={`${item.label} 설명 ${expandedDescriptions[item.id] ? '닫기' : '보기'}`}
+                                                    onclick={() => toggleIndicatorDescription(item.id)}
+                                                >ⓘ</button>
+                                            </span>
+                                            <div class="indicator-description-wrap" class:open={expandedDescriptions[item.id]}>
+                                                <span>{indicatorStatusText(item)} · {item.description}</span>
+                                            </div>
+                                        </div>
+                                        <div class="dimension-tag">{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
+                                        <label class="weight">가중치<input type="number" min="0" max="3" step="0.1" value={item.weight} oninput={(event) => setIndicatorWeight(item.id, event.currentTarget.value)} /></label>
                                     </div>
-                                    <div class="indicator-copy"><strong>{item.label}</strong><span>{indicatorStatusText(item)} · {item.description}</span></div>
-                                    <div class="dimension-tag">{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
-                                    <label class="weight">가중치<input type="number" min="0" max="3" step="0.1" value={item.weight} oninput={(event) => setIndicatorWeight(item.id, event.currentTarget.value)} /></label>
-                                </div>
-                            {/each}
+                                {/each}
+                            {/if}
                         </div>
                     {/each}
                 </div>
 
                 <div class="right-column">
-                    <div class="panel analysis-map-panel">
-                        <div class="panel-head map-head">
-                            <div><h2>{alternatives[activeAlternative]?.name} 분석 지도</h2><p>{alternatives[activeAlternative]?.description} · {region} · 행정구역 코드 {regionCode}</p></div>
-                            <div class="map-toolbar">
-                                <div class="database-actions">
-                                    <label>
-                                        <span>작업자</span>
-                                        <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="Supabase 저장 작업자" />
-                                    </label>
-                                    <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy}>
-                                        {supabaseBusy ? '처리 중' : '저장'}
-                                    </button>
-                                    <button class="db-load-action" onclick={toggleSupabaseHistory} disabled={supabaseBusy}>
-                                        {supabaseHistoryOpen ? '목록닫기' : '불러오기'}
-                                    </button>
-                                    <span>{supabaseStatus}</span>
-                                </div>
-                                <div class="handoff-actions">
-                                    <div class="handoff-button-row">
-                                        <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
-                                        <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 회수</button>
-                                        <button class="secondary-action muted" onclick={resetAllAlternatives}>전체 대안 초기화</button>
-                                    </div>
-                                    <span class="handoff-note">{handoffStatusText}</span>
-                                </div>
-                                <div class="alternative-tabs" aria-label="기후적응실천권역 대안">
-                                    <button class="reset-alt" onclick={resetActiveAlternative} title="현재 대안 초기화">초기화</button>
-                                    <button class="delete-alt" onclick={deleteActiveAlternative} title="현재 대안 삭제">삭제</button>
-                                    <button class="add-alt" onclick={addAlternative} title="대안 추가">대안추가</button>
-                                    {#each alternatives as alternative, index}
-                                        <button class:active={activeAlternative === index} onclick={() => switchAlternative(index)}>
-                                            <span>{alternative.name}</span>
-                                            <small>{alternativeStatusLabel(alternative)}</small>
-                                        </button>
-                                    {/each}
+                    <div class="panel analysis-map-panel" bind:this={mapSectionEl}>
+                        <div class="panel-head">
+                            <div><span class="section-number">02</span><h2>분석 지도</h2><p>{region} · 행정구역 코드 {regionCode}</p></div>
+                        </div>
+                        <div class="map-actions-band">
+                            <div class="database-actions">
+                                <label>
+                                    <span>작업자</span>
+                                    <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="Supabase 저장 작업자" />
+                                </label>
+                                <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy}>
+                                    {supabaseBusy ? '처리 중' : '저장'}
+                                </button>
+                                <button class="db-load-action" onclick={toggleSupabaseHistory} disabled={supabaseBusy}>
+                                    {supabaseHistoryOpen ? '목록닫기' : '불러오기'}
+                                </button>
+                                <span>{supabaseStatus}</span>
+                            </div>
+                            <div class="handoff-actions">
+                                <div class="handoff-button-row">
+                                    <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
+                                    <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 회수</button>
+                                    <button class="secondary-action muted" onclick={resetAllAlternatives}>전체 대안 초기화</button>
                                 </div>
                             </div>
                         </div>
+                        <div class="map-tabs-row">
+                            <div class="alternative-tabs browser-tabs" aria-label="기후적응실천권역 대안">
+                                {#each alternatives as alternative, index}
+                                    <div class="browser-tab" class:active={activeAlternative === index}>
+                                        <button class="browser-tab-select" onclick={() => switchAlternative(index)}>
+                                            <span>{alternative.name}</span>
+                                            <small>{alternativeStatusLabel(alternative)}</small>
+                                        </button>
+                                        <button
+                                            class="browser-tab-close"
+                                            onclick={(event) => { event.stopPropagation(); requestDeleteAlternative(index); }}
+                                            disabled={alternatives.length <= 1}
+                                            title="{alternative.name} 삭제"
+                                            aria-label="{alternative.name} 삭제"
+                                        >×</button>
+                                    </div>
+                                {/each}
+                                <button class="browser-tab-add" onclick={addAlternative} title="대안 추가" aria-label="대안 추가">+</button>
+                            </div>
+                        </div>
+                        {#if pendingDeleteIndex !== null}
+                            <div class="alt-delete-confirm-backdrop" onclick={cancelDeleteAlternative}>
+                                <div class="alt-delete-confirm" onclick={(event) => event.stopPropagation()}>
+                                    <p>'{alternatives[pendingDeleteIndex]?.name}'을(를) 삭제하시겠습니까?<br />대안 데이터가 사라지며 되돌릴 수 없습니다.</p>
+                                    <div class="alt-delete-confirm-actions">
+                                        <button class="secondary-action" onclick={cancelDeleteAlternative}>취소</button>
+                                        <button class="secondary-action danger" onclick={confirmDeleteAlternative}>삭제</button>
+                                    </div>
+                                </div>
+                            </div>
+                        {/if}
                         <div class="map-result-wrap">
                             <SelectedRegionMap
                                 {regionCode}
                                 regionName={region}
-                                height="760px"
+                                height={mapAreaHeight}
                                 showCadastral={false}
                                 analysisIndicators={analysisDone ? appliedIndicators : previewAnalysisIndicators}
                                 riskGrid={analysisResult?.gridResult || indicatorPreviewGrid}
@@ -2719,6 +2845,7 @@
                                 {focusedCandidate}
                                 onParcelCandidatesChange={handleParcelCandidates}
                                 onParcelCandidateFocus={handleMapParcelCandidateFocus}
+                                onParcelDerivationComplete={handleParcelDerivationComplete}
                             />
                             <section class="score-row map-score-overlay" aria-label="리스크 평가 결과">
                                 <div class="score-card risk"><span>{analysisResult?.hazardOnly ? '예비 위험도' : '종합 위험도'}</span><strong>{formatScore(resultRiskScore)}</strong><small>{analysisDone ? `${analysisResult.gridUnit} · ${analysisResult.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk'}` : '분석 실행 대기'}</small></div>
@@ -2731,9 +2858,10 @@
                 </div>
             </section>
 
-            <section class="panel candidates wide-candidates">
+            <section class="post-analysis-phase">
+            <section class="panel candidates wide-candidates" bind:this={candidatesSectionEl}>
                 <div class="panel-head">
-                    <div><span class="section-number">02</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
+                    <div><span class="section-number">03</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
                     <span class="count-badge">실천지구 {candidateList.length}개</span>
                 </div>
                 {#if candidateList.length}
@@ -2832,6 +2960,7 @@
                         주관부서 지원도구로 검토 요청
                     </button>
                 </div>
+            </section>
             </section>
         </main>
     </div>

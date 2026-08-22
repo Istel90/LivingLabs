@@ -30,6 +30,7 @@
         onGridLayerChange = () => {},
         onParcelCandidatesChange = () => {},
         onParcelCandidateFocus = () => {},
+        onParcelDerivationComplete = () => {},
         parcelCandidates = [],
         candidateContextKey = '',
         mapResetKey = 0,
@@ -74,6 +75,9 @@
     let selectedGridLayer = $state(activeGridLayer);
     let visibleLayerScopeKey = $state('');
     let selectedBoundaryVisible = $state(true);
+    let layerPanelOpen = $state(false);
+    let legendDescriptionOpen = $state(false);
+    let legendCollapsed = $state(false);
     let sidoBoundaryVisible = $state(showSidoBoundary);
     let sigunguBoundaryVisible = $state(showSigunguBoundary);
     let cadastralVisible = $state(false);
@@ -1432,7 +1436,10 @@
                 onParcelCandidatesChange([], message, runCandidateContextKey);
             }
         } finally {
-            if (parcelCandidateRunId === runId) parcelCandidateRunning = false;
+            if (parcelCandidateRunId === runId) {
+                parcelCandidateRunning = false;
+                onParcelDerivationComplete();
+            }
         }
     }
 
@@ -1546,6 +1553,51 @@
         if (value >= 0.3) return '#facc15';
         if (value >= 0.15) return '#84cc16';
         return '#22c55e';
+    }
+
+    function legendStops(layer) {
+        if (layer === 'H') {
+            return [
+                { color: '#fde68a', range: '0.30 미만', label: '매우 낮음' },
+                { color: '#facc15', range: '0.30 ~ 0.45', label: '낮음' },
+                { color: '#f97316', range: '0.45 ~ 0.60', label: '보통' },
+                { color: '#dc2626', range: '0.60 ~ 0.75', label: '높음' },
+                { color: '#991b1b', range: '0.75 이상', label: '매우 높음' }
+            ];
+        }
+        if (layer === 'E') {
+            return [
+                { color: '#bae6fd', range: '0.30 미만', label: '매우 낮음' },
+                { color: '#38bdf8', range: '0.30 ~ 0.45', label: '낮음' },
+                { color: '#0284c7', range: '0.45 ~ 0.60', label: '보통' },
+                { color: '#1d4ed8', range: '0.60 ~ 0.75', label: '높음' },
+                { color: '#0f172a', range: '0.75 이상', label: '매우 높음' }
+            ];
+        }
+        if (layer === 'V') {
+            return [
+                { color: '#e9d5ff', range: '0.30 미만', label: '매우 낮음' },
+                { color: '#c084fc', range: '0.30 ~ 0.45', label: '낮음' },
+                { color: '#a855f7', range: '0.45 ~ 0.60', label: '보통' },
+                { color: '#7e22ce', range: '0.60 ~ 0.75', label: '높음' },
+                { color: '#581c87', range: '0.75 이상', label: '매우 높음' }
+            ];
+        }
+        if (layer === 'Hotspot') {
+            return [
+                { color: '#ef4444', range: '0.60 미만', label: '핫스팟 후보' },
+                { color: '#b91c1c', range: '0.60 ~ 0.75', label: '주요 핫스팟' },
+                { color: '#7f1d1d', range: '0.75 이상', label: '최우선 핫스팟' }
+            ];
+        }
+        return [
+            { color: '#22c55e', range: '0.15 미만', label: '매우 낮음' },
+            { color: '#84cc16', range: '0.15 ~ 0.30', label: '낮음' },
+            { color: '#facc15', range: '0.30 ~ 0.45', label: '보통' },
+            { color: '#f97316', range: '0.45 ~ 0.60', label: '다소 높음' },
+            { color: '#dc2626', range: '0.60 ~ 0.75', label: '높음' },
+            { color: '#b91c1c', range: '0.75 이상', label: '매우 높음' }
+        ];
     }
 
     function createRiskGridLayer(L, grid) {
@@ -1986,13 +2038,38 @@
     {/if}
     {#if showAnalysisLegend}
         <div class="analysis-overlay-stack">
-            <div class="analysis-legend" aria-label="분석 범례">
-                <strong>분석 범례</strong>
-                <span class="legend-note">
-                    {riskGrid?.preview
-                        ? '분석 전 미리보기 · H·E·V 탭과 체크박스로 01 지표 데이터를 확인합니다.'
-                        : 'H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.'}
-                </span>
+            <div class="analysis-legend" class:legend-collapsed={legendCollapsed} aria-label="분석 범례">
+                <div class="legend-head">
+                    <strong>분석 범례</strong>
+                    <div class="legend-head-actions">
+                        <button
+                            type="button"
+                            class="legend-info-toggle"
+                            class:active={legendDescriptionOpen}
+                            aria-pressed={legendDescriptionOpen}
+                            aria-label={`분석 범례 설명 ${legendDescriptionOpen ? '숨기기' : '보기'}`}
+                            title="설명 보기"
+                            onclick={() => (legendDescriptionOpen = !legendDescriptionOpen)}
+                        >ⓘ</button>
+                        <button
+                            type="button"
+                            class="legend-collapse-toggle"
+                            aria-expanded={!legendCollapsed}
+                            aria-label={`분석 범례 ${legendCollapsed ? '펼치기' : '접기'}`}
+                            title={legendCollapsed ? '펼치기' : '접기'}
+                            onclick={() => (legendCollapsed = !legendCollapsed)}
+                        >{legendCollapsed ? '▸' : '▾'}</button>
+                    </div>
+                </div>
+                {#if legendDescriptionOpen}
+                    <span class="legend-note">
+                        {riskGrid?.preview
+                            ? '분석 전 미리보기 · H·E·V 탭과 눈 아이콘으로 01 지표 데이터를 확인합니다.'
+                            : 'H·E·V 탭과 눈 아이콘으로 지도 시각화를 켜고 끌 수 있습니다.'}
+                        <br />눈 아이콘은 지도 표시만 제어하며, 분석 결과(Risk 계산)에는 영향을 주지 않습니다. 분석 포함 여부는 01 분석 지표 구성에서 설정하세요.
+                    </span>
+                {/if}
+                {#if !legendCollapsed}
                 {#if riskGrid?.stats}
                     <label class="risk-surface-summary">
                         <input
@@ -2005,6 +2082,18 @@
                         <div class="risk-ramp" aria-hidden="true"></div>
                         <small>낮음 → 높음</small>
                     </label>
+                    <div class="risk-scale-legend" aria-label={`${gridLayerLabels[selectedGridLayer] || selectedGridLayer} 색상 스케일 범례`}>
+                        <b>{gridLayerLabels[selectedGridLayer] || selectedGridLayer} 색상 스케일</b>
+                        <div class="risk-scale-stops">
+                            {#each legendStops(selectedGridLayer) as stop}
+                                <div class="risk-scale-stop">
+                                    <i style={`background:${stop.color}`}></i>
+                                    <span>{stop.range}</span>
+                                    <small>{stop.label}</small>
+                                </div>
+                            {/each}
+                        </div>
+                    </div>
                 {/if}
                 <div class="analysis-grid-tabs" aria-label="분석 격자 레이어">
                     {#each gridLayers as layer}
@@ -2025,16 +2114,34 @@
                             <h3>{group} ({analysisGroupEnglish[group]})</h3>
                             <div class="legend-items">
                                 {#each items as item}
-                                    <label>
-                                        <input
-                                            type="checkbox"
-                                            checked={visibleAnalysisLayerIds.includes(String(item.id))}
-                                            onchange={(event) => toggleAnalysisLayer(item.id, event.currentTarget.checked)}
-                                        />
+                                    {@const visible = visibleAnalysisLayerIds.includes(String(item.id))}
+                                    <div class="legend-item">
+                                        <button
+                                            type="button"
+                                            class="visibility-toggle"
+                                            class:visible
+                                            aria-pressed={visible}
+                                            aria-label={`${item.label} 지도 표시 ${visible ? '끄기' : '켜기'}`}
+                                            title={visible ? '지도에서 숨기기' : '지도에 표시하기'}
+                                            onclick={() => toggleAnalysisLayer(item.id, !visible)}
+                                        >
+                                            {#if visible}
+                                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="M12 5c-6 0-9.5 5-10.5 7 1 2 4.5 7 10.5 7s9.5-5 10.5-7c-1-2-4.5-7-10.5-7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+                                                    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+                                                </svg>
+                                            {:else}
+                                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="M12 5c-6 0-9.5 5-10.5 7 1 2 4.5 7 10.5 7s9.5-5 10.5-7c-1-2-4.5-7-10.5-7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+                                                    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+                                                    <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                                                </svg>
+                                            {/if}
+                                        </button>
                                         <i style={`--legend-color:${item.color || '#64748b'}`}></i>
                                         <b>{item.label}</b>
                                         <small>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</small>
-                                    </label>
+                                    </div>
                                 {/each}
                             </div>
                         </section>
@@ -2047,6 +2154,7 @@
                 {/if}
                 {#if enabledAnalysisIndicators().length && !enabledAnalysisIndicators().some((item) => item.geojson) && !riskGrid?.values?.length}
                     <p>실제 공간 결과 레이어는 아직 연결 전입니다.</p>
+                {/if}
                 {/if}
             </div>
             {#if riskGrid?.stats}
@@ -2090,35 +2198,56 @@
             {/if}
         </div>
     {/if}
-    <div class="layer-panel">
-        <strong>베이스·행정 레이어</strong>
-        <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
-        <label>
-            <input
-                type="checkbox"
-                checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
-                disabled={forceSelectedBoundary}
-                onchange={(event) => {
-                    if (forceSelectedBoundary) return;
-                    selectedBoundaryVisible = event.currentTarget.checked;
-                    toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
-                }}
-            />
-            선택지역 경계
-        </label>
-        {#if hasVWorldApiKey()}
-            <label><input type="checkbox" checked={sidoBoundaryVisible} onchange={(event) => { sidoBoundaryVisible = event.currentTarget.checked; toggleLayer(sidoLayer, sidoBoundaryVisible); }} /> 시도 경계</label>
-            <label><input type="checkbox" checked={sigunguBoundaryVisible} onchange={(event) => { sigunguBoundaryVisible = event.currentTarget.checked; toggleLayer(sggLayer, sigunguBoundaryVisible); }} /> 시군구 경계</label>
-            {#if showCadastral}
-                <label><input type="checkbox" checked={cadastralVisible} onchange={(event) => { cadastralVisible = event.currentTarget.checked; toggleLayer(cadastralLayer, cadastralVisible); }} /> 연속지적도</label>
+    <div class="map-icon-controls">
+        <div class="icon-control-wrap">
+            <button
+                type="button"
+                class="icon-control-button"
+                class:active={layerPanelOpen}
+                aria-expanded={layerPanelOpen}
+                aria-label="베이스·행정 레이어 설정 열기"
+                onclick={() => (layerPanelOpen = !layerPanelOpen)}
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <polygon points="12 3 21 8 12 13 3 8 12 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                    <polyline points="3 12 12 17 21 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                    <polyline points="3 16 12 21 21 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                </svg>
+                <span class="icon-tooltip">선택지역 경계</span>
+            </button>
+            {#if layerPanelOpen}
+                <div class="layer-panel">
+                    <strong>베이스·행정 레이어</strong>
+                    <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
+                            disabled={forceSelectedBoundary}
+                            onchange={(event) => {
+                                if (forceSelectedBoundary) return;
+                                selectedBoundaryVisible = event.currentTarget.checked;
+                                toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
+                            }}
+                        />
+                        선택지역 경계
+                    </label>
+                    {#if hasVWorldApiKey()}
+                        <label><input type="checkbox" checked={sidoBoundaryVisible} onchange={(event) => { sidoBoundaryVisible = event.currentTarget.checked; toggleLayer(sidoLayer, sidoBoundaryVisible); }} /> 시도 경계</label>
+                        <label><input type="checkbox" checked={sigunguBoundaryVisible} onchange={(event) => { sigunguBoundaryVisible = event.currentTarget.checked; toggleLayer(sggLayer, sigunguBoundaryVisible); }} /> 시군구 경계</label>
+                        {#if showCadastral}
+                            <label><input type="checkbox" checked={cadastralVisible} onchange={(event) => { cadastralVisible = event.currentTarget.checked; toggleLayer(cadastralLayer, cadastralVisible); }} /> 연속지적도</label>
+                        {/if}
+                    {:else}
+                        <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
+                    {/if}
+                </div>
             {/if}
-        {:else}
-            <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
-        {/if}
+        </div>
         {#if !locked}
-            <button class="return-region-button" type="button" onclick={returnToSelectedRegion} title={`${regionName || '선택 지역'} 전체 보기`}>
-                <span aria-hidden="true">⌖</span>
-                {regionReturnLabel()}
+            <button type="button" class="icon-control-button" onclick={returnToSelectedRegion}>
+                <span class="icon-glyph" aria-hidden="true">⌖</span>
+                <span class="icon-tooltip">{regionReturnLabel()}</span>
             </button>
         {/if}
     </div>
@@ -2173,40 +2302,83 @@
         font-size: .65rem;
     }
 
-    .return-region-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: .35rem;
-        width: 100%;
-        margin-top: .3rem;
-        border: 1px solid rgb(15 118 110 / 26%);
-        border-radius: .65rem;
-        background: #ecfdf5;
-        color: #0f766e;
-        padding: .52rem .72rem;
-        font-size: .72rem;
-        font-weight: 900;
+    .map-icon-controls {
+        position: absolute;
+        right: .85rem;
+        top: .85rem;
+        z-index: 900;
+        display: grid;
+        gap: .5rem;
+        justify-items: end;
+    }
+
+    .icon-control-wrap {
+        position: relative;
+    }
+
+    .icon-control-button {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 2.35rem;
+        height: 2.35rem;
+        border: 1px solid rgb(15 23 42 / 10%);
+        border-radius: .7rem;
+        background: rgb(255 255 255 / 92%);
+        color: #0f172a;
+        box-shadow: 0 12px 26px rgb(15 23 42 / 14%);
+        backdrop-filter: blur(10px);
         cursor: pointer;
     }
 
-    .return-region-button:hover {
+    .icon-control-button:hover,
+    .icon-control-button.active {
         border-color: #0f766e;
-        background: #ecfdf5;
+        color: #0f766e;
     }
 
-    .return-region-button span {
-        font-size: 1rem;
+    .icon-control-button svg {
+        width: 1.15rem;
+        height: 1.15rem;
+    }
+
+    .icon-control-button .icon-glyph {
+        font-size: 1.15rem;
         line-height: 1;
+    }
+
+    .icon-tooltip {
+        position: absolute;
+        right: calc(100% + .5rem);
+        top: 50%;
+        z-index: 520;
+        transform: translateY(-50%);
+        white-space: nowrap;
+        border-radius: .45rem;
+        background: #0f172a;
+        color: #fff;
+        padding: .3rem .55rem;
+        font-size: .68rem;
+        font-weight: 700;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .12s ease;
+    }
+
+    .icon-control-button:hover .icon-tooltip,
+    .icon-control-button:focus-visible .icon-tooltip {
+        opacity: 1;
     }
 
     .layer-panel {
         position: absolute;
-        right: .85rem;
-        top: .85rem;
+        right: 0;
+        top: calc(100% + .5rem);
         z-index: 500;
         display: grid;
         gap: .38rem;
+        width: max-content;
+        max-width: 15rem;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .9rem;
         background: rgb(255 255 255 / 92%);
@@ -2232,23 +2404,63 @@
 
     .analysis-legend {
         width: 100%;
-        max-height: 16rem;
+        max-height: 11rem;
         overflow: auto;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .9rem;
         background: rgb(255 255 255 / 96%);
-        padding: .8rem .9rem;
+        padding: .55rem .7rem;
         box-shadow: 0 22px 46px rgb(15 23 42 / 18%);
         color: #0f172a;
         backdrop-filter: blur(10px);
         pointer-events: auto;
     }
 
-    .analysis-legend > strong {
+    .analysis-legend.legend-collapsed {
+        max-height: none;
+        overflow: visible;
+    }
+
+    .legend-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+    }
+
+    .legend-head > strong {
         display: block;
         color: #073b52;
         font-size: .88rem;
         font-weight: 900;
+    }
+
+    .legend-head-actions {
+        display: flex;
+        align-items: center;
+        gap: .25rem;
+        flex: 0 0 auto;
+    }
+
+    .legend-info-toggle,
+    .legend-collapse-toggle {
+        width: 1.3rem;
+        height: 1.3rem;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgb(15 23 42 / 14%);
+        border-radius: 50%;
+        background: #fff;
+        color: #64748b;
+        font-size: .7rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .legend-info-toggle.active {
+        border-color: #0f766e;
+        background: #ecfdf5;
+        color: #0f766e;
     }
 
     .legend-note {
@@ -2257,6 +2469,7 @@
         color: #64748b;
         font-size: .68rem;
         font-weight: 800;
+        line-height: 1.5;
     }
 
     .risk-surface-summary {
@@ -2300,6 +2513,59 @@
         height: .42rem;
         border-radius: 999px;
         background: linear-gradient(90deg, #22c55e, #84cc16, #facc15, #f97316, #dc2626, #b91c1c);
+    }
+
+    .risk-scale-legend {
+        margin-top: .5rem;
+        border: 1px solid rgb(15 23 42 / 10%);
+        border-radius: .72rem;
+        background: rgb(248 250 252 / 88%);
+        padding: .55rem .62rem;
+    }
+
+    .risk-scale-legend > b {
+        display: block;
+        margin-bottom: .4rem;
+        color: #244a45;
+        font-size: .68rem;
+        font-weight: 900;
+    }
+
+    .risk-scale-stops {
+        display: grid;
+        gap: .3rem;
+    }
+
+    .risk-scale-stop {
+        display: grid;
+        grid-template-columns: .68rem minmax(0, auto) 1fr;
+        gap: .45rem;
+        align-items: center;
+        min-width: 0;
+    }
+
+    .risk-scale-stop i {
+        width: .68rem;
+        height: .68rem;
+        border-radius: .2rem;
+        box-shadow: 0 0 0 1px rgb(15 23 42 / 12%);
+    }
+
+    .risk-scale-stop span {
+        color: #334155;
+        font-size: .64rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .risk-scale-stop small {
+        overflow: hidden;
+        color: #64748b;
+        font-size: .64rem;
+        font-weight: 700;
+        text-align: right;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .analysis-grid-tabs {
@@ -2471,7 +2737,7 @@
         gap: .35rem;
     }
 
-    .legend-items label {
+    .legend-items .legend-item {
         display: grid;
         grid-template-columns: .85rem .75rem minmax(0, 1fr) auto;
         gap: .45rem;
@@ -2480,14 +2746,28 @@
         color: #334155;
         font-size: .72rem;
         font-weight: 800;
+    }
+
+    .legend-items .visibility-toggle {
+        display: grid;
+        place-items: center;
+        width: .85rem;
+        height: .85rem;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: #94a3b8;
         cursor: pointer;
     }
 
-    .legend-items input {
-        width: .82rem;
-        height: .82rem;
-        margin: 0;
-        accent-color: #0f766e;
+    .legend-items .visibility-toggle.visible {
+        color: #0f766e;
+    }
+
+    .legend-items .visibility-toggle svg {
+        width: 100%;
+        height: 100%;
     }
 
     .legend-items i {
