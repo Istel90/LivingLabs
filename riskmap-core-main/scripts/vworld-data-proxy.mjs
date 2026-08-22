@@ -9,6 +9,7 @@ import proj4 from 'proj4';
 import pg from 'pg';
 import { createObservedHazardGridBuilder } from './hazard-grid.mjs';
 import { createHevGridStore } from './hev-grid-store.mjs';
+import { createFloodGridStore } from './flood-grid-store.mjs';
 
 const { Pool } = pg;
 
@@ -59,6 +60,7 @@ const cadastrePool = new Pool({
 });
 
 const hevGridStore = createHevGridStore({ pool: cadastrePool });
+const floodGridStore = createFloodGridStore({ pool: cadastrePool });
 const hevPostgisRetryDelay = 30000;
 let hevPostgisRetryAt = 0;
 cadastrePool.on('error', (error) => {
@@ -91,6 +93,13 @@ async function buildObservedHazardGrid(searchParams) {
   }
 }
 
+async function fetchFloodGrid(searchParams) {
+  const regionCode = (searchParams.get('regionCode') || '').trim();
+  const indicator = (searchParams.get('indicator') || '').trim().toUpperCase();
+  const stored = await floodGridStore.get(regionCode, indicator);
+  if (!stored) throw new Error(`Flood grid is not loaded: ${regionCode}/${indicator}`);
+  return stored;
+}
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
   '.csv': 'text/csv; charset=utf-8',
@@ -833,6 +842,24 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (routePath === '/flood-grid/health') {
+    try {
+      send(response, 200, JSON.stringify({ ok: await floodGridStore.ready(), ...(await floodGridStore.status()) }));
+    } catch (error) {
+      send(response, 503, JSON.stringify({ ok: false, error: error?.message || 'Flood PostGIS unavailable' }));
+    }
+    return;
+  }
+
+  if (routePath === '/flood-grid') {
+    try {
+      send(response, 200, JSON.stringify(await fetchFloodGrid(url.searchParams)));
+    } catch (error) {
+      const status = /must be|indicator must/.test(error?.message || '') ? 400 : /not loaded/.test(error?.message || '') ? 404 : 503;
+      send(response, status, JSON.stringify({ ok: false, error: error?.message || 'Flood grid lookup failed' }));
+    }
+    return;
+  }
   if (routePath === '/hazard-grid/health') {
     try {
       send(response, 200, JSON.stringify({ ok: await hevGridStore.ready(), ...(await hevGridStore.status()) }));

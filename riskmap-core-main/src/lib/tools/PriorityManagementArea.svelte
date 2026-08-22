@@ -116,8 +116,8 @@
             projectSuffix: '홍수 위험지역 분석',
             heroEmphasis: '우선 대응 침수권역을 찾습니다.',
             heroDescription: '침수위험(H), 노출(E), 취약성(V) 지표를 구성하고 배수·저류·대피 대안을 공간적으로 비교하세요.',
-            sampleNotice: '현재 홍수 분석 데이터와 후보지는 구조 시연용 샘플입니다.',
-            mapSource: '침수흔적도·DEM·배수시설 데이터 연결 준비',
+            sampleNotice: '전국 도시·하천 홍수위험도와 2024 인구·주택을 EPSG:5179 100m 공통 격자로 사용할 수 있습니다.',
+            mapSource: '전국 도시침수·국가하천·지방하천 위험도 및 2024 인구·주택 100m PostGIS',
             rasterPath: null,
             dataSummaryPath: null,
             rasterReadyPrefix: '홍수 위험 래스터',
@@ -143,24 +143,21 @@
                 { name: '대안3', status: '검토중', description: '반지하·취약시설 보호 중심 대응안' }
             ],
             indicators: [
-                { id: 1, icon: '≈', label: '침수흔적도', description: '과거 침수 이력 및 침수심 분포', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#2563eb' },
-                { id: 2, icon: '☔', label: '강우강도', description: '집중호우 강도 및 빈도', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#0284c7' },
-                { id: 3, icon: '▾', label: '저지대 지형', description: 'DEM 기반 저지대·경사 취약 구간', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#0891b2' },
-                { id: 4, icon: '♟', label: '상주인구', description: '침수권역 내 거주 인구', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#d4af42' },
-                { id: 5, icon: '🚶', label: '유동인구', description: '시간대별 보행·상권 유동 인구', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#db9d3e' },
-                { id: 6, icon: '🛣', label: '주요 도로', description: '침수 시 통행 영향 도로망', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#b7791f' },
-                { id: 7, icon: '⌂', label: '반지하 주거', description: '반지하·지하층 주거 밀집도', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#e45662' },
-                { id: 8, icon: '🏚', label: '노후건축물', description: '노후 건축물 및 취약 주택 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#cf6576' },
-                { id: 9, icon: '🏥', label: '취약시설', description: '복지시설·의료시설·학교 등 보호대상', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#a56d83' },
-                { id: 10, icon: '◉', label: '빗물받이 밀도', description: '빗물받이 및 우수 유입시설 분포', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#3f9b80' },
-                { id: 11, icon: '▤', label: '배수펌프장 접근성', description: '배수펌프장·저류시설 영향권', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#57a66c' },
-                { id: 12, icon: '↗', label: '대피시설 접근성', description: '대피소와 안전 이동경로 접근성', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#61958b' }
+                { id: 201, indicatorCode: 'FH01', icon: '≈', label: 'FH01 · 도시침수 30년', description: '도시침수 위험등급을 100m 셀별 침수심 중간값으로 변환', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#2563eb' },
+                { id: 202, indicatorCode: 'FH02', icon: '≋', label: 'FH02 · 국가하천 범람 100년', description: '국가하천 범람 위험등급을 100m 셀별 침수심 중간값으로 변환', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#0284c7' },
+                { id: 203, indicatorCode: 'FH03', icon: '≋', label: 'FH03 · 지방하천 범람 50년', description: '지방하천 범람 위험등급을 100m 셀별 침수심 중간값으로 변환', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#0891b2' },
+                { id: 204, indicatorCode: 'FE01', icon: '♟', label: 'FE01 · 2024 상주인구', description: '전국 총인구 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#d4af42' },
+                { id: 205, indicatorCode: 'FE02', icon: '⌂', label: 'FE02 · 2024 주택 수', description: '전국 주택 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'flood-postgis-100m', supportedGridUnits: ['100m'], color: '#db9d3e' },
+                { id: 206, icon: '🛣', label: '주요 도로', description: '전국 도로 링크의 침수영향도 파생 필요', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'road-grid', value: 0.5, color: '#b7791f' },
+                { id: 207, icon: '⌄', label: '반지하 주거', description: '반지하·지하층 주거 원자료 확보 필요', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'building-grid', value: 0.5, color: '#e45662' },
+                { id: 208, icon: '🏚', label: '노후건축물', description: '건축물대장 기반 30년 이상 주택 비율 구축 필요', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'building-grid', value: 0.5, color: '#cf6576' },
+                { id: 209, icon: '🏥', label: '취약시설', description: '복지·의료·학교 보호대상 시설 원자료 확보 필요', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'facility-grid', value: 0.5, color: '#a56d83' },
+                { id: 210, icon: '◉', label: '빗물받이 밀도', description: '지자체 우수 유입시설 데이터 확보 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'drainage-grid', value: 0.5, color: '#3f9b80' },
+                { id: 211, icon: '▤', label: '배수펌프장 접근성', description: '배수펌프장·저류시설 전국 데이터 확보 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'drainage-grid', value: 0.5, color: '#57a66c' },
+                { id: 212, icon: '↗', label: '대피시설 접근성', description: '재해대피시설 전국 위치와 안전 이동경로 구축 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'shelter-grid', value: 0.5, color: '#61958b' }
             ],
-            candidates: [
-                { name: '후보지 02', area: '저지대 주거밀집지', risk: 0.84, h: 0.88, e: 0.79, v: 0.82, rank: 1, reason: '침수흔적과 반지하 주거가 중첩된 구역' },
-                { name: '후보지 05', area: '하천변 상업·주거 혼재지', risk: 0.79, h: 0.81, e: 0.83, v: 0.73, rank: 2, reason: '하천 범람 영향권과 유동인구 집중' },
-                { name: '후보지 09', area: '노후 배수시설 영향권', risk: 0.74, h: 0.75, e: 0.72, v: 0.78, rank: 3, reason: '배수시설 부족과 노후 건축물 밀집' }
-            ]
+            candidates: []
+
         },
         ecosystem: {
             label: '생태계',
@@ -228,8 +225,24 @@
         return vworldProxyUrl ? new URL(route, vworldProxyUrl).toString() : route;
     }
 
+    function floodDataPath(indicatorCode, code) {
+        if (!code || !/^F(?:H0[1-3]|E0[1-2])$/.test(indicatorCode || '')) return null;
+        const route = `/flood-grid?regionCode=${encodeURIComponent(code)}&indicator=${encodeURIComponent(indicatorCode)}`;
+        return vworldProxyUrl ? new URL(route, vworldProxyUrl).toString() : route;
+    }
     function configureIndicatorsForRegion(sourceIndicators, code, datasetMode = hazardDatasetMode) {
         return sourceIndicators.map((item) => {
+            if (hazard === 'flood' && item.indicatorCode) {
+                const dataPath = floodDataPath(item.indicatorCode, code);
+                return {
+                    ...item,
+                    dataPath,
+                    dataStatus: dataPath ? 'available' : 'missing',
+                    sourceType: dataPath ? 'flood-postgis-100m' : item.sourceType,
+                    supportedGridUnits: ['100m'],
+                    enabled: Boolean(dataPath && item.enabled)
+                };
+            }
             if (item.indicatorCode) {
                 const observed = datasetMode === 'observed';
                 const observedPath = observed ? observedHazardDataPath(item.indicatorCode, code) : null;

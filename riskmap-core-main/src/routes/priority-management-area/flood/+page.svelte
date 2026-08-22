@@ -2,4 +2,4 @@
     import PriorityManagementArea from '$lib/tools/PriorityManagementArea.svelte';
 </script>
 
-<PriorityManagementArea hazard="flood" />
+<PriorityManagementArea hazard="flood" nationalLab />
