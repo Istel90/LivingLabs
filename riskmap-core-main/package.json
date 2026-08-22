@@ -14,6 +14,8 @@
         "flood:load-floating-population": "node ./scripts/load-floating-population-postgis.mjs",
         "flood:collect-national-facilities": "node ./scripts/collect-national-facilities-postgis.mjs",
         "flood:collect-history": "node ./scripts/collect-flood-history-postgis.mjs",
+        "flood:build-terrain": "python ./scripts/collect-dem-derivatives.py --load-postgis",
+        "flood:load-buildings": "python ./scripts/load-gis-building-integrated.py --replace",
         "preview": "vite preview",
         "preview:local": "vite preview --host 0.0.0.0 --port 4175 --strictPort",
         "vworld:proxy": "node ./scripts/vworld-data-proxy.mjs --port=4176",
