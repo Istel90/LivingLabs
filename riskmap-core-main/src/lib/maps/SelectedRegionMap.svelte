@@ -8,10 +8,14 @@
     } from '$lib/data/administrativeRegions.js';
     import { enrichPracticeDistricts, PRACTICE_TYPE_META } from '$lib/data/practiceDistricts.js';
     import {
+        canUseLocalCadastre,
+        canUseRemoteVWorldData,
         canUseVWorldData,
+        createCadastreBboxUrl,
         createVWorldDataUrl,
         createVWorldWmsOptions,
         hasVWorldApiKey,
+        VWORLD_BASE_TILE_URL,
         VWORLD_DATASETS,
         VWORLD_WMS_LAYERS,
         VWORLD_WMS_URL
@@ -30,6 +34,7 @@
         onGridLayerChange = () => {},
         onParcelCandidatesChange = () => {},
         onParcelCandidateFocus = () => {},
+        onParcelDerivationComplete = () => {},
         parcelCandidates = [],
         candidateContextKey = '',
         mapResetKey = 0,
@@ -71,9 +76,13 @@
     let adaptationSiteLayer;
     let visibleAnalysisLayerIds = $state([]);
     let riskGridVisible = $state(true);
+    let activeGridScale = $state(null);
     let selectedGridLayer = $state(activeGridLayer);
     let visibleLayerScopeKey = $state('');
     let selectedBoundaryVisible = $state(true);
+    let layerPanelOpen = $state(false);
+    let legendDescriptionOpen = $state(false);
+    let legendCollapsed = $state(false);
     let sidoBoundaryVisible = $state(showSidoBoundary);
     let sigunguBoundaryVisible = $state(showSigunguBoundary);
     let cadastralVisible = $state(false);
@@ -743,6 +752,21 @@
         boxes,
         { timeoutMs = 75000, concurrency = 1, onProgress = () => {} } = {}
     ) {
+        if (canUseLocalCadastre()) {
+            try {
+                return await fetchPostGisCadastralFeatures(boxes, { timeoutMs, onProgress });
+            } catch (error) {
+                if (!canUseRemoteVWorldData()) {
+                    if (error?.message?.startsWith('VWorld ')) {
+                        error.message = error.message.replace(/^VWorld /, 'PostGIS ');
+                    }
+                    throw error;
+                }
+                // Keep the existing VWorld flow as a deployment and outage fallback.
+                console.warn('Local PostGIS cadastre unavailable; falling back to VWorld.', error);
+            }
+        }
+
         const featuresById = new Map();
         // VWorld intermittently returns 502 for large cadastral payloads even when
         // the same extent succeeds in smaller pages. Keep each payload modest and
@@ -821,7 +845,7 @@
                     failures.push(error);
                 } finally {
                     completed += 1;
-                    onProgress({ completed, total: boxes.length, failed: failures.length, features: featuresById.size });
+                    onProgress({ completed, total: boxes.length, failed: failures.length, features: featuresById.size, source: 'vworld' });
                     await yieldToBrowser();
                 }
             }
@@ -840,7 +864,82 @@
             features: [...featuresById.values()],
             failureCount: failures.length,
             completedCount: completed,
-            requestedCount: boxes.length
+            requestedCount: boxes.length,
+            source: 'vworld'
+        };
+    }
+
+    async function fetchPostGisCadastralFeatures(
+        boxes,
+        { timeoutMs = 75000, onProgress = () => {} } = {}
+    ) {
+        const featuresById = new Map();
+        const failures = [];
+        const queue = [...boxes];
+        const deadline = Date.now() + timeoutMs;
+        let completed = 0;
+
+        async function fetchBox(box, depth = 0) {
+            if (Date.now() > deadline) throw new Error('request-timeout');
+            const remainingTime = Math.max(3000, Math.min(15000, deadline - Date.now()));
+            const url = createCadastreBboxUrl(box, { limit: 1000, simplifyMeters: 0 });
+            const payload = await fetchJsonWithRetry(url, { timeoutMs: remainingTime });
+            const features = extractVWorldFeatures(payload);
+
+            if (features.length < 1000 || depth >= 2) return features;
+
+            const centerLng = (box.minLng + box.maxLng) / 2;
+            const centerLat = (box.minLat + box.maxLat) / 2;
+            const children = [
+                { ...box, maxLng: centerLng, maxLat: centerLat },
+                { ...box, minLng: centerLng, maxLat: centerLat },
+                { ...box, maxLng: centerLng, minLat: centerLat },
+                { ...box, minLng: centerLng, minLat: centerLat }
+            ];
+            const childResults = await Promise.all(children.map((child) => fetchBox(child, depth + 1)));
+            return childResults.flat();
+        }
+
+        async function worker() {
+            while (queue.length) {
+                const box = queue.shift();
+                try {
+                    const features = await fetchBox(box);
+                    features.forEach((feature) => {
+                        const id = featureId(feature);
+                        if (id) featuresById.set(id, feature);
+                    });
+                } catch (error) {
+                    failures.push(error);
+                } finally {
+                    completed += 1;
+                    onProgress({
+                        completed,
+                        total: boxes.length,
+                        failed: failures.length,
+                        features: featuresById.size,
+                        source: 'postgis'
+                    });
+                    await yieldToBrowser();
+                }
+            }
+        }
+
+        await Promise.all(
+            Array.from({ length: Math.min(4, Math.max(1, boxes.length)) }, () => worker())
+        );
+
+        if (!featuresById.size && failures.length) {
+            const timeoutFailure = failures.find((error) => error?.message === 'request-timeout');
+            throw timeoutFailure || failures[0];
+        }
+
+        return {
+            features: [...featuresById.values()],
+            failureCount: failures.length,
+            completedCount: completed,
+            requestedCount: boxes.length,
+            source: 'postgis'
         };
     }
 
@@ -1367,10 +1466,11 @@
             if (!hotspots.length) throw new Error('hotspot-empty');
 
             const requestBoxes = hotspotRequestBoxes(hotspots);
-            parcelCandidateStatus = `연속지적도 API 요청 중 · ${requestBoxes.length}개 구역`;
+            parcelCandidateStatus = `연속지적도 조회 중 · ${requestBoxes.length}개 구역`;
             const fetchResult = await fetchVWorldCadastralFeatures(requestBoxes, {
-                onProgress: ({ completed, total, failed, features }) => {
-                    parcelCandidateStatus = `연속지적도 API 조회 · ${completed}/${total} 구역 · ${features.toLocaleString()}필지${failed ? ` · ${failed}개 구역 재조회 실패` : ''}`;
+                onProgress: ({ completed, total, failed, features, source }) => {
+                    const sourceLabel = source === 'postgis' ? '로컬 PostGIS' : 'VWorld';
+                    parcelCandidateStatus = `${sourceLabel} 연속지적도 · ${completed}/${total} 구역 · ${features.toLocaleString()}필지${failed ? ` · ${failed}개 구역 조회 실패` : ''}`;
                 }
             });
             const cadastralFeatures = fetchResult.features;
@@ -1420,8 +1520,8 @@
                     : error?.message === 'hotspot-empty'
                         ? 'Hotspot 격자가 없습니다.'
                         : error?.message === 'request-timeout'
-                            ? 'VWorld 필지 API 응답 시간이 초과되었습니다. 범위를 줄이거나 잠시 후 다시 실행하세요.'
-                        : error?.message?.startsWith('VWorld ')
+                            ? '필지 API 응답 시간이 초과되었습니다. 범위를 줄이거나 잠시 후 다시 실행하세요.'
+                        : error?.message?.startsWith('VWorld ') || error?.message?.startsWith('PostGIS ')
                             ? error.message
                             : '실천권역 도출 실패 · VWorld API 응답을 확인하세요.';
             parcelCandidateStatus = message;
@@ -1432,7 +1532,10 @@
                 onParcelCandidatesChange([], message, runCandidateContextKey);
             }
         } finally {
-            if (parcelCandidateRunId === runId) parcelCandidateRunning = false;
+            if (parcelCandidateRunId === runId) {
+                parcelCandidateRunning = false;
+                onParcelDerivationComplete();
+            }
         }
     }
 
@@ -1513,39 +1616,101 @@
         return grid.values || [];
     }
 
-    function gridColor(value, layer) {
-        if (layer === 'H') {
-            if (value >= 0.75) return '#991b1b';
-            if (value >= 0.6) return '#dc2626';
-            if (value >= 0.45) return '#f97316';
-            if (value >= 0.3) return '#facc15';
-            return '#fde68a';
+    function gridPalette(layer) {
+        if (layer === 'H') return ['#fde68a', '#facc15', '#f97316', '#dc2626', '#991b1b'];
+        if (layer === 'E') return ['#bae6fd', '#38bdf8', '#0284c7', '#1d4ed8', '#0f172a'];
+        if (layer === 'V') return ['#e9d5ff', '#c084fc', '#a855f7', '#7e22ce', '#581c87'];
+        if (layer === 'Hotspot') return ['#fecaca', '#f87171', '#ef4444', '#b91c1c', '#7f1d1d'];
+        return ['#22c55e', '#84cc16', '#facc15', '#f97316', '#b91c1c'];
+    }
+
+    function quantile(sortedValues, probability) {
+        if (!sortedValues.length) return NaN;
+        const position = (sortedValues.length - 1) * probability;
+        const lowerIndex = Math.floor(position);
+        const upperIndex = Math.ceil(position);
+        const weight = position - lowerIndex;
+        const lower = sortedValues[lowerIndex];
+        const upper = sortedValues[upperIndex];
+        return lower + ((upper - lower) * weight);
+    }
+
+    function createLocalGridScale(values, drawableCells, layer, hotspotThreshold = null) {
+        const localValues = drawableCells
+            .map((cell) => Number(values[cell.index]))
+            .filter((value) =>
+                Number.isFinite(value) &&
+                (!Number.isFinite(hotspotThreshold) || value >= hotspotThreshold)
+            )
+            .sort((left, right) => left - right);
+        if (!localValues.length) return null;
+
+        const minimum = localValues[0];
+        const maximum = localValues.at(-1);
+        const singleValue = Math.abs(maximum - minimum) <= 1e-9;
+        const uniqueCount = new Set(localValues.map((value) => value.toPrecision(12))).size;
+        const probabilities = [0.2, 0.4, 0.6, 0.8];
+        return {
+            layer,
+            minimum,
+            maximum,
+            singleValue,
+            thresholds: singleValue
+                ? []
+                : uniqueCount >= 5
+                    ? probabilities.map((probability) => quantile(localValues, probability))
+                    : probabilities.map((probability) => minimum + ((maximum - minimum) * probability)),
+            count: localValues.length,
+            method: uniqueCount >= 5 ? 'quantile' : 'equal-interval'
+        };
+    }
+
+    function gridColor(value, layer, scale = null) {
+        const palette = gridPalette(layer);
+        if (scale?.singleValue) return palette[Math.floor(palette.length / 2)];
+        if (scale?.thresholds?.length) {
+            if (value <= scale.minimum) return palette[0];
+            if (value >= scale.maximum) return palette.at(-1);
+            const classIndex = scale.thresholds.findIndex((threshold) => value <= threshold);
+            return palette[classIndex < 0 ? palette.length - 1 : classIndex];
         }
-        if (layer === 'E') {
-            if (value >= 0.75) return '#0f172a';
-            if (value >= 0.6) return '#1d4ed8';
-            if (value >= 0.45) return '#0284c7';
-            if (value >= 0.3) return '#38bdf8';
-            return '#bae6fd';
+
+        const normalizedClass = Math.min(palette.length - 1, Math.floor(clamp01(value) * palette.length));
+        return palette[normalizedClass];
+    }
+
+    function formatScaleValue(value) {
+        if (!Number.isFinite(value)) return '-';
+        if (Math.abs(value) >= 100) return value.toFixed(0);
+        if (Math.abs(value) >= 10) return value.toFixed(1);
+        return value.toFixed(2);
+    }
+
+    function legendStops(layer) {
+        const palette = gridPalette(layer);
+        const scale = activeGridScale?.layer === layer ? activeGridScale : null;
+        if (!scale) {
+            return palette.map((color, index) => ({
+                color,
+                range: Math.round(index * 100 / palette.length) + ' ~ ' + Math.round((index + 1) * 100 / palette.length) + '%',
+                label: index === 0 ? '낮음' : index === palette.length - 1 ? '높음' : '정규화'
+            }));
         }
-        if (layer === 'V') {
-            if (value >= 0.75) return '#581c87';
-            if (value >= 0.6) return '#7e22ce';
-            if (value >= 0.45) return '#a855f7';
-            if (value >= 0.3) return '#c084fc';
-            return '#e9d5ff';
+        if (scale.singleValue) {
+            return [{
+                color: palette[Math.floor(palette.length / 2)],
+                range: '단일값 ' + formatScaleValue(scale.minimum),
+                label: '공간 차이 없음'
+            }];
         }
-        if (layer === 'Hotspot') {
-            if (value >= 0.75) return '#7f1d1d';
-            if (value >= 0.6) return '#b91c1c';
-            return '#ef4444';
-        }
-        if (value >= 0.75) return '#b91c1c';
-        if (value >= 0.6) return '#dc2626';
-        if (value >= 0.45) return '#f97316';
-        if (value >= 0.3) return '#facc15';
-        if (value >= 0.15) return '#84cc16';
-        return '#22c55e';
+
+        const bounds = [scale.minimum, ...scale.thresholds, scale.maximum];
+        const labels = ['하위 20%', '20~40%', '40~60%', '60~80%', '상위 20%'];
+        return palette.map((color, index) => ({
+            color,
+            range: formatScaleValue(bounds[index]) + ' ~ ' + formatScaleValue(bounds[index + 1]),
+            label: labels[index]
+        }));
     }
 
     function createRiskGridLayer(L, grid) {
@@ -1592,6 +1757,9 @@
             for (let index = 0; index < rows * columns; index += 1) addDrawableCell(index);
         }
 
+        const localScale = createLocalGridScale(values, drawableCells, layer, hotspotThreshold);
+        activeGridScale = localScale;
+
         const RiskCanvasLayer = L.Layer.extend({
             onAdd(mapInstance) {
                 this._map = mapInstance;
@@ -1632,7 +1800,7 @@
                     const topLeft = this._map.latLngToContainerPoint(cell.northwest);
                     const bottomRight = this._map.latLngToContainerPoint(cell.southeast);
 
-                    context.fillStyle = gridColor(value, layer);
+                    context.fillStyle = gridColor(value, layer, localScale);
                     context.fillRect(
                         Math.floor(topLeft.x),
                         Math.floor(topLeft.y),
@@ -1681,6 +1849,7 @@
     function removeRiskGridLayer() {
         riskGridLayer?.remove();
         riskGridLayer = null;
+        activeGridScale = null;
     }
 
     function renderRiskGridLayer() {
@@ -1830,7 +1999,8 @@
             minZoom: 7,
             maxZoom: 18,
             zoomSnap: locked ? 0.25 : 1,
-            zoomDelta: locked ? 0.25 : 1
+            zoomDelta: locked ? 0.25 : 1,
+            fadeAnimation: false
         });
 
         if (!locked) {
@@ -1847,10 +2017,29 @@
             map.getPane('selectedBoundaryPane').style.pointerEvents = 'none';
         }
 
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        const baseTileOptions = {
+            maxZoom: 19,
+            updateWhenIdle: true,
+            updateWhenZooming: false,
+            keepBuffer: 1
+        };
+        const vworldBaseLayer = L.tileLayer(VWORLD_BASE_TILE_URL, {
+            ...baseTileOptions,
+            attribution: '&copy; VWorld'
+        });
+        const osmFallbackLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            ...baseTileOptions,
             attribution: '&copy; OpenStreetMap contributors',
-            maxZoom: 19
-        }).addTo(map);
+            referrerPolicy: 'strict-origin-when-cross-origin'
+        });
+        let baseFallbackActivated = false;
+        vworldBaseLayer.on('tileerror', () => {
+            if (baseFallbackActivated || !map) return;
+            baseFallbackActivated = true;
+            vworldBaseLayer.remove();
+            osmFallbackLayer.addTo(map);
+        });
+        vworldBaseLayer.addTo(map);
 
         if (hasVWorldApiKey()) {
             sidoLayer = L.tileLayer
@@ -1986,13 +2175,38 @@
     {/if}
     {#if showAnalysisLegend}
         <div class="analysis-overlay-stack">
-            <div class="analysis-legend" aria-label="분석 범례">
-                <strong>분석 범례</strong>
-                <span class="legend-note">
-                    {riskGrid?.preview
-                        ? '분석 전 미리보기 · H·E·V 탭과 체크박스로 01 지표 데이터를 확인합니다.'
-                        : 'H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.'}
-                </span>
+            <div class="analysis-legend" class:legend-collapsed={legendCollapsed} aria-label="분석 범례">
+                <div class="legend-head">
+                    <strong>분석 범례</strong>
+                    <div class="legend-head-actions">
+                        <button
+                            type="button"
+                            class="legend-info-toggle"
+                            class:active={legendDescriptionOpen}
+                            aria-pressed={legendDescriptionOpen}
+                            aria-label={`분석 범례 설명 ${legendDescriptionOpen ? '숨기기' : '보기'}`}
+                            title="설명 보기"
+                            onclick={() => (legendDescriptionOpen = !legendDescriptionOpen)}
+                        >ⓘ</button>
+                        <button
+                            type="button"
+                            class="legend-collapse-toggle"
+                            aria-expanded={!legendCollapsed}
+                            aria-label={`분석 범례 ${legendCollapsed ? '펼치기' : '접기'}`}
+                            title={legendCollapsed ? '펼치기' : '접기'}
+                            onclick={() => (legendCollapsed = !legendCollapsed)}
+                        >{legendCollapsed ? '▸' : '▾'}</button>
+                    </div>
+                </div>
+                {#if legendDescriptionOpen}
+                    <span class="legend-note">
+                        {riskGrid?.preview
+                            ? '분석 전 미리보기 · H·E·V 탭과 눈 아이콘으로 01 지표 데이터를 확인합니다.'
+                            : 'H·E·V 탭과 눈 아이콘으로 지도 시각화를 켜고 끌 수 있습니다.'}
+                        <br />눈 아이콘은 지도 표시만 제어하며, 분석 결과(Risk 계산)에는 영향을 주지 않습니다. 분석 포함 여부는 01 분석 지표 구성에서 설정하세요.
+                    </span>
+                {/if}
+                {#if !legendCollapsed}
                 {#if riskGrid?.stats}
                     <label class="risk-surface-summary">
                         <input
@@ -2003,8 +2217,20 @@
                         <b>100m {gridLayerLabels[selectedGridLayer] || selectedGridLayer} 격자</b>
                         <span>{riskGridVisible ? `${riskGrid.stats.validCells?.toLocaleString()}셀 표시 중` : '숨김'}</span>
                         <div class="risk-ramp" aria-hidden="true"></div>
-                        <small>낮음 → 높음</small>
+                        <small>{activeGridScale?.singleValue ? '단일값 · 공간 차이 없음' : '대상지 내 하위 20% → 상위 20%'}</small>
                     </label>
+                    <div class="risk-scale-legend" aria-label={`${gridLayerLabels[selectedGridLayer] || selectedGridLayer} 색상 스케일 범례`}>
+                        <b>{gridLayerLabels[selectedGridLayer] || selectedGridLayer} · 대상지 맞춤 색상</b>
+                        <div class="risk-scale-stops">
+                            {#each legendStops(selectedGridLayer) as stop}
+                                <div class="risk-scale-stop">
+                                    <i style={`background:${stop.color}`}></i>
+                                    <span>{stop.range}</span>
+                                    <small>{stop.label}</small>
+                                </div>
+                            {/each}
+                        </div>
+                    </div>
                 {/if}
                 <div class="analysis-grid-tabs" aria-label="분석 격자 레이어">
                     {#each gridLayers as layer}
@@ -2025,16 +2251,34 @@
                             <h3>{group} ({analysisGroupEnglish[group]})</h3>
                             <div class="legend-items">
                                 {#each items as item}
-                                    <label>
-                                        <input
-                                            type="checkbox"
-                                            checked={visibleAnalysisLayerIds.includes(String(item.id))}
-                                            onchange={(event) => toggleAnalysisLayer(item.id, event.currentTarget.checked)}
-                                        />
+                                    {@const visible = visibleAnalysisLayerIds.includes(String(item.id))}
+                                    <div class="legend-item">
+                                        <button
+                                            type="button"
+                                            class="visibility-toggle"
+                                            class:visible
+                                            aria-pressed={visible}
+                                            aria-label={`${item.label} 지도 표시 ${visible ? '끄기' : '켜기'}`}
+                                            title={visible ? '지도에서 숨기기' : '지도에 표시하기'}
+                                            onclick={() => toggleAnalysisLayer(item.id, !visible)}
+                                        >
+                                            {#if visible}
+                                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="M12 5c-6 0-9.5 5-10.5 7 1 2 4.5 7 10.5 7s9.5-5 10.5-7c-1-2-4.5-7-10.5-7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+                                                    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+                                                </svg>
+                                            {:else}
+                                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="M12 5c-6 0-9.5 5-10.5 7 1 2 4.5 7 10.5 7s9.5-5 10.5-7c-1-2-4.5-7-10.5-7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+                                                    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+                                                    <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                                                </svg>
+                                            {/if}
+                                        </button>
                                         <i style={`--legend-color:${item.color || '#64748b'}`}></i>
                                         <b>{item.label}</b>
                                         <small>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</small>
-                                    </label>
+                                    </div>
                                 {/each}
                             </div>
                         </section>
@@ -2047,6 +2291,7 @@
                 {/if}
                 {#if enabledAnalysisIndicators().length && !enabledAnalysisIndicators().some((item) => item.geojson) && !riskGrid?.values?.length}
                     <p>실제 공간 결과 레이어는 아직 연결 전입니다.</p>
+                {/if}
                 {/if}
             </div>
             {#if riskGrid?.stats}
@@ -2090,35 +2335,56 @@
             {/if}
         </div>
     {/if}
-    <div class="layer-panel">
-        <strong>베이스·행정 레이어</strong>
-        <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
-        <label>
-            <input
-                type="checkbox"
-                checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
-                disabled={forceSelectedBoundary}
-                onchange={(event) => {
-                    if (forceSelectedBoundary) return;
-                    selectedBoundaryVisible = event.currentTarget.checked;
-                    toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
-                }}
-            />
-            선택지역 경계
-        </label>
-        {#if hasVWorldApiKey()}
-            <label><input type="checkbox" checked={sidoBoundaryVisible} onchange={(event) => { sidoBoundaryVisible = event.currentTarget.checked; toggleLayer(sidoLayer, sidoBoundaryVisible); }} /> 시도 경계</label>
-            <label><input type="checkbox" checked={sigunguBoundaryVisible} onchange={(event) => { sigunguBoundaryVisible = event.currentTarget.checked; toggleLayer(sggLayer, sigunguBoundaryVisible); }} /> 시군구 경계</label>
-            {#if showCadastral}
-                <label><input type="checkbox" checked={cadastralVisible} onchange={(event) => { cadastralVisible = event.currentTarget.checked; toggleLayer(cadastralLayer, cadastralVisible); }} /> 연속지적도</label>
+    <div class="map-icon-controls">
+        <div class="icon-control-wrap">
+            <button
+                type="button"
+                class="icon-control-button"
+                class:active={layerPanelOpen}
+                aria-expanded={layerPanelOpen}
+                aria-label="베이스·행정 레이어 설정 열기"
+                onclick={() => (layerPanelOpen = !layerPanelOpen)}
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <polygon points="12 3 21 8 12 13 3 8 12 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                    <polyline points="3 12 12 17 21 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                    <polyline points="3 16 12 21 21 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                </svg>
+                <span class="icon-tooltip">선택지역 경계</span>
+            </button>
+            {#if layerPanelOpen}
+                <div class="layer-panel">
+                    <strong>베이스·행정 레이어</strong>
+                    <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
+                            disabled={forceSelectedBoundary}
+                            onchange={(event) => {
+                                if (forceSelectedBoundary) return;
+                                selectedBoundaryVisible = event.currentTarget.checked;
+                                toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
+                            }}
+                        />
+                        선택지역 경계
+                    </label>
+                    {#if hasVWorldApiKey()}
+                        <label><input type="checkbox" checked={sidoBoundaryVisible} onchange={(event) => { sidoBoundaryVisible = event.currentTarget.checked; toggleLayer(sidoLayer, sidoBoundaryVisible); }} /> 시도 경계</label>
+                        <label><input type="checkbox" checked={sigunguBoundaryVisible} onchange={(event) => { sigunguBoundaryVisible = event.currentTarget.checked; toggleLayer(sggLayer, sigunguBoundaryVisible); }} /> 시군구 경계</label>
+                        {#if showCadastral}
+                            <label><input type="checkbox" checked={cadastralVisible} onchange={(event) => { cadastralVisible = event.currentTarget.checked; toggleLayer(cadastralLayer, cadastralVisible); }} /> 연속지적도</label>
+                        {/if}
+                    {:else}
+                        <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
+                    {/if}
+                </div>
             {/if}
-        {:else}
-            <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
-        {/if}
+        </div>
         {#if !locked}
-            <button class="return-region-button" type="button" onclick={returnToSelectedRegion} title={`${regionName || '선택 지역'} 전체 보기`}>
-                <span aria-hidden="true">⌖</span>
-                {regionReturnLabel()}
+            <button type="button" class="icon-control-button" onclick={returnToSelectedRegion}>
+                <span class="icon-glyph" aria-hidden="true">⌖</span>
+                <span class="icon-tooltip">{regionReturnLabel()}</span>
             </button>
         {/if}
     </div>
@@ -2173,40 +2439,83 @@
         font-size: .65rem;
     }
 
-    .return-region-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: .35rem;
-        width: 100%;
-        margin-top: .3rem;
-        border: 1px solid rgb(15 118 110 / 26%);
-        border-radius: .65rem;
-        background: #ecfdf5;
-        color: #0f766e;
-        padding: .52rem .72rem;
-        font-size: .72rem;
-        font-weight: 900;
+    .map-icon-controls {
+        position: absolute;
+        right: .85rem;
+        top: .85rem;
+        z-index: 900;
+        display: grid;
+        gap: .5rem;
+        justify-items: end;
+    }
+
+    .icon-control-wrap {
+        position: relative;
+    }
+
+    .icon-control-button {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 2.35rem;
+        height: 2.35rem;
+        border: 1px solid rgb(15 23 42 / 10%);
+        border-radius: .7rem;
+        background: rgb(255 255 255 / 92%);
+        color: #0f172a;
+        box-shadow: 0 12px 26px rgb(15 23 42 / 14%);
+        backdrop-filter: blur(10px);
         cursor: pointer;
     }
 
-    .return-region-button:hover {
+    .icon-control-button:hover,
+    .icon-control-button.active {
         border-color: #0f766e;
-        background: #ecfdf5;
+        color: #0f766e;
     }
 
-    .return-region-button span {
-        font-size: 1rem;
+    .icon-control-button svg {
+        width: 1.15rem;
+        height: 1.15rem;
+    }
+
+    .icon-control-button .icon-glyph {
+        font-size: 1.15rem;
         line-height: 1;
+    }
+
+    .icon-tooltip {
+        position: absolute;
+        right: calc(100% + .5rem);
+        top: 50%;
+        z-index: 520;
+        transform: translateY(-50%);
+        white-space: nowrap;
+        border-radius: .45rem;
+        background: #0f172a;
+        color: #fff;
+        padding: .3rem .55rem;
+        font-size: .68rem;
+        font-weight: 700;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .12s ease;
+    }
+
+    .icon-control-button:hover .icon-tooltip,
+    .icon-control-button:focus-visible .icon-tooltip {
+        opacity: 1;
     }
 
     .layer-panel {
         position: absolute;
-        right: .85rem;
-        top: .85rem;
+        right: 0;
+        top: calc(100% + .5rem);
         z-index: 500;
         display: grid;
         gap: .38rem;
+        width: max-content;
+        max-width: 15rem;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .9rem;
         background: rgb(255 255 255 / 92%);
@@ -2232,23 +2541,63 @@
 
     .analysis-legend {
         width: 100%;
-        max-height: 16rem;
+        max-height: 11rem;
         overflow: auto;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .9rem;
         background: rgb(255 255 255 / 96%);
-        padding: .8rem .9rem;
+        padding: .55rem .7rem;
         box-shadow: 0 22px 46px rgb(15 23 42 / 18%);
         color: #0f172a;
         backdrop-filter: blur(10px);
         pointer-events: auto;
     }
 
-    .analysis-legend > strong {
+    .analysis-legend.legend-collapsed {
+        max-height: none;
+        overflow: visible;
+    }
+
+    .legend-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+    }
+
+    .legend-head > strong {
         display: block;
         color: #073b52;
         font-size: .88rem;
         font-weight: 900;
+    }
+
+    .legend-head-actions {
+        display: flex;
+        align-items: center;
+        gap: .25rem;
+        flex: 0 0 auto;
+    }
+
+    .legend-info-toggle,
+    .legend-collapse-toggle {
+        width: 1.3rem;
+        height: 1.3rem;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgb(15 23 42 / 14%);
+        border-radius: 50%;
+        background: #fff;
+        color: #64748b;
+        font-size: .7rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .legend-info-toggle.active {
+        border-color: #0f766e;
+        background: #ecfdf5;
+        color: #0f766e;
     }
 
     .legend-note {
@@ -2257,6 +2606,7 @@
         color: #64748b;
         font-size: .68rem;
         font-weight: 800;
+        line-height: 1.5;
     }
 
     .risk-surface-summary {
@@ -2300,6 +2650,59 @@
         height: .42rem;
         border-radius: 999px;
         background: linear-gradient(90deg, #22c55e, #84cc16, #facc15, #f97316, #dc2626, #b91c1c);
+    }
+
+    .risk-scale-legend {
+        margin-top: .5rem;
+        border: 1px solid rgb(15 23 42 / 10%);
+        border-radius: .72rem;
+        background: rgb(248 250 252 / 88%);
+        padding: .55rem .62rem;
+    }
+
+    .risk-scale-legend > b {
+        display: block;
+        margin-bottom: .4rem;
+        color: #244a45;
+        font-size: .68rem;
+        font-weight: 900;
+    }
+
+    .risk-scale-stops {
+        display: grid;
+        gap: .3rem;
+    }
+
+    .risk-scale-stop {
+        display: grid;
+        grid-template-columns: .68rem minmax(0, auto) 1fr;
+        gap: .45rem;
+        align-items: center;
+        min-width: 0;
+    }
+
+    .risk-scale-stop i {
+        width: .68rem;
+        height: .68rem;
+        border-radius: .2rem;
+        box-shadow: 0 0 0 1px rgb(15 23 42 / 12%);
+    }
+
+    .risk-scale-stop span {
+        color: #334155;
+        font-size: .64rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .risk-scale-stop small {
+        overflow: hidden;
+        color: #64748b;
+        font-size: .64rem;
+        font-weight: 700;
+        text-align: right;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .analysis-grid-tabs {
@@ -2471,7 +2874,7 @@
         gap: .35rem;
     }
 
-    .legend-items label {
+    .legend-items .legend-item {
         display: grid;
         grid-template-columns: .85rem .75rem minmax(0, 1fr) auto;
         gap: .45rem;
@@ -2480,14 +2883,28 @@
         color: #334155;
         font-size: .72rem;
         font-weight: 800;
+    }
+
+    .legend-items .visibility-toggle {
+        display: grid;
+        place-items: center;
+        width: .85rem;
+        height: .85rem;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: #94a3b8;
         cursor: pointer;
     }
 
-    .legend-items input {
-        width: .82rem;
-        height: .82rem;
-        margin: 0;
-        accent-color: #0f766e;
+    .legend-items .visibility-toggle.visible {
+        color: #0f766e;
+    }
+
+    .legend-items .visibility-toggle svg {
+        width: 100%;
+        height: 100%;
     }
 
     .legend-items i {
