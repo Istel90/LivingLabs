@@ -72,12 +72,12 @@ const contentTypes = {
   '.woff2': 'font/woff2',
 };
 
-function send(response, status, body, contentType = 'application/json; charset=utf-8') {
+function send(response, status, body, contentType = 'application/json; charset=utf-8', cacheControl = 'no-store') {
   response.writeHead(status, {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Cache-Control': 'no-store',
+    'Cache-Control': cacheControl,
     'Content-Type': contentType,
   });
   response.end(body);
@@ -128,6 +128,7 @@ async function fetchCadastreBbox(searchParams) {
   }
 
   const limit = Math.min(Math.max(Number.parseInt(searchParams.get('limit') || '500', 10) || 500, 1), 1000);
+  const offset = Math.min(Math.max(Number.parseInt(searchParams.get('offset') || '0', 10) || 0, 0), 100000);
   const simplifyMeters = Math.min(Math.max(Number(searchParams.get('simplifyMeters') || 0) || 0, 0), 20);
   const result = await cadastrePool.query({
     text: `
@@ -138,19 +139,535 @@ async function fetchCadastreBbox(searchParams) {
              p.lot_number_land_category, p.reference_date, p.sigungu_code,
              ST_AsGeoJSON(
                ST_Transform(
-                 CASE WHEN $6 > 0 THEN ST_SimplifyPreserveTopology(p.geom, $6) ELSE p.geom END,
+                  CASE WHEN $6::double precision > 0 THEN ST_SimplifyPreserveTopology(p.geom, $6::double precision) ELSE p.geom END,
                  4326
                ), 7
              ) AS geometry
       FROM cadastre.parcels_readable p
       CROSS JOIN bounds b
-      WHERE p.geom && b.geom AND ST_Intersects(p.geom, b.geom)
+      -- The browser performs the final parcel-to-hotspot geometry intersection.
+      -- Keep this lookup index-only so nationwide candidate retrieval stays fast.
+      WHERE p.geom && b.geom
       ORDER BY p.pnu
-      LIMIT $5
+      LIMIT $5 OFFSET $7
     `,
-    values: [minLng, minLat, maxLng, maxLat, limit, simplifyMeters],
+    values: [minLng, minLat, maxLng, maxLat, limit + 1, simplifyMeters, offset],
   });
-  return featureCollection(result.rows);
+  const hasMore = result.rows.length > limit;
+  return {
+    ...featureCollection(result.rows.slice(0, limit)),
+    metadata: { limit, offset, hasMore },
+  };
+}
+
+const populationGridCache = new Map();
+
+function rememberPopulationGrid(key, payload) {
+  if (populationGridCache.has(key)) populationGridCache.delete(key);
+  populationGridCache.set(key, payload);
+  while (populationGridCache.size > 40) {
+    populationGridCache.delete(populationGridCache.keys().next().value);
+  }
+}
+
+function percentile(sortedValues, fraction) {
+  if (!sortedValues.length) return null;
+  const position = (sortedValues.length - 1) * fraction;
+  const lowerIndex = Math.floor(position);
+  const upperIndex = Math.ceil(position);
+  const weight = position - lowerIndex;
+  return sortedValues[lowerIndex] + ((sortedValues[upperIndex] - sortedValues[lowerIndex]) * weight);
+}
+
+async function fetchPopulationGrid(searchParams) {
+  const regionCode = (searchParams.get('regionCode') || '').trim();
+  if (!/^\d{5}$/.test(regionCode)) throw new Error('regionCode must be exactly 5 digits');
+
+  const indicator = (searchParams.get('indicator') || '').trim().toLowerCase();
+  const indicatorConfig = {
+    elderly: { column: 'elderly_count', label: '고령인구 수' },
+    infant: { column: 'infant_count', label: '유아인구 수' },
+  }[indicator];
+  if (!indicatorConfig) throw new Error('indicator must be elderly or infant');
+
+  const monthParameter = (searchParams.get('month') || '').trim();
+  let referenceMonth = null;
+  if (monthParameter) {
+    const normalizedMonth = /^\d{4}-\d{2}$/.test(monthParameter) ? `${monthParameter}-01` : monthParameter;
+    if (!/^\d{4}-\d{2}-01$/.test(normalizedMonth)) throw new Error('month must be yyyy-MM or yyyy-MM-01');
+    referenceMonth = normalizedMonth;
+  }
+
+  const cacheKey = `${regionCode}:${indicator}:${referenceMonth || 'latest'}`;
+  const cached = populationGridCache.get(cacheKey);
+  if (cached) return cached;
+
+  const targetMonthSql = `
+    SELECT COALESCE($2::date, max(reference_month)) AS reference_month
+    FROM population.grid_100m
+  `;
+  const metaSql = `
+    WITH target_month AS (${targetMonthSql}), regional_meta AS (
+      SELECT payload
+      FROM analysis.region_indicator_stats
+      WHERE region_code = $1
+      ORDER BY (indicator_code = 'H01') DESC, updated_at DESC
+      LIMIT 1
+    )
+    SELECT to_char(t.reference_month, 'YYYY-MM-DD') AS reference_month,
+           (SELECT count(*) FROM analysis.region_grid_cells_100m WHERE region_code = $1)::integer AS region_cells,
+           m.payload AS grid_meta
+    FROM target_month t
+    LEFT JOIN regional_meta m ON true
+  `;
+  const valueSql = `
+    WITH target_month AS (${targetMonthSql})
+    SELECT r.cell_index, p.${indicatorConfig.column} AS value
+    FROM target_month t
+    JOIN population.grid_100m p
+      ON p.reference_month = t.reference_month
+     AND p.${indicatorConfig.column} IS NOT NULL
+    JOIN analysis.region_grid_cells_100m r
+      ON r.region_code = $1
+     AND r.cell_id = p.cell_id
+    ORDER BY r.cell_index
+  `;
+  const queryValues = [regionCode, referenceMonth];
+  const [metaResult, valueResult] = await Promise.all([
+    cadastrePool.query({ text: metaSql, values: queryValues }),
+    cadastrePool.query({ text: valueSql, values: queryValues }),
+  ]);
+
+  const meta = metaResult.rows[0];
+  if (!meta?.reference_month) throw new Error('population grid is not loaded');
+  if (!Number(meta.region_cells)) throw new Error(`regionCode is not available: ${regionCode}`);
+
+  const gridMeta = typeof meta.grid_meta === 'string' ? JSON.parse(meta.grid_meta) : meta.grid_meta;
+  if (!gridMeta?.extent || !gridMeta?.transform) throw new Error(`region grid metadata is not available: ${regionCode}`);
+  const xmin = Number(gridMeta.extent.xmin);
+  const ymin = Number(gridMeta.extent.ymin);
+  const xmax = Number(gridMeta.extent.xmax);
+  const ymax = Number(gridMeta.extent.ymax);
+  const columns = Number(gridMeta.columns);
+  const rows = Number(gridMeta.rows);
+  const cellCount = columns * rows;
+  if (!Number.isSafeInteger(cellCount) || cellCount <= 0 || cellCount > 2_500_000) {
+    throw new Error(`region grid is too large: ${cellCount} cells`);
+  }
+
+  const rawValues = valueResult.rows.map((row) => Number(row.value)).filter(Number.isFinite);
+  const logValues = rawValues.map((value) => Math.log1p(Math.max(0, value))).sort((a, b) => a - b);
+  const lower = percentile(logValues, 0.02) ?? 0;
+  const upper = percentile(logValues, 0.98) ?? lower;
+  const range = Math.max(upper - lower, Number.EPSILON);
+  const sparseValues = [];
+  let rawSum = 0;
+  let normalizedSum = 0;
+  let rawMin = Infinity;
+  let rawMax = -Infinity;
+
+  valueResult.rows.forEach((row) => {
+    const value = Number(row.value);
+    if (!Number.isFinite(value)) return;
+    const index = Number(row.cell_index);
+    if (!Number.isInteger(index) || index < 0 || index >= cellCount) return;
+    const normalized = Math.min(1, Math.max(0, (Math.log1p(Math.max(0, value)) - lower) / range));
+    sparseValues.push(index, Number(normalized.toFixed(6)));
+    rawSum += value;
+    normalizedSum += normalized;
+    rawMin = Math.min(rawMin, value);
+    rawMax = Math.max(rawMax, value);
+  });
+
+  const validCells = sparseValues.length / 2;
+  const payload = {
+    schemaVersion: 'population-grid/v1',
+    indicator,
+    label: indicatorConfig.label,
+    regionCode,
+    referenceMonth: String(meta.reference_month).slice(0, 10),
+    gridUnit: '100m',
+    crs: 'EPSG:5179',
+    rows,
+    columns,
+    valueCount: cellCount,
+    valueEncoding: 'sparse-index-value',
+    extent: { xmin, ymin, xmax, ymax },
+    transform: { originX: xmin, originY: ymax, pixelWidth: 100, pixelHeight: 100 },
+    sparseValues,
+    rawUnit: '명/100m 셀',
+    unit: '정규화 점수',
+    sourceResolution: '국토정보플랫폼 국토통계 100m 격자',
+    normalization: {
+      method: 'local-log1p-p02-p98',
+      lowerRaw: Number(Math.expm1(lower).toFixed(3)),
+      upperRaw: Number(Math.expm1(upper).toFixed(3)),
+    },
+    stats: {
+      regionCells: Number(meta.region_cells),
+      validCells,
+      rawMin: validCells ? rawMin : null,
+      rawMax: validCells ? rawMax : null,
+      rawMean: validCells ? Number((rawSum / validCells).toFixed(4)) : null,
+      normalizedMean: validCells ? Number((normalizedSum / validCells).toFixed(6)) : null,
+      mean: validCells ? Number((normalizedSum / validCells).toFixed(6)) : null,
+    },
+  };
+
+  rememberPopulationGrid(cacheKey, payload);
+  return payload;
+}
+
+async function fetchHazardGrid(searchParams) {
+  const regionCode = (searchParams.get('regionCode') || '').trim();
+  if (!/^\d{5}$/.test(regionCode)) throw new Error('regionCode must be exactly 5 digits');
+
+  const indicator = (searchParams.get('indicator') || '').trim().toUpperCase();
+  if (!/^H(0[1-9]|10)$/.test(indicator)) throw new Error('indicator must be H01 through H10');
+  const mode = (searchParams.get('mode') || 'observed').trim().toLowerCase();
+  if (mode !== 'observed') throw new Error('future hazard grid is not loaded in this endpoint');
+
+  const column = indicator.toLowerCase();
+  const metaResult = await cadastrePool.query({
+    text: `
+      SELECT s.payload, s.version_id
+      FROM analysis.region_indicator_stats s
+      JOIN analysis.hev_dataset_versions v
+        ON v.version_id = s.version_id
+       AND v.active
+      WHERE s.region_code = $1 AND s.indicator_code = $2
+      ORDER BY s.updated_at DESC
+      LIMIT 1
+    `,
+    values: [regionCode, indicator],
+  });
+  const metaRow = metaResult.rows[0];
+  if (!metaRow) throw new Error(`hazard grid is not available: ${regionCode} ${indicator}`);
+
+  const gridMeta = typeof metaRow.payload === 'string' ? JSON.parse(metaRow.payload) : metaRow.payload;
+  const valueResult = await cadastrePool.query({
+    text: `
+      SELECT r.cell_index, v.${column} AS value
+      FROM analysis.region_grid_cells_100m r
+      JOIN analysis.hev_values_100m v
+        ON v.version_id = $2
+       AND v.cell_id = r.cell_id
+      WHERE r.region_code = $1 AND v.${column} IS NOT NULL
+      ORDER BY r.cell_index
+    `,
+    values: [regionCode, metaRow.version_id],
+  });
+
+  const lower = Number(gridMeta?.stats?.rawMin);
+  const upper = Number(gridMeta?.stats?.rawMax);
+  const range = Number.isFinite(lower) && Number.isFinite(upper) && upper > lower ? upper - lower : 1;
+  const valueCount = Number(gridMeta.valueCount) || (Number(gridMeta.rows) * Number(gridMeta.columns));
+  const sparseValues = [];
+  valueResult.rows.forEach((row) => {
+    const index = Number(row.cell_index);
+    const value = Number(row.value);
+    if (!Number.isInteger(index) || index < 0 || index >= valueCount || !Number.isFinite(value)) return;
+    sparseValues.push(index, Number(Math.min(1, Math.max(0, (value - lower) / range)).toFixed(6)));
+  });
+
+  return {
+    ...gridMeta,
+    schemaVersion: 'livinglabs-hazard-grid/v1',
+    valueEncoding: 'sparse-index-value',
+    valueCount,
+    sparseValues,
+  };
+}
+
+const regionalAnalysisGridCache = new Map();
+
+const regionalAnalysisIndicators = {
+  'terrain-low-elevation': {
+    rasterTable: 'analysis.terrain_elevation_100m', label: '저지대 지형', rawUnit: 'm',
+    sourceResolution: '전국 DEM 표고를 EPSG:5179 100m로 정렬 · 낮은 표고일수록 위험 점수 증가', normalization: 'linear', invert: true,
+  },
+  'terrain-low-slope': {
+    rasterTable: 'analysis.terrain_slope_100m', label: '저경사 지형', rawUnit: '도',
+    sourceResolution: '전국 DEM 경사를 EPSG:5179 100m로 파생 · 낮은 경사일수록 위험 점수 증가', normalization: 'linear', invert: true,
+  },
+  'terrain-twi': {
+    rasterTable: 'analysis.terrain_twi_100m', label: '지형습윤지수 TWI', rawUnit: '지수',
+    sourceResolution: '전국 DEM 기반 지형습윤지수 · EPSG:5179 100m', normalization: 'linear',
+  },
+  'terrain-flow-accumulation': {
+    rasterTable: 'analysis.terrain_flow_accumulation_100m', label: '유로 누적량', rawUnit: '셀',
+    sourceResolution: '전국 DEM 기반 유로 누적량 · EPSG:5179 100m', normalization: 'log1p',
+  },
+  'terrain-depression-depth': {
+    rasterTable: 'analysis.terrain_depression_depth_100m', label: '지형 함몰 깊이', rawUnit: 'm',
+    sourceResolution: '전국 DEM 기반 함몰 깊이 · EPSG:5179 100m', normalization: 'linear',
+  },
+  'rain-max-1h': {
+    table: 'analysis.kma_extreme_rainfall_grid_100m', column: 'max_1h_mm', label: '1시간 최대강우량',
+    rawUnit: 'mm', sourceResolution: '기상청 ASOS 2016~2025년 4~10월 관측소 극값 · 전국 100m 최근접 관측소 연결', normalization: 'linear',
+  },
+  'rain-max-3h': {
+    table: 'analysis.kma_extreme_rainfall_grid_100m', column: 'max_3h_mm', label: '3시간 최대강우량',
+    rawUnit: 'mm', sourceResolution: '기상청 ASOS 2016~2025년 4~10월 관측소 극값 · 전국 100m 최근접 관측소 연결', normalization: 'linear',
+  },
+  'rain-max-6h': {
+    table: 'analysis.kma_extreme_rainfall_grid_100m', column: 'max_6h_mm', label: '6시간 최대강우량',
+    rawUnit: 'mm', sourceResolution: '기상청 ASOS 2016~2025년 4~10월 관측소 극값 · 전국 100m 최근접 관측소 연결', normalization: 'linear',
+  },
+  'rain-max-daily': {
+    table: 'analysis.kma_extreme_rainfall_grid_100m', column: 'max_daily_mm', label: '일 최대강우량',
+    rawUnit: 'mm', sourceResolution: '기상청 ASOS 2016~2025년 4~10월 관측소 극값 · 전국 100m 최근접 관측소 연결', normalization: 'linear',
+  },
+  'rain-days-50mm': {
+    table: 'analysis.kma_extreme_rainfall_grid_100m', column: 'rain_days_50mm', label: '50mm 이상 강우일수',
+    rawUnit: '일', sourceResolution: '기상청 ASOS 2016~2025년 4~10월 관측소 통계 · 전국 100m 최근접 관측소 연결', normalization: 'linear',
+  },
+  'rain-days-80mm': {
+    table: 'analysis.kma_extreme_rainfall_grid_100m', column: 'heavy_rain_days_80mm', label: '80mm 이상 호우일수',
+    rawUnit: '일', sourceResolution: '기상청 ASOS 2016~2025년 4~10월 관측소 통계 · 전국 100m 최근접 관측소 연결', normalization: 'linear',
+  },
+  'building-count': {
+    table: 'analysis.flood_building_sensitivity_100m', column: 'building_count', label: '건축물 수',
+    rawUnit: '동/100m 셀', sourceResolution: 'VWorld GIS 건물통합정보 전국 원자료 · EPSG:5179 100m 셀 집계', normalization: 'log1p', zeroFill: true,
+  },
+  'building-residential-count': {
+    table: 'analysis.flood_building_sensitivity_100m', column: 'residential_building_count', label: '주거용 건축물 수',
+    rawUnit: '동/100m 셀', sourceResolution: 'VWorld GIS 건물통합정보 전국 원자료 · EPSG:5179 100m 셀 집계', normalization: 'log1p', zeroFill: true,
+  },
+  'building-one-story-count': {
+    table: 'analysis.flood_building_sensitivity_100m', column: 'one_story_building_count', label: '1층 건축물 수',
+    rawUnit: '동/100m 셀', sourceResolution: 'VWorld GIS 건물통합정보 전국 원자료 · EPSG:5179 100m 셀 집계', normalization: 'log1p', zeroFill: true,
+  },
+  'building-basement-count': {
+    table: 'analysis.flood_building_sensitivity_100m', column: 'basement_building_count', label: '지하층 보유 건축물 수',
+    rawUnit: '동/100m 셀', sourceResolution: 'VWorld GIS 건물통합정보 전국 원자료 · EPSG:5179 100m 셀 집계', normalization: 'log1p', zeroFill: true,
+  },
+  'building-old-30y-count': {
+    table: 'analysis.flood_building_sensitivity_100m', column: 'old_30y_building_count', label: '30년 이상 건축물 수',
+    rawUnit: '동/100m 셀', sourceResolution: 'VWorld GIS 건물통합정보 사용승인일 기준 · EPSG:5179 100m 셀 집계', normalization: 'log1p', zeroFill: true,
+  },
+  'building-old-30y-ratio': {
+    table: 'analysis.flood_building_sensitivity_100m', column: 'old_30y_ratio_known', label: '30년 이상 건축물 비율',
+    rawUnit: '비율', sourceResolution: 'VWorld GIS 건물통합정보 중 사용승인일 확인 건축물 기준 · EPSG:5179 100m 셀 집계', normalization: 'linear', zeroFill: true,
+  },
+  'facility-bus-stop': {
+    table: 'analysis.national_facility_grid_100m', column: 'facility_count', sourceKey: 'national_bus_stop_20251031', label: '버스정류장 수',
+    rawUnit: '개/100m 셀', sourceResolution: '국토교통부 전국 버스정류장 위치정보 2025-10-31 · EPSG:5179 100m 셀 집계', normalization: 'log1p', zeroFill: true,
+  },
+  'facility-crosswalk': {
+    table: 'analysis.national_facility_grid_100m', column: 'facility_count', sourceKey: 'national_crosswalk_standard', label: '횡단보도 수',
+    rawUnit: '개/100m 셀', sourceResolution: '공공데이터포털 전국횡단보도표준데이터 · 부산·대구·세종 보완 필요 · EPSG:5179 100m 셀 집계', normalization: 'log1p', zeroFill: true,
+  },
+  'facility-shelter': {
+    table: 'analysis.national_facility_grid_100m', column: 'facility_count', sourceKey: 'civil_defense_shelter', label: '민방위 대피시설 수',
+    rawUnit: '개/100m 셀', sourceResolution: '현재 적재된 민방위 대피시설 5,160개 · 74개 행정구역 커버리지 · 추가 보완 필요', normalization: 'log1p', zeroFill: true,
+  },
+  'facility-rail-station': {
+    table: 'analysis.national_facility_grid_100m', column: 'facility_count', sourceKey: 'urban_rail_station', label: '도시철도 역사 수',
+    rawUnit: '개/100m 셀', sourceResolution: '전국 도시철도 역사 851개 · EPSG:5179 100m 셀 집계', normalization: 'log1p', zeroFill: true,
+  },
+};
+
+function rememberRegionalAnalysisGrid(key, payload) {
+  if (regionalAnalysisGridCache.has(key)) regionalAnalysisGridCache.delete(key);
+  regionalAnalysisGridCache.set(key, payload);
+  while (regionalAnalysisGridCache.size > 80) {
+    regionalAnalysisGridCache.delete(regionalAnalysisGridCache.keys().next().value);
+  }
+}
+
+async function fetchRegionalGridMeta(regionCode) {
+  const result = await cadastrePool.query({
+    text: `
+      SELECT payload
+      FROM (
+        SELECT payload, 1 AS priority, updated_at
+        FROM analysis.region_indicator_stats
+        WHERE region_code = $1 AND indicator_code = 'H01'
+        UNION ALL
+        SELECT payload, 2 AS priority, updated_at
+        FROM analysis.flood_region_indicator_stats
+        WHERE region_code = $1 AND indicator_code = 'FH01'
+      ) available
+      ORDER BY priority, updated_at DESC
+      LIMIT 1
+    `,
+    values: [regionCode],
+  });
+  const payload = result.rows[0]?.payload;
+  return typeof payload === 'string' ? JSON.parse(payload) : payload;
+}
+
+async function fetchRegionalAnalysisGrid(searchParams) {
+  const regionCode = (searchParams.get('regionCode') || '').trim();
+  if (!/^\d{5}$/.test(regionCode)) throw new Error('regionCode must be exactly 5 digits');
+  const indicator = (searchParams.get('indicator') || '').trim().toLowerCase();
+  const config = regionalAnalysisIndicators[indicator];
+  if (!config) throw new Error('analysis indicator is not available');
+
+  const cacheKey = `${regionCode}:${indicator}`;
+  const cached = regionalAnalysisGridCache.get(cacheKey);
+  if (cached) return cached;
+
+  const gridMeta = await fetchRegionalGridMeta(regionCode);
+  const columns = Number(gridMeta?.columns);
+  const rows = Number(gridMeta?.rows);
+  const valueCount = Number(gridMeta?.valueCount) || columns * rows;
+  if (!gridMeta?.extent || !gridMeta?.transform || !Number.isSafeInteger(valueCount) || valueCount <= 0) {
+    throw new Error(`region grid metadata is not available: ${regionCode}`);
+  }
+
+  let result;
+  if (config.rasterTable) {
+    result = await cadastrePool.query({
+      text: `
+        SELECT regional.cell_index,
+               ST_Value(source.rast, 1, ST_SetSRID(ST_MakePoint(cells.x, cells.y), 5179)) AS value
+        FROM analysis.region_grid_cells_100m regional
+        JOIN analysis.grid_cells_100m cells ON cells.cell_id = regional.cell_id
+        JOIN ${config.rasterTable} source
+          ON ST_ConvexHull(source.rast) && ST_SetSRID(ST_MakePoint(cells.x, cells.y), 5179)
+         AND ST_Intersects(source.rast, ST_SetSRID(ST_MakePoint(cells.x, cells.y), 5179))
+        WHERE regional.region_code = $1
+        ORDER BY regional.cell_index
+      `,
+      values: [regionCode],
+    });
+  } else {
+    const sourceFilter = config.sourceKey ? 'AND source.source_key = $2' : '';
+    const zeroExpression = config.zeroFill ? `COALESCE(source.${config.column}, 0)` : `source.${config.column}`;
+    const values = config.sourceKey ? [regionCode, config.sourceKey] : [regionCode];
+    result = await cadastrePool.query({
+      text: `
+        SELECT regional.cell_index, ${zeroExpression} AS value
+        FROM analysis.region_grid_cells_100m regional
+        LEFT JOIN ${config.table} source
+          ON source.cell_id = regional.cell_id
+         ${sourceFilter}
+        WHERE regional.region_code = $1
+        ORDER BY regional.cell_index
+      `,
+      values,
+    });
+  }
+
+  const rowsWithValues = result.rows
+    .map((row) => ({ index: Number(row.cell_index), value: Number(row.value) }))
+    .filter((row) => Number.isInteger(row.index) && row.index >= 0 && row.index < valueCount && Number.isFinite(row.value));
+  if (!rowsWithValues.length) throw new Error(`analysis grid is not available: ${regionCode} ${indicator}`);
+
+  const transformedValues = rowsWithValues.map((row) => (
+    config.normalization === 'log1p' ? Math.log1p(Math.max(0, row.value)) : row.value
+  )).sort((left, right) => left - right);
+  const positiveTransformedValues = config.zeroFill
+    ? transformedValues.filter((value) => value > 0)
+    : transformedValues;
+  const lower = config.zeroFill ? 0 : (percentile(transformedValues, 0.02) ?? 0);
+  const upper = percentile(positiveTransformedValues, 0.98) ?? lower;
+  const range = Math.max(upper - lower, Number.EPSILON);
+  const sparseValues = [];
+  let rawSum = 0;
+  let normalizedSum = 0;
+  let rawMin = Infinity;
+  let rawMax = -Infinity;
+  rowsWithValues.forEach((row) => {
+    const transformed = config.normalization === 'log1p' ? Math.log1p(Math.max(0, row.value)) : row.value;
+    const scaled = upper > lower ? Math.min(1, Math.max(0, (transformed - lower) / range)) : 0;
+    const normalized = config.invert ? 1 - scaled : scaled;
+    sparseValues.push(row.index, Number(normalized.toFixed(6)));
+    rawSum += row.value;
+    normalizedSum += normalized;
+    rawMin = Math.min(rawMin, row.value);
+    rawMax = Math.max(rawMax, row.value);
+  });
+
+  const validCells = rowsWithValues.length;
+  const rawLower = config.normalization === 'log1p' ? Math.expm1(lower) : lower;
+  const rawUpper = config.normalization === 'log1p' ? Math.expm1(upper) : upper;
+  const payload = {
+    schemaVersion: 'livinglabs-analysis-grid/v1',
+    indicator,
+    label: config.label,
+    regionCode,
+    gridUnit: '100m',
+    crs: 'EPSG:5179',
+    rows,
+    columns,
+    valueCount,
+    valueEncoding: 'sparse-index-value',
+    extent: gridMeta.extent,
+    transform: gridMeta.transform,
+    sparseValues,
+    rawUnit: config.rawUnit,
+    unit: '정규화 점수',
+    sourceResolution: config.sourceResolution,
+    normalization: {
+      method: `local-${config.normalization}-p02-p98`,
+      lowerRaw: Number(rawLower.toFixed(4)),
+      upperRaw: Number(rawUpper.toFixed(4)),
+    },
+    stats: {
+      regionCells: valueCount,
+      validCells,
+      rawMin,
+      rawMax,
+      rawMean: Number((rawSum / validCells).toFixed(4)),
+      normalizedMean: Number((normalizedSum / validCells).toFixed(6)),
+      mean: Number((normalizedSum / validCells).toFixed(6)),
+    },
+  };
+  rememberRegionalAnalysisGrid(cacheKey, payload);
+  return payload;
+}
+
+async function fetchFloodGrid(searchParams) {
+  const regionCode = (searchParams.get('regionCode') || '').trim();
+  if (!/^\d{5}$/.test(regionCode)) throw new Error('regionCode must be exactly 5 digits');
+  const indicator = (searchParams.get('indicator') || '').trim().toUpperCase();
+  const columns = { FH01: 'fh01', FH02: 'fh02', FH03: 'fh03', FE01: 'fe01', FE02: 'fe02', FE03: 'fe03' };
+  const column = columns[indicator];
+  if (!column) throw new Error('indicator must be FH01 through FH03 or FE01 through FE03');
+
+  const metaResult = await cadastrePool.query({
+    text: `
+      SELECT stats.payload, stats.version_id
+      FROM analysis.flood_region_indicator_stats stats
+      JOIN analysis.flood_dataset_versions versions
+        ON versions.version_id = stats.version_id
+       AND versions.active
+      WHERE stats.region_code = $1 AND stats.indicator_code = $2
+      ORDER BY stats.updated_at DESC
+      LIMIT 1
+    `,
+    values: [regionCode, indicator],
+  });
+  const metaRow = metaResult.rows[0];
+  if (!metaRow) throw new Error(`flood grid is not available: ${regionCode} ${indicator}`);
+  const gridMeta = typeof metaRow.payload === 'string' ? JSON.parse(metaRow.payload) : metaRow.payload;
+  const valueResult = await cadastrePool.query({
+    text: `
+      SELECT regional.cell_index, values.${column} AS value
+      FROM analysis.region_grid_cells_100m regional
+      JOIN analysis.flood_values_100m values
+        ON values.version_id = $2
+       AND values.cell_id = regional.cell_id
+      WHERE regional.region_code = $1 AND values.${column} IS NOT NULL
+      ORDER BY regional.cell_index
+    `,
+    values: [regionCode, metaRow.version_id],
+  });
+  const lower = Number(gridMeta?.stats?.rawMin);
+  const upper = Number(gridMeta?.stats?.rawMax);
+  const range = Number.isFinite(lower) && Number.isFinite(upper) && upper > lower ? upper - lower : 1;
+  const valueCount = Number(gridMeta.valueCount) || Number(gridMeta.rows) * Number(gridMeta.columns);
+  const sparseValues = [];
+  valueResult.rows.forEach((row) => {
+    const index = Number(row.cell_index);
+    const value = Number(row.value);
+    if (!Number.isInteger(index) || index < 0 || index >= valueCount || !Number.isFinite(value)) return;
+    sparseValues.push(index, Number(Math.min(1, Math.max(0, (value - lower) / range)).toFixed(6)));
+  });
+  return { ...gridMeta, schemaVersion: 'livinglabs-flood-grid/v1', valueEncoding: 'sparse-index-value', valueCount, sparseValues };
 }
 
 function readJsonBody(request) {
@@ -824,6 +1341,81 @@ const server = createServer(async (request, response) => {
       send(response, /bbox/.test(error?.message || '') ? 400 : 503, JSON.stringify({
         ok: false,
         error: error?.message || 'Parcel extent lookup failed',
+      }));
+    }
+    return;
+  }
+
+  if (routePath === '/population/health') {
+    try {
+      const result = await cadastrePool.query(`
+        SELECT to_regclass('population.grid_100m') IS NOT NULL AS ready,
+               to_char(max(reference_month), 'YYYY-MM-DD') AS latest_month,
+               count(*) AS unique_cells,
+               count(elderly_count) AS elderly_cells,
+               count(infant_count) AS infant_cells,
+               (SELECT count(*) FROM population.import_log WHERE status = 'loaded') AS loaded_files,
+               (SELECT count(*) FROM population.value_conflict_log) AS logged_conflicts
+        FROM population.grid_100m
+      `);
+      send(response, 200, JSON.stringify({ ok: true, ...result.rows[0] }));
+    } catch (error) {
+      send(response, 503, JSON.stringify({ ok: false, error: error?.message || 'Population PostGIS unavailable' }));
+    }
+    return;
+  }
+
+  if (routePath === '/population/grid') {
+    try {
+      const payload = await fetchPopulationGrid(url.searchParams);
+      send(response, 200, JSON.stringify(payload), 'application/json; charset=utf-8', 'public, max-age=300');
+    } catch (error) {
+      const isInputError = /must be|not available|too large/.test(error?.message || '');
+      send(response, isInputError ? 400 : 503, JSON.stringify({
+        ok: false,
+        error: error?.message || 'Population grid lookup failed',
+      }));
+    }
+    return;
+  }
+
+  if (routePath === '/hazard-grid') {
+    try {
+      const payload = await fetchHazardGrid(url.searchParams);
+      send(response, 200, JSON.stringify(payload), 'application/json; charset=utf-8', 'public, max-age=300');
+    } catch (error) {
+      const isInputError = /must be|not available|not loaded/.test(error?.message || '');
+      send(response, isInputError ? 400 : 503, JSON.stringify({
+        ok: false,
+        error: error?.message || 'Hazard grid lookup failed',
+      }));
+    }
+    return;
+  }
+
+  if (routePath === '/flood-grid') {
+    try {
+      const payload = await fetchFloodGrid(url.searchParams);
+      send(response, 200, JSON.stringify(payload), 'application/json; charset=utf-8', 'public, max-age=300');
+    } catch (error) {
+      const isInputError = /must be|not available/.test(error?.message || '');
+      send(response, isInputError ? 400 : 503, JSON.stringify({
+        ok: false,
+        error: error?.message || 'Flood grid lookup failed',
+      }));
+    }
+    return;
+  }
+
+  if (routePath === '/analysis-grid') {
+    try {
+      const payload = await fetchRegionalAnalysisGrid(url.searchParams);
+      send(response, 200, JSON.stringify(payload), 'application/json; charset=utf-8', 'public, max-age=300');
+    } catch (error) {
+      const isInputError = /must be|not available/.test(error?.message || '');
+      send(response, isInputError ? 400 : 503, JSON.stringify({
+        ok: false,
+        error: error?.message || 'Analysis grid lookup failed',
       }));
     }
     return;

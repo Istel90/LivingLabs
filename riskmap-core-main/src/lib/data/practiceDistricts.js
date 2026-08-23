@@ -56,7 +56,7 @@ function facilityPriority(candidate) {
     );
 }
 
-function reasonFor(type, candidate) {
+function reasonFor(type, candidate, hazard = 'heatwave') {
     const parcelCount = Math.max(0, Math.round(numeric(candidate?.parcelCount)));
     const hotspotCount = Math.max(0, Math.round(numeric(candidate?.hotspotCount)));
     const risk = numeric(candidate?.risk);
@@ -66,9 +66,15 @@ function reasonFor(type, candidate) {
         return `면적 ${area}·${parcelCount.toLocaleString()}필지로 공간 규모가 큰 편이어서, 개별 시설보다 계획·관리기준을 함께 검토하는 유형으로 분류했습니다.`;
     }
     if (type === 'facility') {
-        return `Risk ${risk.toFixed(2)}·hotspot ${hotspotCount.toLocaleString()}셀의 집중도가 높아, 그늘막·쉼터·쿨루프 등 시설 투자를 우선 검토하는 유형으로 분류했습니다.`;
+        const examples = hazard === 'flood'
+            ? '빗물저류·배수개선·차수시설'
+            : '그늘막·쉼터·쿨루프';
+        return `Risk ${risk.toFixed(2)}·hotspot ${hotspotCount.toLocaleString()}셀의 집중도가 높아, ${examples} 등 시설 투자를 우선 검토하는 유형으로 분류했습니다.`;
     }
-    return `면적 ${area}·${parcelCount.toLocaleString()}필지의 비교적 작은 생활권이어서, 주민 참여·안부 확인·행동 캠페인 같은 운영형 대응 유형으로 분류했습니다.`;
+    const actions = hazard === 'flood'
+        ? '침수예보 공유·취약가구 안부 확인·대피훈련'
+        : '주민 참여·안부 확인·행동 캠페인';
+    return `면적 ${area}·${parcelCount.toLocaleString()}필지의 비교적 작은 생활권이어서, ${actions} 같은 운영형 대응 유형으로 분류했습니다.`;
 }
 
 /**
@@ -76,7 +82,7 @@ function reasonFor(type, candidate) {
  * 전체 후보 중 공간 규모가 큰 약 1/3은 계획행정수단, 남은 후보 중
  * Risk 집중도가 높은 후보는 시설지원사업, 소규모 후보는 시민실천으로 나눈다.
  */
-export function enrichPracticeDistricts(sourceCandidates = []) {
+export function enrichPracticeDistricts(sourceCandidates = [], hazard = 'heatwave') {
     const candidates = Array.isArray(sourceCandidates) ? sourceCandidates.filter(Boolean) : [];
     if (!candidates.length) return [];
 
@@ -134,7 +140,7 @@ export function enrichPracticeDistricts(sourceCandidates = []) {
             practiceTypeFillColor: meta.fillColor,
             classificationVersion: 'sample-v1',
             classificationRule: '공간 규모 상위 약 1/3=계획행정수단, 잔여 후보 중 Risk 집중군=시설지원사업, 소규모 생활권=시민실천',
-            classificationReason: reasonFor(practiceType, candidate)
+            classificationReason: reasonFor(practiceType, candidate, hazard)
         };
     });
 }

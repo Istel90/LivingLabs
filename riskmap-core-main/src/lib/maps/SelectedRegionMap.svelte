@@ -8,11 +8,8 @@
     } from '$lib/data/administrativeRegions.js';
     import { enrichPracticeDistricts, PRACTICE_TYPE_META } from '$lib/data/practiceDistricts.js';
     import {
-        canUseVWorldData,
-        createVWorldDataUrl,
         createVWorldWmsOptions,
         hasVWorldApiKey,
-        VWORLD_DATASETS,
         VWORLD_WMS_LAYERS,
         VWORLD_WMS_URL
     } from '../../../../shared/map/vworld.js';
@@ -20,6 +17,7 @@
     let {
         regionCode = '41110',
         regionName = '경기도 수원시',
+        hazard = 'heatwave',
         height = '320px',
         showCadastral = true,
         showSidoBoundary = false,
@@ -589,55 +587,57 @@
             return [lng, lat];
         };
 
-        for (let row = 0; row < rows; row += 1) {
-            for (let column = 0; column < columns; column += 1) {
-                const index = (row * columns) + column;
-                const risk = Number(grid.values[index]);
-                if (!Number.isFinite(risk) || risk < threshold) continue;
+        const candidateIndices = Array.isArray(grid.validIndices) && grid.validIndices.length
+            ? grid.validIndices
+            : Array.from({ length: rows * columns }, (_, index) => index);
 
-                const leftX = originX + (column * cellWidth);
-                const rightX = leftX + cellWidth;
-                const topY = originY - (row * cellHeight);
-                const bottomY = topY - cellHeight;
-                const point = toLngLat(leftX + (cellWidth / 2), topY - (cellHeight / 2));
-                if (!pointInBoundary(point, boundaryFeatures)) continue;
+        for (const index of candidateIndices) {
+            const row = Math.floor(index / columns);
+            const column = index % columns;
+            const risk = Number(grid.values[index]);
+            if (!Number.isFinite(risk) || risk < threshold) continue;
 
-                const corners = [
-                    toLngLat(leftX, topY),
-                    toLngLat(rightX, topY),
-                    toLngLat(rightX, bottomY),
-                    toLngLat(leftX, bottomY)
-                ];
-                const lngs = corners.map((corner) => corner[0]);
-                const lats = corners.map((corner) => corner[1]);
+            const leftX = originX + (column * cellWidth);
+            const rightX = leftX + cellWidth;
+            const topY = originY - (row * cellHeight);
+            const bottomY = topY - cellHeight;
+            const point = toLngLat(leftX + (cellWidth / 2), topY - (cellHeight / 2));
+            if (!pointInBoundary(point, boundaryFeatures)) continue;
 
-                points.push({
-                    index,
-                    row,
-                    column,
-                    point,
-                    corners,
-                    bounds: {
-                        minLng: Math.min(...lngs),
-                        minLat: Math.min(...lats),
-                        maxLng: Math.max(...lngs),
-                        maxLat: Math.max(...lats)
-                    },
-                    risk,
-                    h: Number(grid.hValues?.[index]),
-                    e: Number(grid.eValues?.[index]),
-                    v: Number(grid.vValues?.[index])
-                });
-            }
+            const corners = [
+                toLngLat(leftX, topY),
+                toLngLat(rightX, topY),
+                toLngLat(rightX, bottomY),
+                toLngLat(leftX, bottomY)
+            ];
+            const lngs = corners.map((corner) => corner[0]);
+            const lats = corners.map((corner) => corner[1]);
+
+            points.push({
+                index,
+                row,
+                column,
+                point,
+                corners,
+                bounds: {
+                    minLng: Math.min(...lngs),
+                    minLat: Math.min(...lats),
+                    maxLng: Math.max(...lngs),
+                    maxLat: Math.max(...lats)
+                },
+                risk,
+                h: Number(grid.hValues?.[index]),
+                e: Number(grid.eValues?.[index]),
+                v: Number(grid.vValues?.[index])
+            });
         }
 
         return points.sort((left, right) => right.risk - left.risk);
     }
 
     function hotspotRequestBoxes(points) {
-        // Keep each VWorld query small enough to stay below the 1,000 feature
-        // response cap in dense urban blocks. Large boxes regularly return
-        // thousands of parcels and silently lose the parcels after page one.
+        // Keep each PostGIS query small so dense urban blocks can be paged and
+        // rendered without sending one oversized GeoJSON response to the browser.
         const tileSize = 0.0024;
         const boxes = new Map();
 
@@ -665,6 +665,9 @@
 
         return [...boxes.values()]
             .sort((left, right) => (right.maxRisk - left.maxRisk) || (right.count - left.count))
+            // Candidate districts are ranked from the highest-risk cells, so the
+            // top 20 tiles preserve the decision focus without querying every
+            // lower-ranked hotspot across a metropolitan-scale boundary.
             .slice(0, 20)
             .map((box) => ({
                 minLng: box.minLng - 0.00035,
@@ -675,11 +678,8 @@
             }));
     }
 
-    function extractVWorldFeatures(payload) {
-        return payload?.response?.result?.featureCollection?.features ||
-            payload?.response?.result?.features ||
-            payload?.features ||
-            [];
+    function extractGeoJsonFeatures(payload) {
+        return Array.isArray(payload?.features) ? payload.features : [];
     }
 
     function featureId(feature) {
@@ -695,7 +695,7 @@
         return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
     }
 
-    function isTransientVWorldStatus(status) {
+    function isTransientApiStatus(status) {
         return [408, 425, 429, 500, 502, 503, 504].includes(Number(status));
     }
 
@@ -714,7 +714,7 @@
                 const text = await response.text();
 
                 if (!response.ok) {
-                    const error = new Error(`VWorld ${response.status}`);
+                    const error = new Error(`PostGIS ${response.status}`);
                     error.status = response.status;
                     throw error;
                 }
@@ -722,13 +722,13 @@
                 try {
                     return JSON.parse(text);
                 } catch {
-                    throw new Error('VWorld invalid-json');
+                    throw new Error('PostGIS invalid-json');
                 }
             } catch (error) {
                 lastError = error?.name === 'AbortError' ? new Error('request-timeout') : error;
                 const retryable = error?.name === 'AbortError' ||
                     error instanceof TypeError ||
-                    isTransientVWorldStatus(error?.status);
+                    isTransientApiStatus(error?.status);
                 if (!retryable || attempt >= retries) throw lastError;
                 await wait(450 * (attempt + 1));
             } finally {
@@ -736,74 +736,52 @@
             }
         }
 
-        throw lastError || new Error('VWorld request-failed');
+        throw lastError || new Error('PostGIS request-failed');
     }
 
-    async function fetchVWorldCadastralFeatures(
+    async function fetchPostgisCadastralFeatures(
         boxes,
-        { timeoutMs = 75000, concurrency = 1, onProgress = () => {} } = {}
+        { timeoutMs = 75000, concurrency = 6, onProgress = () => {} } = {}
     ) {
         const featuresById = new Map();
-        // VWorld intermittently returns 502 for large cadastral payloads even when
-        // the same extent succeeds in smaller pages. Keep each payload modest and
-        // page through the tile instead of silently losing the tail of the result.
-        const pageSize = 400;
-        const maxPagesPerBox = 3;
-        const maxFeatures = 8000;
+        const pageSize = 1000;
+        const maxPagesPerBox = 5;
+        const maxFeatures = 12000;
         const deadline = Date.now() + timeoutMs;
         const queue = [...boxes];
         const failures = [];
         let completed = 0;
-        let nextRequestAt = 0;
-
-        async function throttleVWorldRequest() {
-            const delay = nextRequestAt - Date.now();
-            if (delay > 0) await wait(delay);
-        }
 
         async function fetchBox(box) {
             if (Date.now() > deadline) throw new Error('request-timeout');
-            const geomFilter = `BOX(${box.minLng},${box.minLat},${box.maxLng},${box.maxLat})`;
             const features = [];
-            let total = 0;
+            let truncated = false;
 
-            for (let page = 1; page <= maxPagesPerBox; page += 1) {
+            for (let page = 0; page < maxPagesPerBox; page += 1) {
                 if (Date.now() > deadline) throw new Error('request-timeout');
                 try {
-                    const url = createVWorldDataUrl(VWORLD_DATASETS.cadastral, {
-                        geomFilter,
-                        size: pageSize,
-                        page
-                    });
+                    const url = new URL('/cadastre/bbox', window.location.origin);
+                    url.searchParams.set('bbox', [box.minLng, box.minLat, box.maxLng, box.maxLat].join(','));
+                    url.searchParams.set('limit', String(pageSize));
+                    url.searchParams.set('offset', String(page * pageSize));
+                    url.searchParams.set('simplifyMeters', '0.2');
                     const remainingTime = Math.max(3000, Math.min(12000, deadline - Date.now()));
-                    await throttleVWorldRequest();
-                    let payload;
-                    try {
-                        payload = await fetchJsonWithRetry(url, { timeoutMs: remainingTime });
-                    } finally {
-                        // VWorld becomes unreliable under back-to-back cadastral
-                        // requests. Leave breathing room before the next page/tile.
-                        nextRequestAt = Date.now() + 900;
-                    }
-                    if (payload?.response?.status === 'ERROR') {
-                        const code = payload.response.error?.code || 'API_ERROR';
-                        const text = payload.response.error?.text || 'VWorld 데이터 API 오류';
-                        const error = new Error(`VWorld ${code}: ${text}`);
-                        error.vworldCode = code;
-                        throw error;
-                    }
-
-                    const pageFeatures = extractVWorldFeatures(payload);
+                    const payload = await fetchJsonWithRetry(url, { timeoutMs: remainingTime });
+                    const pageFeatures = extractGeoJsonFeatures(payload);
                     features.push(...pageFeatures);
-                    total = Number(payload?.response?.record?.total) || pageFeatures.length;
-                    if (pageFeatures.length < pageSize || features.length >= total || Date.now() > deadline - 3000) break;
+                    const hasMore = Boolean(payload?.metadata?.hasMore) || pageFeatures.length >= pageSize;
+                    if (!hasMore || Date.now() > deadline - 3000) {
+                        truncated = hasMore;
+                        break;
+                    }
+                    if (page === maxPagesPerBox - 1) truncated = true;
                 } catch (error) {
-                    if (page === 1 || !features.length) throw error;
+                    if (page === 0 || !features.length) throw error;
                     return { features, truncated: true };
                 }
             }
 
-            return { features, truncated: total > features.length };
+            return { features, truncated };
         }
 
         async function worker() {
@@ -816,7 +794,7 @@
                         const id = featureId(feature);
                         if (id) featuresById.set(id, feature);
                     });
-                    if (result.truncated) failures.push(new Error('VWorld response-truncated'));
+                    if (result.truncated) failures.push(new Error('PostGIS response-truncated'));
                 } catch (error) {
                     failures.push(error);
                 } finally {
@@ -846,7 +824,10 @@
 
     function parcelLabel(feature) {
         const properties = feature?.properties || {};
-        return properties.jibun || properties.JIBUN || properties.addr || properties.ADDR || properties.pnu || properties.PNU || '필지';
+        const legalDong = properties.legal_dong_name || properties.legalDongName || '';
+        const lotNumber = properties.lot_number || properties.lotNumber || '';
+        return properties.jibun || properties.JIBUN || properties.addr || properties.ADDR ||
+            [legalDong, lotNumber].filter(Boolean).join(' ') || properties.pnu || properties.PNU || '필지';
     }
 
     function parcelScoreRecords(features, hotspots) {
@@ -976,7 +957,7 @@
                 v: Number((cluster.vMean || 0).toFixed(2)),
                 rank: index + 1,
                 reason: `연속지적도 필지 교차 · 최고 Risk ${Number.isFinite(cluster.riskMax) ? cluster.riskMax.toFixed(2) : '--'} · 대표 ${cluster.members[0]?.label || '필지'}`,
-                basis: 'VWorld LP_PA_CBND_BUBUN + 100m hotspot cell-parcel intersection',
+                basis: 'PostGIS cadastre.parcels_readable + 100m hotspot cell-parcel intersection',
                 parcelCount: cluster.members.length,
                 hotspotCount: cluster.hotspotCount,
                 totalAreaSqm: Number(cluster.totalAreaSqm.toFixed(1)),
@@ -991,7 +972,7 @@
 
     function renderParcelCandidateLayer(candidates) {
         if (!map || !window.L) return;
-        candidates = enrichPracticeDistricts(candidates);
+        candidates = enrichPracticeDistricts(candidates, hazard);
         parcelCandidateLayer?.remove();
         parcelCandidateLayer = null;
         const legendCandidates = candidates.filter(Boolean);
@@ -1100,7 +1081,7 @@
             (candidate.pnuList || []).length &&
             candidate.bounds
         );
-        if (!missingGeometry.length || !canUseVWorldData()) return;
+        if (!missingGeometry.length) return;
 
         const requestBoxes = missingGeometry.map(candidateRequestBox).filter(Boolean);
         if (!requestBoxes.length) return;
@@ -1110,7 +1091,7 @@
         parcelCandidateStatus = `저장된 필지 도형 복원 중 · ${missingGeometry.length}개 후보`;
 
         try {
-            const fetchResult = await fetchVWorldCadastralFeatures(requestBoxes, {
+            const fetchResult = await fetchPostgisCadastralFeatures(requestBoxes, {
                 timeoutMs: 60000,
                 onProgress: ({ completed, total, failed }) => {
                     parcelCandidateStatus = `저장된 필지 도형 복원 중 · ${completed}/${total} 구역${failed ? ` · ${failed}개 재조회 실패` : ''}`;
@@ -1139,7 +1120,7 @@
             if (parcelCandidateRunId !== runId) return;
             parcelCandidateStatus = error?.message === 'request-timeout'
                 ? '필지 도형 복원 시간이 초과되었습니다. 잠시 후 저장본을 다시 불러오세요.'
-                : `필지 도형 복원 실패 · ${error?.message || 'VWorld 조회 오류'}`;
+                : `필지 도형 복원 실패 · ${error?.message || 'PostGIS 조회 오류'}`;
         } finally {
             if (parcelCandidateRunId === runId) parcelCandidateRunning = false;
         }
@@ -1352,11 +1333,6 @@
             parcelCandidateStatus = 'Risk 분석 결과가 먼저 필요합니다.';
             return;
         }
-        if (!canUseVWorldData()) {
-            parcelCandidateStatus = 'VWorld 필지 API 연결 주소가 설정되지 않았습니다.';
-            return;
-        }
-
         parcelCandidateRunning = true;
         parcelCandidateStatus = 'Hotspot 격자 준비 중';
         const runCandidateContextKey = candidateContextKey;
@@ -1367,10 +1343,10 @@
             if (!hotspots.length) throw new Error('hotspot-empty');
 
             const requestBoxes = hotspotRequestBoxes(hotspots);
-            parcelCandidateStatus = `연속지적도 API 요청 중 · ${requestBoxes.length}개 구역`;
-            const fetchResult = await fetchVWorldCadastralFeatures(requestBoxes, {
+            parcelCandidateStatus = `PostGIS 연속지적도 요청 중 · ${requestBoxes.length}개 구역`;
+            const fetchResult = await fetchPostgisCadastralFeatures(requestBoxes, {
                 onProgress: ({ completed, total, failed, features }) => {
-                    parcelCandidateStatus = `연속지적도 API 조회 · ${completed}/${total} 구역 · ${features.toLocaleString()}필지${failed ? ` · ${failed}개 구역 재조회 실패` : ''}`;
+                    parcelCandidateStatus = `PostGIS 필지 조회 · ${completed}/${total} 구역 · ${features.toLocaleString()}필지${failed ? ` · ${failed}개 구역 부분 조회` : ''}`;
                 }
             });
             const cadastralFeatures = fetchResult.features;
@@ -1385,7 +1361,7 @@
 
             await yieldToBrowser();
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
-            const candidates = enrichPracticeDistricts(clusterParcelRecords(parcelRecords));
+            const candidates = enrichPracticeDistricts(clusterParcelRecords(parcelRecords), hazard);
             renderParcelCandidateLayer(candidates);
             const slimCandidates = candidates.map(({ features, ...candidate }) => ({
                 ...candidate,
@@ -1414,16 +1390,16 @@
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             console.error(error);
             const message = error?.message === 'parcel-empty'
-                ? '연속지적도 API에서 필지 geometry를 받지 못했습니다.'
+                ? 'PostGIS 연속지적도에서 필지 geometry를 찾지 못했습니다.'
                 : error?.message === 'intersection-empty'
                     ? 'Hotspot과 겹치는 필지를 찾지 못했습니다.'
                     : error?.message === 'hotspot-empty'
                         ? 'Hotspot 격자가 없습니다.'
                         : error?.message === 'request-timeout'
-                            ? 'VWorld 필지 API 응답 시간이 초과되었습니다. 범위를 줄이거나 잠시 후 다시 실행하세요.'
-                        : error?.message?.startsWith('VWorld ')
+                            ? 'PostGIS 필지 조회 시간이 초과되었습니다. 범위를 줄이거나 잠시 후 다시 실행하세요.'
+                        : error?.message?.startsWith('PostGIS ')
                             ? error.message
-                            : '실천권역 도출 실패 · VWorld API 응답을 확인하세요.';
+                            : '실천권역 도출 실패 · PostGIS 필지 서비스 상태를 확인하세요.';
             parcelCandidateStatus = message;
             // A transient API failure must not erase a previously completed
             // analysis. Keep the last valid candidates visible and only report
@@ -1441,7 +1417,15 @@
     }
 
     function isGridValueCollection(values) {
-        return Array.isArray(values) || ArrayBuffer.isView(values);
+        return Array.isArray(values) || ArrayBuffer.isView(values) || values instanceof Map;
+    }
+
+    function gridValueAt(values, index) {
+        return values instanceof Map ? values.get(index) : values?.[index];
+    }
+
+    function gridValueCollectionSize(values) {
+        return values instanceof Map ? values.size : Number(values?.length) || 0;
     }
 
     function visibleGridIndicatorsForLayer(layer) {
@@ -1473,9 +1457,14 @@
             return items[0].gridValues;
         }
 
-        const values = new Array(cellCount).fill(null);
+        const useSparseMap = cellCount > 500_000;
+        const values = useSparseMap ? new Map() : new Float32Array(cellCount);
+        if (!useSparseMap) values.fill(Number.NaN);
+        const indices = Array.isArray(grid.validIndices) && grid.validIndices.length
+            ? grid.validIndices
+            : Array.from({ length: cellCount }, (_, index) => index);
 
-        for (let index = 0; index < cellCount; index += 1) {
+        for (const index of indices) {
             let weightedSum = 0;
             let totalWeight = 0;
 
@@ -1483,7 +1472,7 @@
                 const weight = Math.max(0, Number(item.weight) || 0);
                 if (weight <= 0) return;
 
-                const rawValue = Number(item.gridValues[index]);
+                const rawValue = Number(gridValueAt(item.gridValues, index));
                 if (!Number.isFinite(rawValue)) return;
 
                 const value = layer === 'V' && item.direction === 'negative'
@@ -1494,7 +1483,11 @@
                 totalWeight += weight;
             });
 
-            values[index] = totalWeight > 0 ? weightedSum / totalWeight : null;
+            if (totalWeight > 0) {
+                const value = weightedSum / totalWeight;
+                if (useSparseMap) values.set(index, value);
+                else values[index] = value;
+            }
         }
 
         return values;
@@ -1553,7 +1546,7 @@
 
         const layer = selectedGridLayer || 'Risk';
         const values = gridValuesForLayer(grid, layer);
-        if (!values.length) return null;
+        if (!gridValueCollectionSize(values)) return null;
         const columns = Number(grid.columns);
         const rows = Number(grid.rows);
         const originX = Number(grid.transform.originX);
@@ -1625,7 +1618,7 @@
                 context.globalAlpha = 0.58;
 
                 for (const cell of drawableCells) {
-                    const value = Number(values[cell.index]);
+                    const value = Number(gridValueAt(values, cell.index));
                     if (!Number.isFinite(value)) continue;
                     if (Number.isFinite(hotspotThreshold) && value < hotspotThreshold) continue;
 
@@ -2054,7 +2047,7 @@
                     <div class="parcel-candidate-tools">
                         <button
                             type="button"
-                            disabled={parcelCandidateRunning || !canUseVWorldData()}
+                            disabled={parcelCandidateRunning}
                             onclick={deriveParcelCandidates}
                         >
                             {parcelCandidateRunning ? '실천권역 분석 중...' : '실천권역도출하기'}

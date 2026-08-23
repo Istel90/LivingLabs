@@ -92,16 +92,21 @@
                 { id: 109, indicatorCode: 'H09', icon: '⏱', label: 'H09 · 최대 온난일 계속기간 WSDIx', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#c2410c' },
                 { id: 110, indicatorCode: 'H10', icon: '🛰', label: 'H10 · 여름철 지표면온도 P90', description: '2021~2025 Landsat 30m 원자료를 집계한 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'Landsat-LST-100m', supportedGridUnits: ['100m'], color: '#b45309' },
                 { id: 3, iconPath: asset('/indicator-icons/보행자.png'), label: '유동인구 노출량', description: 'Pop_Grid_100m Day_Total을 EPSG:5179 표준 100m 격자에 연결한 유동인구 노출량', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/E_population_floating_count_100m.json', value: 0.01259, color: '#db9d3e' },
-                { id: 4, icon: '♟', label: '상주인구 노출량', description: '국토통계 100m 격자 총인구 수를 EPSG:5179 표준 통계격자에 연결', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/E_population_resident_count_100m.json', value: 0.03308, color: '#d4af42' },
-                { id: 5, iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 비율', description: '국토통계 100m 격자 고령인구 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/V_sensitivity_elderly_ratio_100m.json', value: 0.06127, color: '#e45662' },
-                { id: 6, iconPath: asset('/indicator-icons/유소년인구비율.png'), label: '유소년인구 비율', description: '국토통계 100m 격자 유소년인구 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/V_sensitivity_children_ratio_100m.json', value: 0.02439, color: '#d96b72' },
+                { id: 4, floodIndicator: 'FE01', icon: '♟', label: '상주인구 노출량', description: '2024 전국 총인구 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], color: '#d4af42' },
+                { id: 5, iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 수', description: '국토정보플랫폼 2024년 10월 고령인구 수를 공통 EPSG:5179 100m 셀에 연결', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', populationIndicator: 'elderly', value: 0.06127, color: '#e45662' },
+                { id: 6, iconPath: asset('/indicator-icons/유소년인구비율.png'), label: '유아인구 수', description: '국토정보플랫폼 2024년 10월 유아인구 수를 공통 EPSG:5179 100m 셀에 연결', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', populationIndicator: 'infant', value: 0.02439, color: '#d96b72' },
                 { id: 7, iconPath: asset('/indicator-icons/1인가구.png'), label: '1인 가구', description: '행정동 1인가구 비율을 EPSG:5179 표준 100m 격자에 할당한 정규화 지표', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_sensitivity_single_household_ratio_100m_z.json', value: 0.50044, color: '#cf6576' },
                 { id: 8, iconPath: asset('/indicator-icons/기저질환자.png'), label: '건강 취약 참고', description: '2021-2023 순환기·호흡기 진료인원 기반 구 단위 건강취약 proxy', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_sensitivity_chronic_disease_ratio_proxy_100m_z.json', value: 0.50816, color: '#b86c82' },
                 { id: 9, iconPath: asset('/indicator-icons/저소득층.png'), label: '저소득층', description: '2026 기초생활보장 수급자 현황 기반 행정동 저소득층 비율 proxy', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_adaptive_low_income_ratio_proxy_100m_z.json', value: 0.26613, color: '#a56d83' },
-                { id: 10, iconPath: asset('/indicator-icons/노후주택비율.png'), label: '노후주택 비율', description: '건축물 주거용도 proxy 중 30년 이상 footprint 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_adaptive_old_housing_ratio_100m_z.json', value: 0.17228, color: '#a77a72' },
+                { id: 10, iconPath: asset('/indicator-icons/노후주택비율.png'), label: '30년 이상 건축물 비율', description: '전국 GIS 건물통합정보 사용승인일 확인 건축물 기준 100m 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], analysisIndicator: 'building-old-30y-ratio', color: '#a77a72' },
                 { id: 11, iconPath: asset('/indicator-icons/무더위쉼터접근성.png'), label: '무더위쉼터 접근성', description: '379개 무더위쉼터 최근접 거리 기반 EPSG:5179 100m 접근성 점수', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'cooling-shelter-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/cooling-shelter/V_adaptive_cooling_shelter_accessibility_100m_z.json', value: 0.87419, color: '#3f9b80' },
                 { id: 12, iconPath: asset('/indicator-icons/녹지비율.png'), label: '녹지 비율', description: '세분류토지피복도 산림·초지·수역 기반 100m 녹지/자연자원 면적 비율', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_adaptive_green_natural_ratio_100m_z.json', value: 0.38105, color: '#57a66c' },
-                { id: 13, iconPath: asset('/indicator-icons/그늘면적.png'), label: '그늘 면적', description: '그늘/수목 공간데이터 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'file', value: 0.51, color: '#61958b' }
+                { id: 13, iconPath: asset('/indicator-icons/그늘면적.png'), label: '그늘 면적', description: '그늘/수목 공간데이터 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'file', value: 0.51, color: '#61958b' },
+                { id: 14, icon: '🚏', label: '버스정류장 노출 proxy', description: '전국 버스정류장 100m 셀 밀도 · 실제 이용량이 아닌 정류장 위치 기반 노출 참고지표', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-bus-stop', color: '#ca8a04' },
+                { id: 15, icon: '🚇', label: '도시철도 결절점', description: '전국 도시철도 역사 851개를 100m 셀에 집계한 대중교통 결절점 노출 proxy', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-rail-station', color: '#a16207' },
+                { id: 16, icon: '⌂', label: '주거용 건축물 밀도', description: '전국 GIS 건물통합정보의 주거용 건축물 수를 100m 셀에 집계', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], analysisIndicator: 'building-residential-count', color: '#b7791f' },
+                { id: 17, icon: '▰', label: '횡단보도 노출 proxy', description: '전국횡단보도 표준자료의 100m 셀 밀도 · 부산·대구·세종 보완 필요', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-crosswalk', color: '#d97706' },
+                { id: 18, icon: '⇄', label: '대중교통 접근성 proxy', description: '전국 버스정류장 100m 셀 밀도를 쉼터·공공시설 이동 접근성 참고지표로 사용 · 실제 이동시간은 아님', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-bus-stop', color: '#358b78' }
             ],
             candidates: [
                 { name: '후보지 03', area: '팔달구 인계동', risk: 0.82, h: 0.76, e: 0.91, v: 0.81, rank: 1, reason: '고령층·유동인구 집중, 쉼터 접근성 부족' },
@@ -114,12 +119,12 @@
             projectSuffix: '홍수 위험지역 분석',
             heroEmphasis: '우선 대응 침수권역을 찾습니다.',
             heroDescription: '침수위험(H), 노출(E), 취약성(V) 지표를 구성하고 배수·저류·대피 대안을 공간적으로 비교하세요.',
-            sampleNotice: '현재 홍수 분석 데이터와 후보지는 구조 시연용 샘플입니다.',
-            mapSource: '침수흔적도·DEM·배수시설 데이터 연결 준비',
+            sampleNotice: '전국 침수위험·강우·DEM·인구·건축물·교통시설 100m PostGIS 격자를 연결했습니다.',
+            mapSource: '전국 홍수 H/E/V PostGIS 100m 서비스 격자',
             rasterPath: null,
             dataSummaryPath: null,
-            rasterReadyPrefix: '홍수 위험 래스터',
-            rasterError: '홍수 위험 래스터 연결 전 · 예시 격자 표시',
+            rasterReadyPrefix: '선택 행정구역 홍수 100m 격자',
+            rasterError: '선택 행정구역 홍수 격자 연결 실패',
             actionTitle: '배수개선·저류공간·대피동선 우선 정비',
             brief: {
                 driverTitle: '반지하·저지대 주거',
@@ -141,18 +146,29 @@
                 { name: '대안3', status: '검토중', description: '반지하·취약시설 보호 중심 대응안' }
             ],
             indicators: [
-                { id: 1, icon: '≈', label: '침수흔적도', description: '과거 침수 이력 및 침수심 분포', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#2563eb' },
-                { id: 2, icon: '☔', label: '강우강도', description: '집중호우 강도 및 빈도', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#0284c7' },
-                { id: 3, icon: '▾', label: '저지대 지형', description: 'DEM 기반 저지대·경사 취약 구간', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#0891b2' },
-                { id: 4, icon: '♟', label: '상주인구', description: '침수권역 내 거주 인구', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#d4af42' },
-                { id: 5, icon: '🚶', label: '유동인구', description: '시간대별 보행·상권 유동 인구', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#db9d3e' },
-                { id: 6, icon: '🛣', label: '주요 도로', description: '침수 시 통행 영향 도로망', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#b7791f' },
-                { id: 7, icon: '⌂', label: '반지하 주거', description: '반지하·지하층 주거 밀집도', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#e45662' },
-                { id: 8, icon: '🏚', label: '노후건축물', description: '노후 건축물 및 취약 주택 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#cf6576' },
-                { id: 9, icon: '🏥', label: '취약시설', description: '복지시설·의료시설·학교 등 보호대상', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#a56d83' },
-                { id: 10, icon: '◉', label: '빗물받이 밀도', description: '빗물받이 및 우수 유입시설 분포', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#3f9b80' },
-                { id: 11, icon: '▤', label: '배수펌프장 접근성', description: '배수펌프장·저류시설 영향권', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#57a66c' },
-                { id: 12, icon: '↗', label: '대피시설 접근성', description: '대피소와 안전 이동경로 접근성', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#61958b' }
+                { id: 201, floodIndicator: 'FH01', icon: '≈', label: 'H01 · 도시침수 30년', description: '도시침수 30년 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#2563eb' },
+                { id: 202, floodIndicator: 'FH02', icon: '≋', label: 'H02 · 국가하천 100년', description: '국가하천 범람 100년 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#1d4ed8' },
+                { id: 203, floodIndicator: 'FH03', icon: '≋', label: 'H03 · 지방하천 50년', description: '지방하천 범람 50년 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#0369a1' },
+                { id: 204, analysisIndicator: 'rain-max-1h', icon: '☔', label: '1시간 최대강우량', description: '2016~2025년 4~10월 ASOS 관측 극값을 최근접 관측소 기준으로 연결', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-KMA-100m', supportedGridUnits: ['100m'], color: '#0284c7' },
+                { id: 205, analysisIndicator: 'terrain-low-elevation', icon: '▾', label: '저지대 지형', description: '전국 DEM 100m 표고 · 대상지 내 낮은 표고일수록 위험 점수 증가', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#0891b2' },
+                { id: 206, analysisIndicator: 'terrain-twi', icon: '◒', label: '지형습윤지수 TWI', description: '전국 DEM 기반 100m 지형습윤지수', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#0e7490' },
+                { id: 207, analysisIndicator: 'terrain-flow-accumulation', icon: '⇣', label: '유로 누적량', description: '전국 DEM 기반 100m 유로 누적량', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#155e75' },
+                { id: 208, analysisIndicator: 'terrain-depression-depth', icon: '⌄', label: '지형 함몰 깊이', description: '전국 DEM 기반 100m 함몰 깊이', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#164e63' },
+                { id: 211, floodIndicator: 'FE01', icon: '♟', label: 'FE01 · 상주인구', description: '2024 전국 총인구 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#d4af42' },
+                { id: 212, floodIndicator: 'FE02', icon: '⌂', label: 'FE02 · 주택 수', description: '2024 전국 주택 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#c58b2a' },
+                { id: 213, floodIndicator: 'FE03', coveragePrefix: '4111', icon: '🚶', label: 'FE03 · 유동인구', description: '2021 수원시 일평균 유동인구 100m · 현재 수원시만 제공', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#db9d3e' },
+                { id: 214, analysisIndicator: 'facility-bus-stop', icon: '🚏', label: '버스정류장 노출 proxy', description: '전국 정류장 위치의 100m 셀 밀도 · 실제 이용량은 아님', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#b7791f' },
+                { id: 215, analysisIndicator: 'facility-rail-station', icon: '🚇', label: '도시철도 결절점', description: '전국 도시철도 역사 851개의 100m 셀 밀도', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#a16207' },
+                { id: 216, analysisIndicator: 'facility-crosswalk', icon: '▰', label: '횡단보도 노출 proxy', description: '전국횡단보도 표준자료 100m 셀 밀도 · 부산·대구·세종 보완 필요', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#92400e' },
+                { id: 221, analysisIndicator: 'building-basement-count', icon: '⌂', label: '지하층 보유 건축물', description: '전국 GIS 건물통합정보의 지하층 보유 건축물 100m 셀 밀도', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], color: '#e45662' },
+                { id: 222, analysisIndicator: 'building-old-30y-ratio', icon: '🏚', label: '30년 이상 건축물 비율', description: '사용승인일 확인 건축물 중 30년 이상 건축물의 100m 셀 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], color: '#cf6576' },
+                { id: 223, populationIndicator: 'elderly', iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 수', description: '국토정보플랫폼 2024년 10월 전국 100m 고령인구', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', color: '#b86c82' },
+                { id: 224, populationIndicator: 'infant', iconPath: asset('/indicator-icons/유소년인구비율.png'), label: '유아인구 수', description: '국토정보플랫폼 2024년 10월 전국 100m 유아인구', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', color: '#a56d83' },
+                { id: 225, icon: '🏫', label: '어린이집·복지시설', description: '어린이집은 주소만 적재되어 좌표 원자료 보완 후 연결 예정', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'source-address-only', supportedGridUnits: ['100m'], color: '#9333ea' },
+                { id: 231, analysisIndicator: 'facility-bus-stop', icon: '⇄', label: '대중교통 대피 접근성 proxy', description: '전국 버스정류장 100m 셀 밀도를 대피 이동 접근성 참고지표로 사용 · 실제 대피경로·운행정보는 아님', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#358b78' },
+                { id: 234, analysisIndicator: 'facility-shelter', icon: '↗', label: '민방위 대피시설 밀도', description: '현재 적재본 5,160개의 100m 셀 밀도 · 지역별 원자료 커버리지 확인 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#61958b' },
+                { id: 232, icon: '◉', label: '빗물받이 밀도', description: '전국 빗물받이 원자료 보완 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'source-required', color: '#3f9b80' },
+                { id: 233, icon: '▤', label: '배수펌프장 접근성', description: '전국 배수펌프장·저류시설 원자료 보완 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'source-required', color: '#57a66c' }
             ],
             candidates: [
                 { name: '후보지 02', area: '저지대 주거밀집지', risk: 0.84, h: 0.88, e: 0.79, v: 0.82, rank: 1, reason: '침수흔적과 반지하 주거가 중첩된 구역' },
@@ -207,7 +223,7 @@
 
     const config = hazardConfigs[hazard] || hazardConfigs.heatwave;
     function configureIndicatorsForRegion(sourceIndicators, code, datasetMode = hazardDatasetMode) {
-        const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H07', 'H10']);
+        const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09', 'H10']);
         return sourceIndicators.map((item) => {
             if (item.indicatorCode) {
                 const observed = datasetMode === 'observed';
@@ -247,6 +263,29 @@
                     enabled: available && item.indicatorCode === (observed ? 'H01' : 'H04')
                 };
             }
+            const covered = Boolean(code) && (!item.coveragePrefix || code.startsWith(item.coveragePrefix));
+            if (item.floodIndicator) {
+                const dataQuery = new URLSearchParams({ regionCode: code, indicator: item.floodIndicator });
+                return {
+                    ...item,
+                    dataPath: covered ? `/flood-grid?${dataQuery.toString()}` : null,
+                    dataStatus: covered ? (item.dataStatus || 'available') : 'missing',
+                    enabled: covered && item.enabled
+                };
+            }
+            if (item.analysisIndicator) {
+                const dataQuery = new URLSearchParams({ regionCode: code, indicator: item.analysisIndicator });
+                return {
+                    ...item,
+                    dataPath: covered ? `/analysis-grid?${dataQuery.toString()}` : null,
+                    dataStatus: covered ? (item.dataStatus || 'available') : 'missing',
+                    enabled: covered && item.enabled
+                };
+            }
+            if (item.populationIndicator) {
+                return { ...item, dataStatus: 'available' };
+            }
+            if (item.dataStatus === 'missing') return item;
             if (!code.startsWith('4111')) {
                 return { ...item, enabled: false, dataStatus: 'missing' };
             }
@@ -255,10 +294,15 @@
     }
 
     function isGridValueCollection(values) {
-        return Array.isArray(values) || ArrayBuffer.isView(values);
+        return Array.isArray(values) || ArrayBuffer.isView(values) || values instanceof Map;
     }
 
-    function decodeGridValues(grid) {
+    function gridValueCollectionSize(values) {
+        if (values instanceof Map) return values.size;
+        return Number(values?.length) || 0;
+    }
+
+    function decodeGridValues(grid, { preferDense = false } = {}) {
         if (Array.isArray(grid?.values)) {
             return { values: grid.values, validIndices: null };
         }
@@ -267,15 +311,17 @@
         }
 
         const valueCount = Number(grid.valueCount) || (Number(grid.columns) * Number(grid.rows));
-        const values = new Float32Array(valueCount);
-        values.fill(Number.NaN);
+        const useSparseMap = !preferDense && valueCount > 500_000;
+        const values = useSparseMap ? new Map() : new Float32Array(valueCount);
+        if (!useSparseMap) values.fill(Number.NaN);
         const validIndices = new Array(Math.floor(grid.sparseValues.length / 2));
         let validIndex = 0;
         for (let offset = 0; offset < grid.sparseValues.length; offset += 2) {
             const index = Number(grid.sparseValues[offset]);
             const value = Number(grid.sparseValues[offset + 1]);
             if (!Number.isInteger(index) || index < 0 || index >= valueCount || !Number.isFinite(value)) continue;
-            values[index] = value;
+            if (useSparseMap) values.set(index, value);
+            else values[index] = value;
             validIndices[validIndex] = index;
             validIndex += 1;
         }
@@ -358,11 +404,11 @@
         const loaded = loadedPreviewIndicators.find((previewItem) => previewItem.id === item.id);
         return loaded
             ? { ...loaded, enabled: item.enabled && isIndicatorAvailable(item), weight: item.weight, direction: item.direction }
-            : item;
+            : { ...item, enabled: false };
     });
     $: if (indicatorPreviewGrid && !analysisDone && ['Risk', 'Hotspot'].includes(activeLayer)) activeLayer = 'H';
     $: candidateList = analysisResult?.parcelCandidates?.length
-        ? enrichPracticeDistricts(analysisResult.parcelCandidates)
+        ? enrichPracticeDistricts(analysisResult.parcelCandidates, hazard)
         : [];
     $: practiceDistrictGroups = PRACTICE_TYPE_ORDER.map((type) => ({
         type,
@@ -684,7 +730,7 @@
         region = params.get('regionName') || region;
         regionCode = params.get('regionCode') || regionCode;
         selectedSido = getRegionByCode(regionCode)?.sido || selectedSido;
-        hazardDatasetMode = params.get('hazardPeriod') === 'future' ? 'future' : 'observed';
+        hazardDatasetMode = hazard === 'heatwave' && params.get('hazardPeriod') === 'future' ? 'future' : 'observed';
         hazardScenario = hazardScenarios.includes(params.get('scenario')) ? params.get('scenario') : hazardScenario;
         hazardFuturePeriod = hazardFuturePeriods.includes(params.get('futurePeriod')) ? params.get('futurePeriod') : hazardFuturePeriod;
         indicators = configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
@@ -719,7 +765,7 @@
         if (!analysisResult?.gridResult) mapSource = config.mapSource;
 
         if (!analysisResult?.gridResult) {
-            loadedPreviewIndicators = await loadIndicatorInputs(indicators.map((item) => ({ ...item })));
+            loadedPreviewIndicators = await loadIndicatorInputs(initialPreviewTargets(indicators), [], { preferDense: true });
             indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
         }
 
@@ -895,16 +941,56 @@
         };
     }
 
-    async function loadIndicatorInputs(sourceIndicators) {
+    function indicatorDataKey(item) {
+        return [
+            item.id,
+            item.dataPath || '',
+            item.populationIndicator || '',
+            item.indicatorCode || '',
+            item.floodIndicator || '',
+            item.analysisIndicator || ''
+        ].join('|');
+    }
+
+    function initialPreviewTargets(sourceIndicators) {
+        return sourceIndicators
+            .filter((item) => item.enabled && item.group === '기후위험' && item.dataPath)
+            .slice(0, 1)
+            .map((item) => ({ ...item }));
+    }
+
+    async function loadIndicatorInputs(sourceIndicators, cachedIndicators = [], { preferDense = false } = {}) {
+        const cachedByKey = new Map(
+            cachedIndicators
+                .filter((item) => isGridValueCollection(item.gridValues))
+                .map((item) => [indicatorDataKey(item), item])
+        );
         const loaded = await Promise.all(sourceIndicators.map(async (item) => {
             if (!usableIndicator(item) || !item.dataPath) return item;
 
+            const cached = cachedByKey.get(indicatorDataKey(item));
+            if (cached) {
+                return {
+                    ...cached,
+                    ...item,
+                    gridValues: cached.gridValues,
+                    gridValidIndices: cached.gridValidIndices,
+                    gridMeta: cached.gridMeta,
+                    gridSummary: cached.gridSummary,
+                    loadedValue: cached.loadedValue
+                };
+            }
+
             try {
-                const dataUrl = item.dataPath.startsWith('/hazard-grid') ? item.dataPath : asset(item.dataPath);
+                const dataUrl = item.populationIndicator
+                    ? `${base}/population/grid?regionCode=${encodeURIComponent(regionCode)}&indicator=${encodeURIComponent(item.populationIndicator)}`
+                    : ['/hazard-grid', '/flood-grid', '/analysis-grid'].some((prefix) => item.dataPath.startsWith(prefix))
+                        ? item.dataPath
+                        : asset(item.dataPath);
                 const response = await fetch(dataUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const grid = await response.json();
-                const decodedGrid = decodeGridValues(grid);
+                const decodedGrid = decodeGridValues(grid, { preferDense });
                 const loadedValue = Number(grid?.stats?.normalizedMean ?? grid?.stats?.mean);
                 if (!Number.isFinite(loadedValue)) throw new Error('normalizedMean is missing');
 
@@ -979,15 +1065,22 @@
     }
 
     function createIndicatorPreviewGrid(sourceIndicators) {
-        const reference = sourceIndicators.find((item) =>
+        const previewItems = sourceIndicators.filter((item) =>
             item.enabled &&
             isGridValueCollection(item.gridValues) &&
-            item.gridValues.length &&
+            gridValueCollectionSize(item.gridValues) &&
             item.gridMeta?.columns &&
             item.gridMeta?.rows &&
             item.gridMeta?.transform
         );
+        const reference = previewItems[0];
         if (!reference) return null;
+        const hasSparseIndices = previewItems.every((item) =>
+            Array.isArray(item.gridValidIndices) && item.gridValidIndices.length
+        );
+        const validIndices = hasSparseIndices
+            ? [...new Set(previewItems.flatMap((item) => item.gridValidIndices))]
+            : null;
 
         return {
             preview: true,
@@ -998,18 +1091,18 @@
             transform: reference.gridMeta.transform,
             crs: reference.gridMeta.crs,
             values: reference.gridValues,
-            validIndices: reference.gridValidIndices || null
+            validIndices
         };
     }
 
     function isIndicatorAvailable(item) {
-        return item.dataStatus === 'available' && (!item.supportedGridUnits || item.supportedGridUnits.includes(gridUnit));
+        return ['available', 'partial'].includes(item.dataStatus) && (!item.supportedGridUnits || item.supportedGridUnits.includes(gridUnit));
     }
 
     function indicatorStatusText(item) {
-        if (item.dataStatus !== 'available') return '연결대기';
+        if (!['available', 'partial'].includes(item.dataStatus)) return '연결대기';
         if (item.supportedGridUnits && !item.supportedGridUnits.includes(gridUnit)) return '격자미지원';
-        return item.sourceType;
+        return item.dataStatus === 'partial' ? `${item.sourceType} · 일부 보완 필요` : item.sourceType;
     }
 
     function usableIndicator(item) {
@@ -1062,7 +1155,7 @@
 
     function gridValue(item, index) {
         if (!isGridValueCollection(item.gridValues)) return null;
-        return finiteGridValue(item.gridValues[index]);
+        return finiteGridValue(item.gridValues instanceof Map ? item.gridValues.get(index) : item.gridValues[index]);
     }
 
     function weightedCellMean(items, index, valueGetter = gridValue) {
@@ -1084,7 +1177,17 @@
     }
 
     function summarizeGridValues(values) {
-        const validValues = values.filter((value) => Number.isFinite(value));
+        const validValues = [];
+        let min = Infinity;
+        let max = -Infinity;
+        let sum = 0;
+        for (const value of values) {
+            if (!Number.isFinite(value)) continue;
+            validValues.push(value);
+            min = Math.min(min, value);
+            max = Math.max(max, value);
+            sum += value;
+        }
         if (!validValues.length) {
             return {
                 validCells: 0,
@@ -1096,14 +1199,13 @@
             };
         }
 
-        const sum = validValues.reduce((total, value) => total + value, 0);
         const sorted = [...validValues].sort((left, right) => right - left);
         const topCount = Math.max(1, Math.ceil(sorted.length * 0.1));
 
         return {
             validCells: validValues.length,
-            min: Math.min(...validValues),
-            max: Math.max(...validValues),
+            min,
+            max,
             mean: sum / validValues.length,
             topCount,
             topThreshold: sorted[topCount - 1]
@@ -1122,7 +1224,7 @@
         const availableIndicators = sourceIndicators.filter(usableIndicator);
         const reference = availableIndicators.find((item) =>
             isGridValueCollection(item.gridValues) &&
-            item.gridValues.length &&
+            gridValueCollectionSize(item.gridValues) &&
             item.gridMeta?.columns &&
             item.gridMeta?.rows
         );
@@ -1134,7 +1236,7 @@
         const cellCount = columns * rows;
         const gridIndicators = availableIndicators.filter((item) =>
             isGridValueCollection(item.gridValues) &&
-            item.gridValues.length >= cellCount &&
+            (item.gridValues instanceof Map || item.gridValues.length >= cellCount) &&
             Number(item.gridMeta?.columns) === columns &&
             Number(item.gridMeta?.rows) === rows
         );
@@ -1148,14 +1250,26 @@
         const hazardOnly = nationalLab && (!eItems.length || !sensitivityItems.length || !adaptiveItems.length);
         if (!hazardOnly && (!eItems.length || !sensitivityItems.length || !adaptiveItems.length)) return null;
 
-        const hValues = new Array(cellCount).fill(null);
-        const eValues = new Array(cellCount).fill(null);
-        const sensitivityValues = new Array(cellCount).fill(null);
-        const adaptiveCapacityValues = new Array(cellCount).fill(null);
-        const vValues = new Array(cellCount).fill(null);
-        const riskValues = new Array(cellCount).fill(null);
+        const createEmptyValues = () => {
+            const values = new Float32Array(cellCount);
+            values.fill(Number.NaN);
+            return values;
+        };
+        const hValues = createEmptyValues();
+        const eValues = createEmptyValues();
+        const sensitivityValues = createEmptyValues();
+        const adaptiveCapacityValues = createEmptyValues();
+        const vValues = createEmptyValues();
+        const riskValues = createEmptyValues();
+        const canUseSparseIndices = gridIndicators.every((item) =>
+            Array.isArray(item.gridValidIndices) && item.gridValidIndices.length
+        );
+        const analysisIndices = canUseSparseIndices
+            ? [...new Set(gridIndicators.flatMap((item) => item.gridValidIndices))]
+            : Array.from({ length: cellCount }, (_, index) => index);
+        const riskValidIndices = [];
 
-        for (let index = 0; index < cellCount; index += 1) {
+        for (const index of analysisIndices) {
             const hScore = weightedCellMean(hItems, index);
             const eScore = weightedCellMean(eItems, index);
             const sensitivityScore = weightedCellMean(sensitivityItems, index);
@@ -1176,6 +1290,7 @@
 
             if (hazardOnly && Number.isFinite(hScore)) {
                 riskValues[index] = hScore;
+                riskValidIndices.push(index);
             } else if (
                 Number.isFinite(hScore) &&
                 Number.isFinite(eScore) &&
@@ -1186,6 +1301,7 @@
                 const riskScore = weightedGeometricMean({ H: hScore, E: eScore, V: vScore }, dimensionWeights);
                 vValues[index] = vScore;
                 riskValues[index] = riskScore;
+                riskValidIndices.push(index);
             }
         }
 
@@ -1216,6 +1332,7 @@
                 extent: reference.gridMeta.extent,
                 transform: reference.gridMeta.transform,
                 crs: reference.gridMeta.crs,
+                validIndices: riskValidIndices,
                 valueEncoding: hazardOnly
                     ? 'row-major 100m cells; preliminary Risk equals normalized Hazard score'
                     : 'row-major 100m cells aligned to the regional analysis grid',
@@ -1369,7 +1486,7 @@
     }
 
     async function setHazardDatasetMode(value) {
-        hazardDatasetMode = value === 'future' ? 'future' : 'observed';
+        hazardDatasetMode = hazard === 'heatwave' && value === 'future' ? 'future' : 'observed';
         await refreshHazardDataset(
             hazardDatasetMode === 'observed'
                 ? '최근 5년(2021~2025) 100m 자료로 전환했습니다. H01~H05·H07·H10을 사용할 수 있습니다.'
@@ -1386,7 +1503,7 @@
     async function refreshHazardDataset(message) {
         indicators = configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
             .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
-        loadedPreviewIndicators = await loadIndicatorInputs(indicators.map((item) => ({ ...item })));
+        loadedPreviewIndicators = await loadIndicatorInputs(initialPreviewTargets(indicators), [], { preferDense: true });
         indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
         const url = new URL(window.location.href);
         url.searchParams.set('hazardPeriod', hazardDatasetMode);
@@ -1421,7 +1538,7 @@
         mapSource = `${region} 전국 100m 원본 연결 중`;
         markAnalysisDirty(`${region}의 100m Hazard 자료를 불러오는 중입니다.`);
 
-        const loaded = await loadIndicatorInputs(indicators.map((item) => ({ ...item })));
+        const loaded = await loadIndicatorInputs(initialPreviewTargets(indicators), [], { preferDense: true });
         if (runId !== regionChangeRunId) return;
         loadedPreviewIndicators = loaded;
         indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
@@ -1450,7 +1567,7 @@
         const target = indicators.find((item) => item.id === id);
         const cached = loadedPreviewIndicators.some((item) => item.id === id && isGridValueCollection(item.gridValues));
         if (enabled && target?.dataPath && !cached) {
-            const [loaded] = await loadIndicatorInputs([{ ...target }]);
+            const [loaded] = await loadIndicatorInputs([{ ...target }], loadedPreviewIndicators, { preferDense: true });
             loadedPreviewIndicators = [
                 ...loadedPreviewIndicators.filter((item) => item.id !== id),
                 loaded
@@ -1498,7 +1615,8 @@
         const runGridUnit = gridUnit;
         const runDimensionWeights = { ...dimensionWeights };
         const snapshot = indicators.map((item) => ({ ...item }));
-        const enrichedSnapshot = await loadIndicatorInputs(snapshot);
+        const enrichedSnapshot = await loadIndicatorInputs(snapshot, loadedPreviewIndicators);
+        loadedPreviewIndicators = enrichedSnapshot.filter((item) => isGridValueCollection(item.gridValues));
         const missingAfterLoad = analysisRequiredGroups(enrichedSnapshot)
             .find((group) => selectedIndicatorsFor(group, enrichedSnapshot).length === 0);
         if (missingAfterLoad) {
@@ -1559,7 +1677,7 @@
     }
 
     function handleParcelCandidates(candidates, message, sourceAlternativeId = activeAlternativeId) {
-        const nextCandidates = enrichPracticeDistricts(Array.isArray(candidates) ? candidates : []);
+        const nextCandidates = enrichPracticeDistricts(Array.isArray(candidates) ? candidates : [], hazard);
         const nextMessage = message || (nextCandidates.length
             ? `실천권역 내 ${nextCandidates.length}개 유형별 실천지구 도출`
             : '실천권역이 아직 없습니다.');
@@ -2438,10 +2556,27 @@
         schedulePriorityDraftSave();
     }
 
-    function setActiveGridLayer(layer) {
+    async function setActiveGridLayer(layer) {
         activeLayer = layer;
         persistAlternative(activeAlternative, { activeLayer: layer });
         schedulePriorityDraftSave();
+
+        if (analysisDone || !['H', 'E', 'V'].includes(layer)) return;
+        const groups = layer === 'H'
+            ? ['기후위험']
+            : layer === 'E'
+                ? ['노출']
+                : ['민감도', '적응역량'];
+        const targets = indicators.filter((item) => item.enabled && groups.includes(item.group));
+        const loaded = await loadIndicatorInputs(
+            targets.map((item) => ({ ...item })),
+            loadedPreviewIndicators,
+            { preferDense: true }
+        );
+        const loadedById = new Map(loadedPreviewIndicators.map((item) => [item.id, item]));
+        loaded.forEach((item) => loadedById.set(item.id, item));
+        loadedPreviewIndicators = [...loadedById.values()];
+        indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
     }
 
     function downloadConfig() {
@@ -2607,7 +2742,7 @@
                         <label>Hazard 기준기간
                             <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
                                 <option value="observed">최근 5년 · 2021~2025</option>
-                                <option value="future">미래 시나리오 · 2026~2100</option>
+                                <option value="future" disabled={hazard !== 'heatwave'}>미래 시나리오 · 2026~2100</option>
                             </select>
                         </label>
                         {#if hazardDatasetMode === 'future'}
@@ -2706,6 +2841,7 @@
                             <SelectedRegionMap
                                 {regionCode}
                                 regionName={region}
+                                {hazard}
                                 height="760px"
                                 showCadastral={false}
                                 analysisIndicators={analysisDone ? appliedIndicators : previewAnalysisIndicators}
