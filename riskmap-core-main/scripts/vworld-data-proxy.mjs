@@ -6,6 +6,11 @@ import { extname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as h5wasm from 'h5wasm/node';
 import proj4 from 'proj4';
+import pg from 'pg';
+import { buildNationalHazardGrid } from './hazard-grid-service.mjs';
+import { createFloodAnalysisGridService } from './flood-analysis-grid-service.mjs';
+
+const { Pool } = pg;
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const workspaceRoot = resolve(root, '..');
@@ -35,6 +40,17 @@ const httpsAgent = allowInsecureTls ? new HttpsAgent({ rejectUnauthorized: false
 const port = Number(process.env.VWORLD_PROXY_PORT || process.argv.find((arg) => arg.startsWith('--port='))?.split('=')[1] || 5176);
 const staticRootArgument = process.argv.find((arg) => arg.startsWith('--static-root='))?.slice('--static-root='.length);
 const staticRoot = staticRootArgument ? resolve(workspaceRoot, staticRootArgument) : '';
+const cadastrePool = new Pool({
+  host: process.env.VWORLD_POSTGIS_HOST || env.VWORLD_POSTGIS_HOST || '127.0.0.1',
+  port: Number(process.env.VWORLD_POSTGIS_PORT || env.VWORLD_POSTGIS_PORT || 55432),
+  database: process.env.VWORLD_POSTGIS_DATABASE || env.VWORLD_POSTGIS_DATABASE || 'livinglabs_postgis',
+  user: process.env.VWORLD_POSTGIS_USER || env.VWORLD_POSTGIS_USER || 'postgres',
+  password: process.env.VWORLD_POSTGIS_PASSWORD || env.VWORLD_POSTGIS_PASSWORD || undefined,
+  max: 4,
+  connectionTimeoutMillis: 3000,
+  idleTimeoutMillis: 30000,
+});
+const floodAnalysisGridService = createFloodAnalysisGridService({ pool: cadastrePool });
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -68,6 +84,76 @@ function send(response, status, body, contentType = 'application/json; charset=u
     'Content-Type': contentType,
   });
   response.end(body);
+}
+
+function featureCollection(rows) {
+  return {
+    type: 'FeatureCollection',
+    features: rows.map(({ geometry, ...properties }) => ({
+      type: 'Feature',
+      id: properties.pnu,
+      geometry: typeof geometry === 'string' ? JSON.parse(geometry) : geometry,
+      properties,
+    })),
+  };
+}
+
+async function fetchCadastreParcel(searchParams) {
+  const pnu = (searchParams.get('pnu') || '').trim();
+  if (!/^\d{19}$/.test(pnu)) throw new Error('pnu must be exactly 19 digits');
+
+  const result = await cadastrePool.query({
+    text: `
+      SELECT pnu, legal_dong_code, legal_dong_name, lot_number,
+             lot_number_land_category, reference_date, sigungu_code,
+             ST_AsGeoJSON(ST_Transform(geom, 4326), 7) AS geometry
+      FROM cadastre.parcels_readable
+      WHERE pnu = $1
+      LIMIT 10
+    `,
+    values: [pnu],
+  });
+  return featureCollection(result.rows);
+}
+
+async function fetchCadastreBbox(searchParams) {
+  const bbox = (searchParams.get('bbox') || '').split(',').map(Number);
+  if (bbox.length !== 4 || bbox.some((value) => !Number.isFinite(value))) {
+    throw new Error('bbox must be minLng,minLat,maxLng,maxLat');
+  }
+
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+  if (minLng >= maxLng || minLat >= maxLat || minLng < 124 || maxLng > 132 || minLat < 32 || maxLat > 39.5) {
+    throw new Error('bbox must be a valid extent within Korea');
+  }
+  if ((maxLng - minLng) * (maxLat - minLat) > 0.04) {
+    throw new Error('bbox is too large; zoom in before requesting parcels');
+  }
+
+  const limit = Math.min(Math.max(Number.parseInt(searchParams.get('limit') || '500', 10) || 500, 1), 1000);
+  const simplifyMeters = Math.min(Math.max(Number(searchParams.get('simplifyMeters') || 0) || 0, 0), 20);
+  const result = await cadastrePool.query({
+    text: `
+      WITH bounds AS (
+        SELECT ST_Transform(ST_MakeEnvelope($1, $2, $3, $4, 4326), 5186) AS geom
+      )
+      SELECT p.pnu, p.legal_dong_code, p.legal_dong_name, p.lot_number,
+             p.lot_number_land_category, p.reference_date, p.sigungu_code,
+             ST_AsGeoJSON(
+               ST_Transform(
+                 CASE WHEN $6 > 0 THEN ST_SimplifyPreserveTopology(p.geom, $6) ELSE p.geom END,
+                 4326
+               ), 7
+             ) AS geometry
+      FROM cadastre.parcels_readable p
+      CROSS JOIN bounds b
+      WHERE p.geom && b.geom AND ST_Intersects(p.geom, b.geom)
+      ORDER BY p.pnu
+      LIMIT $5
+    `,
+    values: [minLng, minLat, maxLng, maxLat, limit, simplifyMeters],
+  });
+  return featureCollection(result.rows);
 }
 
 function readJsonBody(request) {
@@ -117,10 +203,14 @@ async function handleStoredHandoffRoute(request, response, url, { storePath, sch
   if (request.method === 'GET') {
     const regionCode = url.searchParams.get('regionCode') || '';
     const store = readHandoffStore(storePath);
-    send(response, 200, JSON.stringify({
-      ok: true,
-      payload: regionCode ? store[regionCode] || null : null,
-    }));
+    send(
+      response,
+      200,
+      JSON.stringify({
+        ok: true,
+        payload: regionCode ? store[regionCode] || null : null,
+      }),
+    );
     return true;
   }
 
@@ -137,7 +227,15 @@ async function handleStoredHandoffRoute(request, response, url, { storePath, sch
         storedAt: new Date().toISOString(),
       };
       writeHandoffStore(store, storePath);
-      send(response, 200, JSON.stringify({ ok: true, packageId: payload.packageId, regionCode: payload.regionCode }));
+      send(
+        response,
+        200,
+        JSON.stringify({
+          ok: true,
+          packageId: payload.packageId,
+          regionCode: payload.regionCode,
+        }),
+      );
     } catch (error) {
       send(response, 400, JSON.stringify({ ok: false, error: error?.message || 'Failed to store handoff' }));
     }
@@ -428,8 +526,7 @@ async function checkRecentKmaLstData(searchParams) {
   now.setUTCMinutes(Math.floor(now.getUTCMinutes() / 10) * 10, 0, 0);
   const attempts = [];
   for (let offsetMinutes = 10; offsetMinutes <= 180; offsetMinutes += 10) {
-    const date = new Date(now.getTime() - offsetMinutes * 60 * 1000)
-      .toISOString().slice(0, 16).replace(/[-T:]/g, '');
+    const date = new Date(now.getTime() - offsetMinutes * 60 * 1000).toISOString().slice(0, 16).replace(/[-T:]/g, '');
     const result = await checkKmaLstDataAt(date, area);
     attempts.push({ date, statusCode: result.statusCode });
     if (result.ok) return { ...result, attempts };
@@ -456,11 +553,13 @@ function fetchKmaLstData(searchParams) {
     const request = httpsRequest(url, { method: 'GET', timeout: 45000, agent: httpsAgent }, (upstream) => {
       const chunks = [];
       upstream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-      upstream.on('end', () => resolvePromise({
-        statusCode: upstream.statusCode || 502,
-        body: Buffer.concat(chunks),
-        contentType: upstream.headers['content-type'] || 'application/octet-stream',
-      }));
+      upstream.on('end', () =>
+        resolvePromise({
+          statusCode: upstream.statusCode || 502,
+          body: Buffer.concat(chunks),
+          contentType: upstream.headers['content-type'] || 'application/octet-stream',
+        }),
+      );
     });
     request.on('timeout', () => request.destroy(new Error('KMA LST data download timeout')));
     request.on('error', reject);
@@ -504,25 +603,9 @@ async function buildKmaLstGrid(searchParams) {
       const pixelSize = h5AttributeNumber(projection.pixel_size);
       const upperLeftEasting = h5AttributeNumber(projection.upper_left_easting);
       const upperLeftNorthing = h5AttributeNumber(projection.upper_left_northing);
-      const sourceProjection = [
-        '+proj=lcc',
-        `+lat_1=${h5AttributeNumber(projection.standard_parallel1)}`,
-        `+lat_2=${h5AttributeNumber(projection.standard_parallel2)}`,
-        `+lat_0=${h5AttributeNumber(projection.origin_latitude)}`,
-        `+lon_0=${h5AttributeNumber(projection.central_meridian)}`,
-        `+x_0=${h5AttributeNumber(projection.false_easting, 0)}`,
-        `+y_0=${h5AttributeNumber(projection.false_northing, 0)}`,
-        '+datum=WGS84',
-        '+units=m',
-        '+no_defs',
-      ].join(' ');
+      const sourceProjection = ['+proj=lcc', `+lat_1=${h5AttributeNumber(projection.standard_parallel1)}`, `+lat_2=${h5AttributeNumber(projection.standard_parallel2)}`, `+lat_0=${h5AttributeNumber(projection.origin_latitude)}`, `+lon_0=${h5AttributeNumber(projection.central_meridian)}`, `+x_0=${h5AttributeNumber(projection.false_easting, 0)}`, `+y_0=${h5AttributeNumber(projection.false_northing, 0)}`, '+datum=WGS84', '+units=m', '+no_defs'].join(' ');
       const gyeonggiBounds = { west: 126.32, south: 36.82, east: 127.88, north: 38.32 };
-      const projectedCorners = [
-        proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.west, gyeonggiBounds.south]),
-        proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.west, gyeonggiBounds.north]),
-        proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.east, gyeonggiBounds.south]),
-        proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.east, gyeonggiBounds.north]),
-      ];
+      const projectedCorners = [proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.west, gyeonggiBounds.south]), proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.west, gyeonggiBounds.north]), proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.east, gyeonggiBounds.south]), proj4('EPSG:4326', sourceProjection, [gyeonggiBounds.east, gyeonggiBounds.north])];
       const minX = Math.min(...projectedCorners.map(([x]) => x));
       const maxX = Math.max(...projectedCorners.map(([x]) => x));
       const minY = Math.min(...projectedCorners.map(([, y]) => y));
@@ -533,8 +616,14 @@ async function buildKmaLstGrid(searchParams) {
       const endRow = Math.min(height, Math.ceil((upperLeftNorthing - minY) / pixelSize) + 1);
       const columnCount = endColumn - startColumn;
       const rowCount = endRow - startRow;
-      const rawValues = lstDataset.slice([[startRow, endRow], [startColumn, endColumn]]);
-      const qualityValues = qualityDataset.slice([[startRow, endRow], [startColumn, endColumn]]);
+      const rawValues = lstDataset.slice([
+        [startRow, endRow],
+        [startColumn, endColumn],
+      ]);
+      const qualityValues = qualityDataset.slice([
+        [startRow, endRow],
+        [startColumn, endColumn],
+      ]);
       const scaleFactor = h5AttributeNumber(lstDataset.attrs.scale_factor, 0.01);
       const addOffset = h5AttributeNumber(lstDataset.attrs.add_offset, 0);
       const fillValue = h5AttributeNumber(lstDataset.attrs._FillValue, 65535);
@@ -549,10 +638,7 @@ async function buildKmaLstGrid(searchParams) {
           const x = upperLeftEasting + (startColumn + column) * pixelSize;
           const y = upperLeftNorthing - (startRow + row) * pixelSize;
           const [longitude, latitude] = proj4(sourceProjection, 'EPSG:4326', [x, y]);
-          if (
-            longitude < gyeonggiBounds.west || longitude > gyeonggiBounds.east ||
-            latitude < gyeonggiBounds.south || latitude > gyeonggiBounds.north
-          ) continue;
+          if (longitude < gyeonggiBounds.west || longitude > gyeonggiBounds.east || latitude < gyeonggiBounds.south || latitude > gyeonggiBounds.north) continue;
           cells.push({
             latitude: Number(latitude.toFixed(6)),
             longitude: Number(longitude.toFixed(6)),
@@ -596,7 +682,9 @@ function requestKmaText(pathname, params) {
     url.searchParams.set('authKey', kmaApiKey);
     const request = httpsRequest(url, { method: 'GET', timeout: 25000, agent: httpsAgent }, (upstream) => {
       const chunks = [];
-      upstream.on('data', (chunk) => { chunks.push(Buffer.from(chunk)); });
+      upstream.on('data', (chunk) => {
+        chunks.push(Buffer.from(chunk));
+      });
       upstream.on('end', () => resolvePromise(new TextDecoder('euc-kr').decode(Buffer.concat(chunks))));
     });
     request.on('timeout', () => request.destroy(new Error('KMA request timeout')));
@@ -606,44 +694,53 @@ function requestKmaText(pathname, params) {
 }
 
 function parseKmaStations(payload, type) {
-  return payload.split(/\r?\n/).map((line) => line.trim()).filter((line) => /^\d+\s+\d/.test(line)).map((line) => {
-    const values = line.split(/\s+/);
-    const nameIndex = type === 'asos' ? 10 : 8;
-    return {
-      id: values[0],
-      longitude: Number(values[1]),
-      latitude: Number(values[2]),
-      name: values[nameIndex] || `관측소 ${values[0]}`,
-      type,
-    };
-  }).filter((station) => Number.isFinite(station.longitude) && Number.isFinite(station.latitude));
+  return payload
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^\d+\s+\d/.test(line))
+    .map((line) => {
+      const values = line.split(/\s+/);
+      const nameIndex = type === 'asos' ? 10 : 8;
+      return {
+        id: values[0],
+        longitude: Number(values[1]),
+        latitude: Number(values[2]),
+        name: values[nameIndex] || `관측소 ${values[0]}`,
+        type,
+      };
+    })
+    .filter((station) => Number.isFinite(station.longitude) && Number.isFinite(station.latitude));
 }
 
 function parseKmaHourly(payload) {
   const observations = new Map();
-  payload.split(/\r?\n/).map((line) => line.trim()).filter((line) => /^\d{12}\s+\d+/.test(line)).forEach((line) => {
-    const values = line.split(/\s+/);
-    const numeric = (index) => {
-      const value = Number(values[index]);
-      return Number.isFinite(value) && value > -90 ? value : null;
-    };
-    observations.set(values[1], {
-      observedAt: values[0],
-      temperature: numeric(2),
-      windDirection: numeric(3),
-      windSpeed: numeric(4),
-      rainfallDay: numeric(5),
-      rainfallHour: numeric(6),
-      humidity: numeric(7),
-      stationPressure: numeric(8),
-      seaLevelPressure: numeric(9),
+  payload
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^\d{12}\s+\d+/.test(line))
+    .forEach((line) => {
+      const values = line.split(/\s+/);
+      const numeric = (index) => {
+        const value = Number(values[index]);
+        return Number.isFinite(value) && value > -90 ? value : null;
+      };
+      observations.set(values[1], {
+        observedAt: values[0],
+        temperature: numeric(2),
+        windDirection: numeric(3),
+        windSpeed: numeric(4),
+        rainfallDay: numeric(5),
+        rainfallHour: numeric(6),
+        humidity: numeric(7),
+        stationPressure: numeric(8),
+        seaLevelPressure: numeric(9),
+      });
     });
-  });
   return observations;
 }
 
 function distanceKm(lat1, lon1, lat2, lon2) {
-  const radians = (value) => value * Math.PI / 180;
+  const radians = (value) => (value * Math.PI) / 180;
   const earthRadius = 6371;
   const dLat = radians(lat2 - lat1);
   const dLon = radians(lon2 - lon1);
@@ -659,11 +756,7 @@ async function fetchKmaNetwork(type = 'asos', radiusKm = 35) {
   if (cached && Date.now() - cached.storedAt < 5 * 60 * 1000) return cached.payload;
 
   const latestCompletedHour = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 13).replace(/[-T:]/g, '') + '00';
-  const [selectedCatalogText, asosCatalogText, observationText] = await Promise.all([
-    requestKmaText('url/stn_inf.php', { inf: safeType === 'asos' ? 'SFC' : 'AWS', stn: 0 }),
-    requestKmaText('url/stn_inf.php', { inf: 'SFC', stn: 0 }),
-    requestKmaText('url/awsh.php', { tm: latestCompletedHour, stn: 0 }),
-  ]);
+  const [selectedCatalogText, asosCatalogText, observationText] = await Promise.all([requestKmaText('url/stn_inf.php', { inf: safeType === 'asos' ? 'SFC' : 'AWS', stn: 0 }), requestKmaText('url/stn_inf.php', { inf: 'SFC', stn: 0 }), requestKmaText('url/awsh.php', { tm: latestCompletedHour, stn: 0 })]);
 
   const selectedStations = parseKmaStations(selectedCatalogText, safeType);
   const asosIds = new Set(parseKmaStations(asosCatalogText, 'asos').map((station) => station.id));
@@ -700,11 +793,15 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://127.0.0.1:${port}`);
   const routePath = url.pathname.startsWith('/api/') ? url.pathname.slice('/api'.length) : url.pathname;
   if (routePath === '/health') {
-    send(response, 200, JSON.stringify({
-      ok: true,
-      service: staticRoot ? 'living-labs-platform' : 'vworld-data-proxy',
-      unified: Boolean(staticRoot),
-    }));
+    send(
+      response,
+      200,
+      JSON.stringify({
+        ok: true,
+        service: staticRoot ? 'living-labs-platform' : 'vworld-data-proxy',
+        unified: Boolean(staticRoot),
+      }),
+    );
     return;
   }
 
@@ -719,15 +816,15 @@ const server = createServer(async (request, response) => {
     }
 
     resetDevStores();
-    send(response, 200, JSON.stringify({
-      ok: true,
-      reset: [
-        'priority-handoffs',
-        'responsible-handoffs',
-        'responsible-review-responses',
-      ],
-      ...readHandoffStore(devResetStatePath),
-    }));
+    send(
+      response,
+      200,
+      JSON.stringify({
+        ok: true,
+        reset: ['priority-handoffs', 'responsible-handoffs', 'responsible-review-responses'],
+        ...readHandoffStore(devResetStatePath),
+      }),
+    );
     return;
   }
 
@@ -735,10 +832,14 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET') {
       const regionCode = url.searchParams.get('regionCode') || '';
       const store = readHandoffStore();
-      send(response, 200, JSON.stringify({
-        ok: true,
-        payload: regionCode ? store[regionCode] || null : null,
-      }));
+      send(
+        response,
+        200,
+        JSON.stringify({
+          ok: true,
+          payload: regionCode ? store[regionCode] || null : null,
+        }),
+      );
       return;
     }
 
@@ -755,9 +856,24 @@ const server = createServer(async (request, response) => {
           storedAt: new Date().toISOString(),
         };
         writeHandoffStore(store);
-        send(response, 200, JSON.stringify({ ok: true, packageId: payload.packageId, regionCode: payload.regionCode }));
+        send(
+          response,
+          200,
+          JSON.stringify({
+            ok: true,
+            packageId: payload.packageId,
+            regionCode: payload.regionCode,
+          }),
+        );
       } catch (error) {
-        send(response, 400, JSON.stringify({ ok: false, error: error?.message || 'Failed to store handoff' }));
+        send(
+          response,
+          400,
+          JSON.stringify({
+            ok: false,
+            error: error?.message || 'Failed to store handoff',
+          }),
+        );
       }
       return;
     }
@@ -773,17 +889,23 @@ const server = createServer(async (request, response) => {
   }
 
   if (routePath === '/responsible-handoff') {
-    if (await handleStoredHandoffRoute(request, response, url, {
-      storePath: responsibleHandoffStorePath,
-      schemaVersion: 'lead-to-responsible-handoff/v1',
-    })) return;
+    if (
+      await handleStoredHandoffRoute(request, response, url, {
+        storePath: responsibleHandoffStorePath,
+        schemaVersion: 'lead-to-responsible-handoff/v1',
+      })
+    )
+      return;
   }
 
   if (routePath === '/responsible-review-response') {
-    if (await handleStoredHandoffRoute(request, response, url, {
-      storePath: responsibleReviewStorePath,
-      schemaVersion: 'responsible-to-lead-review/v1',
-    })) return;
+    if (
+      await handleStoredHandoffRoute(request, response, url, {
+        storePath: responsibleReviewStorePath,
+        schemaVersion: 'responsible-to-lead-review/v1',
+      })
+    )
+      return;
   }
 
   if (routePath === '/kma-network') {
@@ -791,7 +913,107 @@ const server = createServer(async (request, response) => {
       const payload = await fetchKmaNetwork(url.searchParams.get('type') || 'asos', url.searchParams.get('radiusKm') || 35);
       send(response, 200, JSON.stringify(payload));
     } catch (error) {
-      send(response, 502, JSON.stringify({ ok: false, error: error?.message || 'Failed to load KMA station network' }));
+      send(
+        response,
+        502,
+        JSON.stringify({
+          ok: false,
+          error: error?.message || 'Failed to load KMA station network',
+        }),
+      );
+    }
+    return;
+  }
+
+  if (routePath === '/cadastre/health') {
+    try {
+      const result = await cadastrePool.query(`
+        SELECT current_database() AS database,
+               to_regclass('cadastre.parcels') IS NOT NULL AS ready,
+               (SELECT count(*) FROM cadastre.import_log WHERE status = 'loaded') AS loaded_files
+      `);
+      send(response, 200, JSON.stringify({ ok: true, ...result.rows[0] }));
+    } catch (error) {
+      send(response, 503, JSON.stringify({ ok: false, error: error?.message || 'PostGIS unavailable' }));
+    }
+    return;
+  }
+
+  if (routePath === '/cadastre/parcel') {
+    try {
+      send(response, 200, JSON.stringify(await fetchCadastreParcel(url.searchParams)));
+    } catch (error) {
+      send(
+        response,
+        /must be/.test(error?.message || '') ? 400 : 503,
+        JSON.stringify({
+          ok: false,
+          error: error?.message || 'Parcel lookup failed',
+        }),
+      );
+    }
+    return;
+  }
+
+  if (routePath === '/cadastre/bbox') {
+    try {
+      send(response, 200, JSON.stringify(await fetchCadastreBbox(url.searchParams)));
+    } catch (error) {
+      send(
+        response,
+        /bbox/.test(error?.message || '') ? 400 : 503,
+        JSON.stringify({
+          ok: false,
+          error: error?.message || 'Parcel extent lookup failed',
+        }),
+      );
+    }
+    return;
+  }
+  if (routePath === '/flood-grid/health') {
+    try {
+      send(response, 200, JSON.stringify(await floodAnalysisGridService.health()));
+    } catch (error) {
+      send(response, 503, JSON.stringify({ ok: false, error: error?.message || 'Flood PostGIS unavailable' }));
+    }
+    return;
+  }
+
+  if (routePath === '/flood-grid') {
+    try {
+      send(response, 200, JSON.stringify(await floodAnalysisGridService.fetchFloodGrid(url.searchParams)));
+    } catch (error) {
+      const message = error?.message || 'Flood grid lookup failed';
+      const status = /must be/.test(message) ? 400 : /not available/.test(message) ? 404 : 503;
+      send(response, status, JSON.stringify({ ok: false, error: message }));
+    }
+    return;
+  }
+
+  if (routePath === '/analysis-grid') {
+    try {
+      send(response, 200, JSON.stringify(await floodAnalysisGridService.fetchAnalysisGrid(url.searchParams)));
+    } catch (error) {
+      const message = error?.message || 'Analysis grid lookup failed';
+      const status = /must be|indicator is not available/.test(message) ? 400 : /grid is not available/.test(message) ? 404 : 503;
+      send(response, status, JSON.stringify({ ok: false, error: message }));
+    }
+    return;
+  }
+
+  if (routePath === '/hazard-grid') {
+    try {
+      const grid = await buildNationalHazardGrid(url.searchParams);
+      send(response, 200, JSON.stringify(grid));
+    } catch (error) {
+      send(
+        response,
+        404,
+        JSON.stringify({
+          ok: false,
+          error: error?.message || '전국 Hazard 격자를 불러오지 못했습니다.',
+        }),
+      );
     }
     return;
   }
@@ -800,10 +1022,14 @@ const server = createServer(async (request, response) => {
       const result = await fetchKmaObservation(url.searchParams);
       send(response, result.statusCode, result.body, 'text/plain; charset=utf-8');
     } catch (error) {
-      send(response, 502, JSON.stringify({
-        ok: false,
-        error: error?.message || 'Local KMA proxy failed',
-      }));
+      send(
+        response,
+        502,
+        JSON.stringify({
+          ok: false,
+          error: error?.message || 'Local KMA proxy failed',
+        }),
+      );
     }
     return;
   }
@@ -812,10 +1038,14 @@ const server = createServer(async (request, response) => {
       const result = await fetchKmaLstList(url.searchParams);
       send(response, result.statusCode, result.body);
     } catch (error) {
-      send(response, 502, JSON.stringify({
-        ok: false,
-        error: error?.message || 'KMA LST list request failed',
-      }));
+      send(
+        response,
+        502,
+        JSON.stringify({
+          ok: false,
+          error: error?.message || 'KMA LST list request failed',
+        }),
+      );
     }
     return;
   }
@@ -824,10 +1054,14 @@ const server = createServer(async (request, response) => {
       const result = await fetchKmaLstFileList(url.searchParams);
       send(response, result.statusCode, result.body, 'text/plain; charset=utf-8');
     } catch (error) {
-      send(response, 502, JSON.stringify({
-        ok: false,
-        error: error?.message || 'KMA LST file-list request failed',
-      }));
+      send(
+        response,
+        502,
+        JSON.stringify({
+          ok: false,
+          error: error?.message || 'KMA LST file-list request failed',
+        }),
+      );
     }
     return;
   }
@@ -836,10 +1070,14 @@ const server = createServer(async (request, response) => {
       const result = await checkRecentKmaLstData(url.searchParams);
       send(response, result.ok ? 200 : result.statusCode || 502, JSON.stringify(result));
     } catch (error) {
-      send(response, 502, JSON.stringify({
-        ok: false,
-        error: error?.message || 'KMA LST data check failed',
-      }));
+      send(
+        response,
+        502,
+        JSON.stringify({
+          ok: false,
+          error: error?.message || 'KMA LST data check failed',
+        }),
+      );
     }
     return;
   }
@@ -848,10 +1086,14 @@ const server = createServer(async (request, response) => {
       const result = await fetchKmaLstData(url.searchParams);
       send(response, result.statusCode, result.body, result.contentType);
     } catch (error) {
-      send(response, 502, JSON.stringify({
-        ok: false,
-        error: error?.message || 'KMA LST data download failed',
-      }));
+      send(
+        response,
+        502,
+        JSON.stringify({
+          ok: false,
+          error: error?.message || 'KMA LST data download failed',
+        }),
+      );
     }
     return;
   }
@@ -860,10 +1102,14 @@ const server = createServer(async (request, response) => {
       const result = await buildKmaLstGrid(url.searchParams);
       send(response, 200, JSON.stringify(result));
     } catch (error) {
-      send(response, 502, JSON.stringify({
-        ok: false,
-        error: error?.message || 'KMA LST grid conversion failed',
-      }));
+      send(
+        response,
+        502,
+        JSON.stringify({
+          ok: false,
+          error: error?.message || 'KMA LST grid conversion failed',
+        }),
+      );
     }
     return;
   }
@@ -877,15 +1123,19 @@ const server = createServer(async (request, response) => {
     const result = await fetchVWorldData(url.searchParams);
     send(response, result.statusCode, result.body);
   } catch (error) {
-    send(response, 502, JSON.stringify({
-      response: {
-        status: 'ERROR',
-        error: {
-          code: 'LOCAL_PROXY_ERROR',
-          text: error?.message || 'Local VWorld proxy failed',
+    send(
+      response,
+      502,
+      JSON.stringify({
+        response: {
+          status: 'ERROR',
+          error: {
+            code: 'LOCAL_PROXY_ERROR',
+            text: error?.message || 'Local VWorld proxy failed',
+          },
         },
-      },
-    }));
+      }),
+    );
   }
 });
 

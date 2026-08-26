@@ -1,6 +1,6 @@
 <script>
     import { base } from '$app/paths';
-    import PriorityManagementArea from '$lib/tools/PriorityManagementArea.svelte';
+    import ClimateHazardLab from '$lib/tools/ClimateHazardLab.svelte';
 </script>
 
 <svelte:head>
@@ -23,7 +23,7 @@
     </nav>
 </aside>
 
-<PriorityManagementArea hazard="heatwave" nationalLab={true} />
+<ClimateHazardLab hazard="heatwave" nationalLab={true} />
 
 <style>
     .demo-notice {

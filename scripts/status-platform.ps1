@@ -59,3 +59,10 @@ $rows = foreach ($app in $apps) {
 }
 
 $rows | Format-Table -AutoSize
+
+$postgisStatusScript = Join-Path $PSScriptRoot "status-vworld-postgis.ps1"
+if (Test-Path -LiteralPath $postgisStatusScript) {
+  Write-Host ""
+  Write-Host "VWorld PostGIS"
+  & $postgisStatusScript
+}

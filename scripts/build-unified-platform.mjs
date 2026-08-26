@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const outputRoot = join(workspaceRoot, 'pages-dist');
+const vworldProxyUrl = process.env.VITE_VWORLD_PROXY_URL || 'http://127.0.0.1:4173/vworld-data';
+const analysisApiUrl = process.env.VITE_ANALYSIS_API_URL || '';
 
 function runBuild(label, cwd, extraEnv) {
   console.log(`\n[build] ${label}`);
@@ -30,7 +32,8 @@ runBuild('Portal', workspaceRoot, {
   PAGES_BASE_PATH: '/',
   VITE_INTERNAL_TOOLS_ORIGIN: '/internal-tools',
   VITE_SURVEY_PLATFORM_URL: '/survey/',
-  VITE_VWORLD_PROXY_URL: 'http://127.0.0.1:4173/vworld-data',
+  VITE_VWORLD_PROXY_URL: vworldProxyUrl,
+  VITE_ANALYSIS_API_URL: analysisApiUrl,
 });
 
 runBuild('Survey', join(workspaceRoot, 'Survey platform for collaboration'), {
@@ -42,7 +45,8 @@ runBuild('Internal tools', join(workspaceRoot, 'riskmap-core-main'), {
   PAGES_BASE_PATH: '/internal-tools',
   VITE_PORTAL_TOOLS_URL: 'http://127.0.0.1:4173/tools#adaptation-support-tools',
   VITE_LEAD_DEPARTMENT_TOOL_URL: 'http://127.0.0.1:4173/lead-department-tool',
-  VITE_VWORLD_PROXY_URL: 'http://127.0.0.1:4173/vworld-data',
+  VITE_VWORLD_PROXY_URL: vworldProxyUrl,
+  VITE_ANALYSIS_API_URL: analysisApiUrl,
 });
 
 rmSync(outputRoot, { recursive: true, force: true });

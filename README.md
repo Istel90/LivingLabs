@@ -26,7 +26,23 @@ PowerShell 실행 정책으로 `npm.ps1`이 차단되는 PC에서는 아래 예�
 npm.cmd run install:all
 ```
 
-## 로컬 실행
+## 로컬 실행 — 권장 방식
+
+홈페이지, 설문, 내부 도구와 데이터 API를 하나의 주소에서 제공하는 통합 실행을 권장합니다.
+
+```powershell
+npm.cmd run platform:refresh
+```
+
+- 통합 접속 주소: `http://127.0.0.1:4173/`
+- 기존 실천권역: `http://127.0.0.1:4173/internal-tools/priority-management-area`
+- H01~H10 실험실: `http://127.0.0.1:4173/internal-tools/climate-hazard-lab`
+- 상태 확인: `npm.cmd run platform:status`
+- 종료: `npm.cmd run platform:stop`
+
+통합 방식은 하나의 서버만 실행하므로 개별 개발 서버의 포트가 종료되어 링크가 끊기는 문제를 줄입니다.
+
+## 개별 개발 서버 실행
 
 PowerShell 창을 3개 열고 저장소 루트에서 각각 실행합니다.
 

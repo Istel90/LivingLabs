@@ -43,6 +43,15 @@ if (Test-Path $processFile) {
   Remove-Item -LiteralPath $processFile -Force -ErrorAction SilentlyContinue
 }
 
+$postgisStopScript = Join-Path $PSScriptRoot "stop-vworld-postgis.ps1"
+$pgIsReady = "D:\90_Data\VWORLD\tools\pgsql-17.11\pgsql\bin\pg_isready.exe"
+if ((Test-Path -LiteralPath $postgisStopScript) -and (Test-Path -LiteralPath $pgIsReady)) {
+  & $pgIsReady -h 127.0.0.1 -p 55432 -U postgres | Out-Null
+  if ($LASTEXITCODE -eq 0) {
+    & $postgisStopScript
+  }
+}
+
 Write-Host ""
 Write-Host "Stop request completed."
 Write-Host "Check status: npm run platform:status"
