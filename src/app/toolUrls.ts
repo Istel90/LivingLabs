@@ -30,6 +30,6 @@ export const leadDepartmentToolUrl = `${import.meta.env.BASE_URL}lead-department
 
 export const climateDataLabUrl = `${import.meta.env.BASE_URL}climate-scenario-lab`;
 
-export const planningOptimizationLabUrl = `${import.meta.env.BASE_URL}internal-tools/climate-hazard-lab`;
+export const climateHazardLabUrl = `${internalToolsOrigin}/climate-hazard-lab`;
 
 export const nationalIndicatorStatusUrl = `${import.meta.env.BASE_URL}internal-tools/national-indicator-status`;

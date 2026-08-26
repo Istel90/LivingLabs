@@ -1,8 +1,21 @@
 <script>
     import { onDestroy, onMount } from 'svelte';
     import { base } from '$app/paths';
+    import proj4 from 'proj4';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
-    import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
+    import SelectedRegionMap from '$lib/maps/ClimateHazardRegionMap.svelte';
+    import {
+        enrichPracticeDistricts,
+        PRACTICE_TYPE_META,
+        PRACTICE_TYPE_ORDER
+    } from '$lib/data/practiceDistricts.js';
+    import {
+        getRegionByCode,
+        getRegionBounds,
+        getRegionOptionsBySido,
+        getSigunguLabel,
+        sidos
+    } from '$lib/data/administrativeRegions.js';
     import { markPlatformHandoffStatus, savePlatformHandoff } from '../../../../shared/services/platformHandoffs.js';
     import {
         draftPayloadFromRow,
@@ -11,17 +24,23 @@
     } from '../../../../shared/services/priorityAreaDrafts.js';
 
     export let hazard = 'heatwave';
+    export let nationalLab = false;
+
+    proj4.defs(
+        'EPSG:5179',
+        '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs +type=crs'
+    );
 
     const steps = ['프로젝트 설정', '입력자료', '가중치 설정', '분석 실행', '결과 지도', '의사결정 지원'];
     const gridOptions = ['100m', '50m', '10m', '5m'];
+    const hazardScenarios = ['ssp126', 'ssp245', 'ssp370', 'ssp585'];
+    const hazardFuturePeriods = ['2026', '2027', '2028', '2029', '2030', '2040', '2050', '2060', '2070', '2080', '2090', '2100'];
     const requiredGroups = ['기후위험', '노출', '민감도', '적응역량'];
     const vLambda = 0.5;
     const asset = (path) => `${base}${path}`;
     const DEPARTMENT_HANDOFF_KEY = 'livinglabs.priorityManagementHandoff';
     const priorityHandoffInboxUrl = import.meta.env.VITE_PRIORITY_HANDOFF_INBOX_URL || '/priority-handoff';
     const vworldProxyUrl = import.meta.env.VITE_VWORLD_PROXY_URL || '';
-    const analysisApiUrl = import.meta.env.VITE_ANALYSIS_API_URL || '';
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
     const devResetSignalUrl = vworldProxyUrl
         ? new URL('/dev-reset', vworldProxyUrl).toString()
         : '';
@@ -35,12 +54,12 @@
             projectSuffix: '폭염 위험지역 분석',
             heroEmphasis: '우선 대응지를 찾습니다.',
             heroDescription: '기후위험(H), 노출(E), 취약성(V) 지표를 직접 구성하고 공간 분석 결과를 의사결정으로 연결하세요.',
-            sampleNotice: '현재 폭염 분석 데이터와 후보지는 수원시 샘플입니다.',
-            mapSource: '수원 LST 100m 격자 연결 대기',
+            sampleNotice: '전국 행정구역별 H01~H10 100m 분석격자를 확인할 수 있습니다.',
+            mapSource: '전국 최근 5년 H01~H10 / SSP H01~H09 100m 격자',
             rasterPath: null,
             dataSummaryPath: '/analysis-data/suwon-heatwave-data-summary.json',
-            rasterReadyPrefix: '수원 LST 100m 격자',
-            rasterError: '수원 LST 100m 격자 연결 실패',
+            rasterReadyPrefix: '선택 행정구역 100m Hazard 격자',
+            rasterError: '선택 행정구역 Hazard 격자 연결 실패',
             actionTitle: '이동형 쉼터와 그늘막 우선 배치',
             brief: {
                 driverTitle: '65세 이상 고령층',
@@ -62,10 +81,16 @@
                 { name: '대안3', status: '검토중', description: '공공시설·녹지 연계 복합 대응안' }
             ],
             indicators: [
-                { id: 1, icon: '☀', label: '지표면 온도', description: '수원LST.tif 30m 원본을 EPSG:5179 100m 격자에 평균 집계', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: '100m-grid', supportedGridUnits: ['100m'], dataPath: '/analysis-data/suwon-lst-100m-epsg5179-grid.json', value: 0.38262, color: '#ef6c4d' },
-                { id: 2, icon: '🌡', label: '폭염일수', description: 'AR6 SSP245 중기 100m 정규화 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'AR6-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/ar6-hazard/H_climate_HW33_SSP245_MT_100m_z.json', value: 0.55852, color: '#f08b45' },
-                { id: 14, icon: '🌙', label: '열대야일수', description: 'AR6 SSP245 중기 100m 정규화 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'AR6-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/ar6-hazard/H_climate_TR25_SSP245_MT_100m_z.json', value: 0.69113, color: '#d96545' },
-                { id: 15, icon: '↗', label: '온난일 계속기간', description: 'AR6 SSP245 중기 100m 정규화 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'AR6-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/ar6-hazard/H_climate_WSDI_SSP245_MT_100m_z.json', value: 0.61478, color: '#c96a36' },
+                { id: 101, indicatorCode: 'H01', icon: '🌡', label: 'H01 · 평균기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#f59e0b' },
+                { id: 102, indicatorCode: 'H02', icon: '↗', label: 'H02 · 평균최고기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#ef4444' },
+                { id: 103, indicatorCode: 'H03', icon: '↘', label: 'H03 · 평균최저기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#3b82f6' },
+                { id: 104, indicatorCode: 'H04', icon: '☀', label: 'H04 · 폭염일수', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#dc2626' },
+                { id: 105, indicatorCode: 'H05', icon: '🌙', label: 'H05 · 열대야일수', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#be123c' },
+                { id: 106, indicatorCode: 'H06', icon: '↗', label: 'H06 · 온난일 계속기간 WSDI', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#ea580c' },
+                { id: 107, indicatorCode: 'H07', icon: '🔺', label: 'H07 · 일최고기온 연최대 TXx', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#991b1b' },
+                { id: 108, indicatorCode: 'H08', icon: '📈', label: 'H08 · 온난일 TX90P', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#f97316' },
+                { id: 109, indicatorCode: 'H09', icon: '⏱', label: 'H09 · 최대 온난일 계속기간 WSDIx', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#c2410c' },
+                { id: 110, indicatorCode: 'H10', icon: '🛰', label: 'H10 · 여름철 지표면온도 P90', description: '2021~2025 Landsat 30m 원자료를 집계한 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'Landsat-LST-100m', supportedGridUnits: ['100m'], color: '#b45309' },
                 { id: 3, iconPath: asset('/indicator-icons/보행자.png'), label: '유동인구 노출량', description: 'Pop_Grid_100m Day_Total을 EPSG:5179 표준 100m 격자에 연결한 유동인구 노출량', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/E_population_floating_count_100m.json', value: 0.01259, color: '#db9d3e' },
                 { id: 4, icon: '♟', label: '상주인구 노출량', description: '국토통계 100m 격자 총인구 수를 EPSG:5179 표준 통계격자에 연결', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/E_population_resident_count_100m.json', value: 0.03308, color: '#d4af42' },
                 { id: 5, iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 비율', description: '국토통계 100m 격자 고령인구 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/V_sensitivity_elderly_ratio_100m.json', value: 0.06127, color: '#e45662' },
@@ -89,12 +114,12 @@
             projectSuffix: '홍수 위험지역 분석',
             heroEmphasis: '우선 대응 침수권역을 찾습니다.',
             heroDescription: '침수위험(H), 노출(E), 취약성(V) 지표를 구성하고 배수·저류·대피 대안을 공간적으로 비교하세요.',
-            sampleNotice: '공식 도시침수 30년 빈도 원본과 극한강우·DEM·인구·건축물 실제 자료를 전국 100m PostGIS 격자로 사용합니다.',
-            mapSource: '도시침수·극한강우·저지대·인구·건축물 실제자료 PostGIS 100m',
+            sampleNotice: '현재 홍수 분석 데이터와 후보지는 구조 시연용 샘플입니다.',
+            mapSource: '침수흔적도·DEM·배수시설 데이터 연결 준비',
             rasterPath: null,
             dataSummaryPath: null,
-            rasterReadyPrefix: '선택 행정구역 홍수 실제자료 100m 격자',
-            rasterError: '선택 행정구역 홍수 실제자료 연결 실패',
+            rasterReadyPrefix: '홍수 위험 래스터',
+            rasterError: '홍수 위험 래스터 연결 전 · 예시 격자 표시',
             actionTitle: '배수개선·저류공간·대피동선 우선 정비',
             brief: {
                 driverTitle: '반지하·저지대 주거',
@@ -116,34 +141,24 @@
                 { name: '대안3', status: '검토중', description: '반지하·취약시설 보호 중심 대응안' }
             ],
             indicators: [
-                { id: 201, floodIndicator: 'FH01', icon: '≈', label: 'H01 · 도시침수 30년', description: '도시침수 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#2563eb' },
-                { id: 209, floodIndicator: 'UF50', icon: '≈', label: '도시침수 50년', description: '50년 빈도 도시침수지도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#1e40af' },
-                { id: 210, floodIndicator: 'UF80', icon: '≈', label: '도시침수 80년', description: '80년 빈도 도시침수지도 5m 원자료 · 전국 묶음 중 2개 지역 원본 누락', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#3730a3' },
-                { id: 219, floodIndicator: 'UF100', icon: '≈', label: '도시침수 100년', description: '100년 빈도 도시침수지도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#312e81' },
-                { id: 202, floodIndicator: 'FH02', icon: '≋', label: 'H02 · 국가하천 100년', description: '국가하천 범람 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#1d4ed8' },
-                { id: 203, floodIndicator: 'FH03', icon: '≋', label: 'H03 · 지방하천 50년', description: '지방하천 범람 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#0369a1' },
-                { id: 204, analysisIndicator: 'rain-max-1h', icon: '☔', label: '1시간 최대강우량', description: 'ASOS 97개소 최근접 관측값으로 실제 100m 강우면은 아님', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-KMA-100m', supportedGridUnits: ['100m'], color: '#0284c7' },
-                { id: 205, analysisIndicator: 'terrain-low-elevation', icon: '▾', label: '저지대 지형', description: '전국 DEM 100m 표고 · 낮은 표고일수록 위험 증가', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#0891b2' },
-                { id: 206, analysisIndicator: 'terrain-twi', icon: '◒', label: '지형습윤지수 TWI', description: '전국 DEM 기반 100m 지형습윤지수', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#0e7490' },
-                { id: 207, analysisIndicator: 'terrain-flow-accumulation', icon: '⇣', label: '유로 누적량', description: '전국 DEM 기반 100m 유로 누적량', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#155e75' },
-                { id: 208, analysisIndicator: 'terrain-depression-depth', icon: '⌄', label: '지형 함몰 깊이', description: '전국 DEM 기반 100m 함몰 깊이', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#164e63' },
-                { id: 211, floodIndicator: 'FE01', icon: '♟', label: 'FE01 · 상주인구', description: '2024 전국 총인구 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#d4af42' },
-                { id: 212, floodIndicator: 'FE02', icon: '⌂', label: 'FE02 · 주택 수', description: '2024 전국 주택 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#c58b2a' },
-                { id: 213, floodIndicator: 'FE03', coveragePrefix: '4111', icon: '🚶', label: 'FE03 · 유동인구', description: '2021 수원시 일평균 유동인구 100m · 현재 수원시만 제공', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#db9d3e' },
-                { id: 214, analysisIndicator: 'facility-bus-stop', icon: '🚏', label: '버스정류장 노출 proxy', description: '전국 정류장 100m 셀 밀도 · 실제 이용량은 아님', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#b7791f' },
-                { id: 215, analysisIndicator: 'facility-rail-station', icon: '🚇', label: '도시철도 결절점', description: '전국 도시철도 역사 851개의 100m 셀 밀도', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#a16207' },
-                { id: 216, analysisIndicator: 'facility-crosswalk', icon: '▰', label: '횡단보도 노출 proxy', description: '전국횡단보도 100m 셀 밀도 · 부산·대구·세종 보완 필요', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#92400e' },
-                { id: 221, analysisIndicator: 'building-basement-count', icon: '⌂', label: '지하층 보유 건축물', description: '전국 GIS 건물통합정보의 지하층 보유 건축물 100m 셀 밀도', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], color: '#e45662' },
-                { id: 222, analysisIndicator: 'building-old-30y-ratio', icon: '🏚', label: '30년 이상 건축물 비율', description: '사용승인일 확인 건축물 중 30년 이상 건축물의 100m 셀 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], color: '#cf6576' },
-                { id: 223, analysisIndicator: 'population-elderly', iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 수', description: '국토정보플랫폼 2024년 10월 전국 100m 고령인구', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], color: '#b86c82' },
-                { id: 224, analysisIndicator: 'population-infant', iconPath: asset('/indicator-icons/유소년인구비율.png'), label: '유아인구 수', description: '국토정보플랫폼 2024년 10월 전국 100m 유아인구', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], color: '#a56d83' },
-                { id: 225, icon: '🏫', label: '어린이집·복지시설', description: '어린이집 주소만 적재되어 최신 좌표 원자료 보완 후 연결 예정', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'source-address-only', supportedGridUnits: ['100m'], color: '#9333ea' },
-                { id: 231, analysisIndicator: 'facility-bus-stop', icon: '⇄', label: '대중교통 대피 접근성 proxy', description: '버스정류장 밀도 재사용 · 실제 대피경로·이동시간은 아님', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#358b78' },
-                { id: 234, analysisIndicator: 'facility-shelter', icon: '↗', label: '민방위 대피시설 밀도', description: '현재 적재본 5,147개 · 지역별 원자료 커버리지 확인 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#61958b' },
-                { id: 232, icon: '◉', label: '빗물받이 밀도', description: '전국 빗물받이 원자료 보완 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'source-required', color: '#3f9b80' },
-                { id: 233, icon: '▤', label: '배수펌프장·저류시설 접근성', description: '전국 시설 위치·용량·가동 원자료 보완 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'source-required', color: '#57a66c' }
+                { id: 1, icon: '≈', label: '침수흔적도', description: '과거 침수 이력 및 침수심 분포', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#2563eb' },
+                { id: 2, icon: '☔', label: '강우강도', description: '집중호우 강도 및 빈도', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#0284c7' },
+                { id: 3, icon: '▾', label: '저지대 지형', description: 'DEM 기반 저지대·경사 취약 구간', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#0891b2' },
+                { id: 4, icon: '♟', label: '상주인구', description: '침수권역 내 거주 인구', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#d4af42' },
+                { id: 5, icon: '🚶', label: '유동인구', description: '시간대별 보행·상권 유동 인구', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#db9d3e' },
+                { id: 6, icon: '🛣', label: '주요 도로', description: '침수 시 통행 영향 도로망', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#b7791f' },
+                { id: 7, icon: '⌂', label: '반지하 주거', description: '반지하·지하층 주거 밀집도', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#e45662' },
+                { id: 8, icon: '🏚', label: '노후건축물', description: '노후 건축물 및 취약 주택 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#cf6576' },
+                { id: 9, icon: '🏥', label: '취약시설', description: '복지시설·의료시설·학교 등 보호대상', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#a56d83' },
+                { id: 10, icon: '◉', label: '빗물받이 밀도', description: '빗물받이 및 우수 유입시설 분포', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#3f9b80' },
+                { id: 11, icon: '▤', label: '배수펌프장 접근성', description: '배수펌프장·저류시설 영향권', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#57a66c' },
+                { id: 12, icon: '↗', label: '대피시설 접근성', description: '대피소와 안전 이동경로 접근성', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#61958b' }
             ],
-            candidates: []
+            candidates: [
+                { name: '후보지 02', area: '저지대 주거밀집지', risk: 0.84, h: 0.88, e: 0.79, v: 0.82, rank: 1, reason: '침수흔적과 반지하 주거가 중첩된 구역' },
+                { name: '후보지 05', area: '하천변 상업·주거 혼재지', risk: 0.79, h: 0.81, e: 0.83, v: 0.73, rank: 2, reason: '하천 범람 영향권과 유동인구 집중' },
+                { name: '후보지 09', area: '노후 배수시설 영향권', risk: 0.74, h: 0.75, e: 0.72, v: 0.78, rank: 3, reason: '배수시설 부족과 노후 건축물 밀집' }
+            ]
         },
         ecosystem: {
             label: '생태계',
@@ -191,62 +206,93 @@
     };
 
     const config = hazardConfigs[hazard] || hazardConfigs.heatwave;
-    function proxyDataPath(route) {
-        const baseUrl = analysisApiUrl || vworldProxyUrl;
-        return baseUrl ? `${baseUrl.replace(/\/$/, '')}${route}` : route;
-    }
-
-    function gridFetchOptions(url) {
-        if (!supabaseAnonKey || !url.includes('.supabase.co/functions/v1/')) return {};
-        return {
-            headers: {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`
-            }
-        };
-    }
-
-    function configureIndicatorsForRegion(sourceIndicators, code) {
+    function configureIndicatorsForRegion(sourceIndicators, code, datasetMode = hazardDatasetMode) {
+        const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09', 'H10']);
         return sourceIndicators.map((item) => {
-            if (hazard !== 'flood') return { ...item };
-
-            let dataPath = null;
-            const covered = !item.coveragePrefix || code?.startsWith(item.coveragePrefix);
-            if (item.floodIndicator && code && covered) {
-                dataPath = proxyDataPath(`/flood-grid?regionCode=${encodeURIComponent(code)}&indicator=${encodeURIComponent(item.floodIndicator)}`);
-            } else if (item.analysisIndicator && code && covered) {
-                dataPath = proxyDataPath(`/analysis-grid?regionCode=${encodeURIComponent(code)}&indicator=${encodeURIComponent(item.analysisIndicator)}`);
+            if (item.indicatorCode) {
+                const observed = datasetMode === 'observed';
+                const availableForDataset = observed
+                    ? observedCodes.has(item.indicatorCode)
+                    : item.indicatorCode !== 'H10';
+                const available = Boolean(code) && availableForDataset;
+                const dataQuery = new URLSearchParams({
+                    regionCode: code,
+                    mode: observed ? 'observed' : 'future',
+                    indicator: item.indicatorCode,
+                    scenario: hazardScenario,
+                    period: hazardFuturePeriod
+                });
+                return {
+                    ...item,
+                    description: observed
+                        ? item.indicatorCode === 'H01'
+                            ? '2021~2025 평균 · 500m 원자료를 정렬한 지역 100m 분석격자'
+                            : item.indicatorCode === 'H10'
+                                ? '2021~2025 여름철 P90 평균 · Landsat 30m를 집계한 지역 100m 격자'
+                                : ['H06', 'H08', 'H09'].includes(item.indicatorCode)
+                                    ? '1991~2020 기준자료와 2021~2025 ASOS 34개소 지표를 IDW 공간화한 지역 100m 분석격자'
+                                    : '2021~2025 ASOS 95개소 지표를 IDW 공간화한 지역 100m 분석격자'
+                        : item.indicatorCode === 'H10'
+                            ? 'SSP 기반 직접 미래 전망자료 없음'
+                            : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 지역 100m 분석격자`,
+                    sourceType: observed
+                        ? item.indicatorCode === 'H10'
+                            ? 'Landsat-LST-100m'
+                            : item.indicatorCode === 'H01'
+                                ? 'KMA-observed-100m'
+                                : 'KMA-ASOS-IDW-100m'
+                        : 'KMA-AR6-region-100m',
+                    dataPath: available ? `/hazard-grid?${dataQuery.toString()}` : null,
+                    dataStatus: available ? 'available' : 'missing',
+                    enabled: available && item.indicatorCode === (observed ? 'H01' : 'H04')
+                };
             }
-
-            if (!item.floodIndicator && !item.analysisIndicator) return { ...item };
-            const status = dataPath ? item.dataStatus : 'missing';
-            return {
-                ...item,
-                dataPath,
-                dataStatus: status,
-                enabled: Boolean(dataPath && item.enabled && status !== 'missing')
-            };
+            if (!code.startsWith('4111')) {
+                return { ...item, enabled: false, dataStatus: 'missing' };
+            }
+            return { ...item };
         });
     }
 
+    function isGridValueCollection(values) {
+        return Array.isArray(values) || ArrayBuffer.isView(values);
+    }
+
     function decodeGridValues(grid) {
-        if (Array.isArray(grid?.values)) return grid.values;
-        if (grid?.valueEncoding !== 'sparse-index-value' || !Array.isArray(grid?.sparseValues)) return null;
-        const valueCount = Number(grid.valueCount) || Number(grid.columns) * Number(grid.rows);
-        const values = new Array(valueCount).fill(null);
+        if (Array.isArray(grid?.values)) {
+            return { values: grid.values, validIndices: null };
+        }
+        if (grid?.valueEncoding !== 'sparse-index-value' || !Array.isArray(grid?.sparseValues)) {
+            return { values: null, validIndices: null };
+        }
+
+        const valueCount = Number(grid.valueCount) || (Number(grid.columns) * Number(grid.rows));
+        const values = new Float32Array(valueCount);
+        values.fill(Number.NaN);
+        const validIndices = new Array(Math.floor(grid.sparseValues.length / 2));
+        let validIndex = 0;
         for (let offset = 0; offset < grid.sparseValues.length; offset += 2) {
             const index = Number(grid.sparseValues[offset]);
             const value = Number(grid.sparseValues[offset + 1]);
-            if (Number.isInteger(index) && index >= 0 && index < valueCount && Number.isFinite(value)) values[index] = value;
+            if (!Number.isInteger(index) || index < 0 || index >= valueCount || !Number.isFinite(value)) continue;
+            values[index] = value;
+            validIndices[validIndex] = index;
+            validIndex += 1;
         }
-        return values;
+        validIndices.length = validIndex;
+        return { values, validIndices };
     }
-
 
     let activeStep = 0;
     let activeLayer = 'Risk';
     let region = '경기도 수원시';
     let regionCode = '41110';
+    let selectedSido = '경기도';
+    $: availableRegions = getRegionOptionsBySido(selectedSido);
+    let hazardDatasetMode = 'observed';
+    let hazardScenario = 'ssp245';
+    let hazardFuturePeriod = '2050';
+    let regionChangeRunId = 0;
     $: projectName = `${region} ${config.projectSuffix}`;
     let analysisDone = false;
     let running = false;
@@ -259,11 +305,11 @@
     let dataBundleStatus = config.dataSummaryPath ? '수원 시연 원자료 불러오는 중' : '시연 원자료 연결 전';
     let analysisMessage = '설정값을 확인한 뒤 Risk 분석을 실행하세요.';
     let analysisResult = null;
-    let parcelCandidateMessage = 'Risk 분석 후 지도에서 필지 후보를 도출하세요.';
+    let parcelCandidateMessage = 'Risk 분석 후 지도에서 실천권역도출하기를 실행하세요.';
     let focusedCandidate = null;
     let mapResetKey = 0;
     let detailCandidateKey = null;
-    let handoffMessage = '필지 후보를 도출하면 주관부서 지원도구로 전달할 수 있습니다.';
+    let handoffMessage = '실천권역을 도출하면 주관부서 지원도구로 전달할 수 있습니다.';
     let handoffDialog = null;
     let latestHandoffPackage = null;
     let sentHandoffPackages = [];
@@ -297,7 +343,7 @@
     $: decidedAlternative = alternatives.find((item) => item.status === '선정');
     $: activeAlternativeId = alternatives[activeAlternative]?.id || `alternative-${activeAlternative + 1}`;
 
-    let indicators = configureIndicatorsForRegion(config.indicators, regionCode)
+    let indicators = configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
         .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
     let appliedIndicators = [];
     let loadedPreviewIndicators = [];
@@ -316,8 +362,13 @@
     });
     $: if (indicatorPreviewGrid && !analysisDone && ['Risk', 'Hotspot'].includes(activeLayer)) activeLayer = 'H';
     $: candidateList = analysisResult?.parcelCandidates?.length
-        ? analysisResult.parcelCandidates
+        ? enrichPracticeDistricts(analysisResult.parcelCandidates)
         : [];
+    $: practiceDistrictGroups = PRACTICE_TYPE_ORDER.map((type) => ({
+        type,
+        ...PRACTICE_TYPE_META[type],
+        candidates: candidateList.filter((candidate) => candidate.practiceType === type)
+    }));
     $: if (candidateList.length && selectedCandidate >= candidateList.length) selectedCandidate = 0;
     $: selectedCandidateItem = candidateList[selectedCandidate] || candidateList[0] || null;
     $: detailCandidateItem = detailCandidateKey
@@ -632,7 +683,11 @@
         const params = new URLSearchParams(window.location.search);
         region = params.get('regionName') || region;
         regionCode = params.get('regionCode') || regionCode;
-        indicators = configureIndicatorsForRegion(config.indicators, regionCode)
+        selectedSido = getRegionByCode(regionCode)?.sido || selectedSido;
+        hazardDatasetMode = params.get('hazardPeriod') === 'future' ? 'future' : 'observed';
+        hazardScenario = hazardScenarios.includes(params.get('scenario')) ? params.get('scenario') : hazardScenario;
+        hazardFuturePeriod = hazardFuturePeriods.includes(params.get('futurePeriod')) ? params.get('futurePeriod') : hazardFuturePeriod;
+        indicators = configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
             .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
         operatorName = window.localStorage.getItem('livinglabs.priorityAreaOperator') || operatorName;
         const resumeDraft = params.get('resumeDraft') === '1';
@@ -651,7 +706,7 @@
             draftStorageStatus = '임시 저장소 연결 실패';
         }
 
-        if (config.dataSummaryPath) {
+        if (config.dataSummaryPath && regionCode === '41110') {
             try {
                 const dataResponse = await fetch(asset(config.dataSummaryPath));
                 dataBundle = await dataResponse.json();
@@ -735,10 +790,10 @@
         analysisMessage = alternative.analysisMessage || '설정값을 확인한 뒤 Risk 분석을 실행하세요.';
         parcelCandidateMessage = alternative.parcelCandidateMessage ||
             (analysisResult?.parcelCandidates?.length
-                ? `${analysisResult.parcelCandidates.length}개 필지 후보 클러스터 도출`
+                ? `${analysisResult.parcelCandidates.length}개 실천권역 도출`
                 : analysisDone
-                    ? 'Risk 분석 완료. 지도에서 필지 후보 도출을 실행하세요.'
-                    : 'Risk 분석 후 지도에서 필지 후보를 도출하세요.');
+                    ? 'Risk 분석 완료. 지도에서 실천권역도출하기를 실행하세요.'
+                    : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하세요.');
         selectedCandidate = Number.isInteger(alternative.selectedCandidate) ? alternative.selectedCandidate : 0;
         detailCandidateKey = alternative.detailCandidateKey ||
             (analysisResult?.parcelCandidates?.[0] ? candidateIdentity(analysisResult.parcelCandidates[0]) : null);
@@ -756,23 +811,108 @@
         schedulePriorityDraftSave();
     }
 
+    function publicDemoSeed(item) {
+        return `${regionCode}:${item.indicatorCode || item.id}`
+            .split('')
+            .reduce((sum, character) => sum + character.charCodeAt(0), 0);
+    }
+
+    function publicDemoValue(index, columns, rows, seed) {
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        const x = columns > 1 ? column / (columns - 1) : 0.5;
+        const y = rows > 1 ? row / (rows - 1) : 0.5;
+        const wave = (Math.sin((x * 8.4) + (seed * 0.07)) + Math.cos((y * 7.1) - (seed * 0.05))) * 0.09;
+        const ridge = Math.max(0, 1 - Math.hypot(x - 0.64, y - 0.42) * 2.1) * 0.22;
+        const texture = (((index * 1103515245 + seed * 12345) >>> 8) % 101) / 1000;
+        return clamp01(0.34 + wave + ridge + texture);
+    }
+
+    function createPublicDemoFallbackGrid(item, referenceItem = null) {
+        let columns = Number(referenceItem?.gridMeta?.columns);
+        let rows = Number(referenceItem?.gridMeta?.rows);
+        let extent = referenceItem?.gridMeta?.extent;
+        let transform = referenceItem?.gridMeta?.transform;
+
+        if (!(columns > 0 && rows > 0 && transform)) {
+            const bounds = getRegionBounds(regionCode);
+            if (!bounds) return null;
+            const [xmin, ymin] = proj4('EPSG:4326', 'EPSG:5179', [bounds.west, bounds.south]);
+            const [xmax, ymax] = proj4('EPSG:4326', 'EPSG:5179', [bounds.east, bounds.north]);
+            const originX = Math.floor(Math.min(xmin, xmax) / 100) * 100;
+            const originY = Math.ceil(Math.max(ymin, ymax) / 100) * 100;
+            columns = Math.max(1, Math.ceil((Math.max(xmin, xmax) - originX) / 100));
+            rows = Math.max(1, Math.ceil((originY - Math.min(ymin, ymax)) / 100));
+            transform = { originX, originY, pixelWidth: 100, pixelHeight: 100 };
+            extent = {
+                xmin: originX,
+                ymin: originY - (rows * 100),
+                xmax: originX + (columns * 100),
+                ymax: originY
+            };
+        }
+
+        const cellCount = columns * rows;
+        if (!Number.isFinite(cellCount) || cellCount <= 0 || cellCount > 450000) return null;
+        const seed = publicDemoSeed(item);
+        const values = new Float32Array(cellCount);
+        let sum = 0;
+        for (let index = 0; index < cellCount; index += 1) {
+            const value = publicDemoValue(index, columns, rows, seed);
+            values[index] = value;
+            sum += value;
+        }
+        const mean = sum / cellCount;
+
+        return {
+            ...item,
+            enabled: item.enabled,
+            dataStatus: 'available',
+            sourceType: 'PUBLIC-DEMO-FALLBACK',
+            demoFallback: true,
+            loadedValue: mean,
+            gridValues: values,
+            gridValidIndices: null,
+            gridMeta: {
+                gridUnit: '100m',
+                rows,
+                columns,
+                extent,
+                transform,
+                crs: 'EPSG:5179'
+            },
+            gridSummary: {
+                gridUnit: '100m',
+                rows,
+                columns,
+                validCells: cellCount,
+                rawMean: Number(mean.toFixed(4)),
+                rawUnit: '정규화 점수',
+                normalizedMean: mean,
+                sourceResolution: '시연용 대체 패턴'
+            },
+            loadError: `${item.label} 원자료 서버에 연결하지 못해 공개 시연용 대체 패턴을 사용했습니다.`
+        };
+    }
+
     async function loadIndicatorInputs(sourceIndicators) {
         const loaded = await Promise.all(sourceIndicators.map(async (item) => {
             if (!usableIndicator(item) || !item.dataPath) return item;
 
             try {
-                const dataUrl = /^https?:\/\//.test(item.dataPath) ? item.dataPath : asset(item.dataPath);
-                const response = await fetch(dataUrl, gridFetchOptions(dataUrl));
+                const dataUrl = item.dataPath.startsWith('/hazard-grid') ? item.dataPath : asset(item.dataPath);
+                const response = await fetch(dataUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const grid = await response.json();
-                const gridValues = decodeGridValues(grid);
+                const decodedGrid = decodeGridValues(grid);
                 const loadedValue = Number(grid?.stats?.normalizedMean ?? grid?.stats?.mean);
                 if (!Number.isFinite(loadedValue)) throw new Error('normalizedMean is missing');
 
                 return {
                     ...item,
                     loadedValue,
-                    gridValues,
+                    gridValues: decodedGrid.values,
+                    gridValidIndices: decodedGrid.validIndices,
                     gridMeta: {
                         gridUnit: grid.gridUnit,
                         rows: grid.rows,
@@ -786,13 +926,20 @@
                         rows: grid.rows,
                         columns: grid.columns,
                         validCells: grid.stats?.validCells,
-                        rawUnit: grid.rawUnit || grid.unit || '',
                         rawMean: grid.stats?.rawMean,
+                        rawUnit: grid.rawUnit || grid.unit || '',
                         normalizedMean: grid.stats?.normalizedMean ?? grid.stats?.mean,
                         sourceResolution: grid.sourceResolution
                     }
                 };
             } catch (error) {
+                if (nationalLab && item.indicatorCode) {
+                    return {
+                        ...item,
+                        publicFallbackPending: true,
+                        loadError: `${item.label} 원자료 서버에 연결하지 못했습니다.`
+                    };
+                }
                 return {
                     ...item,
                     enabled: false,
@@ -802,17 +949,39 @@
             }
         }));
 
-        const loadedGrid = loaded.find((item) => item.gridSummary);
+        const referenceItem = loaded.find((item) =>
+            !item.publicFallbackPending &&
+            isGridValueCollection(item.gridValues) &&
+            item.gridMeta?.columns &&
+            item.gridMeta?.rows
+        );
+        const resolved = loaded.map((item) => {
+            if (!item.publicFallbackPending) return item;
+            const fallback = createPublicDemoFallbackGrid(item, referenceItem);
+            if (fallback) return fallback;
+            return {
+                ...item,
+                enabled: false,
+                dataStatus: 'missing',
+                loadError: `${item.label} 입력자료와 시연용 대체 격자를 준비하지 못했습니다.`
+            };
+        });
+
+        const loadedGrid = resolved.find((item) => item.gridSummary);
+        const usesDemoFallback = resolved.some((item) => item.demoFallback && item.enabled);
         mapSource = loadedGrid
-            ? `${config.rasterReadyPrefix} · ${loadedGrid.gridSummary.columns}×${loadedGrid.gridSummary.rows} · 평균 ${loadedGrid.gridSummary.rawMean}${loadedGrid.gridSummary.rawUnit}`
+            ? usesDemoFallback
+                ? `공개 시연용 100m 대체 패턴 · 실제 Hazard 원자료 서버 연결 전 · ${loadedGrid.gridSummary.columns}×${loadedGrid.gridSummary.rows}`
+                : `${config.rasterReadyPrefix} · ${loadedGrid.gridSummary.columns}×${loadedGrid.gridSummary.rows} · 평균 ${loadedGrid.gridSummary.rawMean}${loadedGrid.gridSummary.rawUnit}`
             : config.mapSource;
 
-        return loaded;
+        return resolved;
     }
 
     function createIndicatorPreviewGrid(sourceIndicators) {
         const reference = sourceIndicators.find((item) =>
-            Array.isArray(item.gridValues) &&
+            item.enabled &&
+            isGridValueCollection(item.gridValues) &&
             item.gridValues.length &&
             item.gridMeta?.columns &&
             item.gridMeta?.rows &&
@@ -828,17 +997,17 @@
             extent: reference.gridMeta.extent,
             transform: reference.gridMeta.transform,
             crs: reference.gridMeta.crs,
-            values: reference.gridValues
+            values: reference.gridValues,
+            validIndices: reference.gridValidIndices || null
         };
     }
 
     function isIndicatorAvailable(item) {
-        return ['available', 'partial'].includes(item.dataStatus) && (!item.supportedGridUnits || item.supportedGridUnits.includes(gridUnit));
+        return item.dataStatus === 'available' && (!item.supportedGridUnits || item.supportedGridUnits.includes(gridUnit));
     }
 
     function indicatorStatusText(item) {
-        if (item.dataStatus === 'missing') return '연결대기';
-        if (item.dataStatus === 'partial') return '지역·품질 제한';
+        if (item.dataStatus !== 'available') return '연결대기';
         if (item.supportedGridUnits && !item.supportedGridUnits.includes(gridUnit)) return '격자미지원';
         return item.sourceType;
     }
@@ -892,7 +1061,7 @@
     }
 
     function gridValue(item, index) {
-        if (!Array.isArray(item.gridValues)) return null;
+        if (!isGridValueCollection(item.gridValues)) return null;
         return finiteGridValue(item.gridValues[index]);
     }
 
@@ -945,14 +1114,14 @@
         const { gridValues, ...resultItem } = item;
         return {
             ...resultItem,
-            gridValues: Array.isArray(gridValues) ? gridValues : null
+            gridValues: isGridValueCollection(gridValues) ? gridValues : null
         };
     }
 
     function computeGridAnalysis(sourceIndicators) {
         const availableIndicators = sourceIndicators.filter(usableIndicator);
         const reference = availableIndicators.find((item) =>
-            Array.isArray(item.gridValues) &&
+            isGridValueCollection(item.gridValues) &&
             item.gridValues.length &&
             item.gridMeta?.columns &&
             item.gridMeta?.rows
@@ -964,7 +1133,7 @@
         const rows = Number(reference.gridMeta.rows);
         const cellCount = columns * rows;
         const gridIndicators = availableIndicators.filter((item) =>
-            Array.isArray(item.gridValues) &&
+            isGridValueCollection(item.gridValues) &&
             item.gridValues.length >= cellCount &&
             Number(item.gridMeta?.columns) === columns &&
             Number(item.gridMeta?.rows) === rows
@@ -975,7 +1144,9 @@
         const sensitivityItems = byGroup('민감도');
         const adaptiveItems = byGroup('적응역량');
 
-        if (!hItems.length || !eItems.length || !sensitivityItems.length || !adaptiveItems.length) return null;
+        if (!hItems.length) return null;
+        const hazardOnly = nationalLab && (!eItems.length || !sensitivityItems.length || !adaptiveItems.length);
+        if (!hazardOnly && (!eItems.length || !sensitivityItems.length || !adaptiveItems.length)) return null;
 
         const hValues = new Array(cellCount).fill(null);
         const eValues = new Array(cellCount).fill(null);
@@ -1003,7 +1174,9 @@
             sensitivityValues[index] = sensitivityScore;
             adaptiveCapacityValues[index] = adaptiveCapacityForV;
 
-            if (
+            if (hazardOnly && Number.isFinite(hScore)) {
+                riskValues[index] = hScore;
+            } else if (
                 Number.isFinite(hScore) &&
                 Number.isFinite(eScore) &&
                 Number.isFinite(sensitivityScore) &&
@@ -1034,14 +1207,18 @@
             sensitivityScore: sensitivityStats.mean,
             adaptiveCapacityForV: adaptiveStats.mean,
             riskScore: riskStats.mean,
+            hazardOnly,
             gridResult: {
+                hazardOnly,
                 gridUnit,
                 columns,
                 rows,
                 extent: reference.gridMeta.extent,
                 transform: reference.gridMeta.transform,
                 crs: reference.gridMeta.crs,
-                valueEncoding: 'row-major 100m cells aligned to the Suwon stat grid',
+                valueEncoding: hazardOnly
+                    ? 'row-major 100m cells; preliminary Risk equals normalized Hazard score'
+                    : 'row-major 100m cells aligned to the regional analysis grid',
                 values: riskValues,
                 hValues,
                 eValues,
@@ -1061,18 +1238,22 @@
     }
 
     function validateAnalysis() {
-        const missingGroup = requiredGroups.find((group) => selectedIndicatorsFor(group).length === 0);
+        const activeRequiredGroups = analysisRequiredGroups();
+        const missingGroup = activeRequiredGroups.find((group) => selectedIndicatorsFor(group).length === 0);
         if (missingGroup) {
             return `분석을 실행할 수 없습니다. ${missingGroup} 영역에 선택된 사용 가능 지표가 없습니다.`;
         }
-        const zeroWeightGroup = requiredGroups.find((group) => {
+        const zeroWeightGroup = activeRequiredGroups.find((group) => {
             const items = selectedIndicatorsFor(group);
             return items.reduce((sum, item) => sum + Math.max(0, Number(item.weight) || 0), 0) <= 0;
         });
         if (zeroWeightGroup) {
             return `분석을 실행할 수 없습니다. ${zeroWeightGroup} 영역의 가중치 합이 0입니다.`;
         }
-        if (dimensionWeights.H + dimensionWeights.E + dimensionWeights.V <= 0) {
+        const activeDimensionWeight = activeRequiredGroups.length === 1
+            ? dimensionWeights.H
+            : dimensionWeights.H + dimensionWeights.E + dimensionWeights.V;
+        if (activeDimensionWeight <= 0) {
             return '분석을 실행할 수 없습니다. H/E/V 통합 가중치 합이 0입니다.';
         }
         return '';
@@ -1084,7 +1265,10 @@
         if (gridAnalysis) {
             return {
                 gridUnit,
-                formula: 'Weighted geometric mean: (H^wH × E^wE × V^wV)^(1/Σw)',
+                formula: gridAnalysis.hazardOnly
+                    ? 'Preliminary Risk = normalized Hazard score (H-only until nationwide E/V is connected)'
+                    : 'Weighted geometric mean: (H^wH × E^wE × V^wV)^(1/Σw)',
+                hazardOnly: gridAnalysis.hazardOnly,
                 dimensionScores: gridAnalysis.dimensionScores,
                 sensitivityScore: gridAnalysis.sensitivityScore,
                 adaptiveCapacityForV: gridAnalysis.adaptiveCapacityForV,
@@ -1157,7 +1341,7 @@
         analysisDone = false;
         analysisResult = null;
         appliedIndicators = [];
-        parcelCandidateMessage = 'Risk 분석 후 지도에서 필지 후보를 도출하세요.';
+        parcelCandidateMessage = 'Risk 분석 후 지도에서 실천권역도출하기를 실행하세요.';
         selectedCandidate = 0;
         detailCandidateKey = null;
         focusedCandidate = null;
@@ -1184,9 +1368,103 @@
         markAnalysisDirty('분석 단위 격자가 변경되었습니다. Risk 분석을 다시 실행하세요.');
     }
 
-    function setIndicatorEnabled(id, enabled) {
+    async function setHazardDatasetMode(value) {
+        hazardDatasetMode = value === 'future' ? 'future' : 'observed';
+        await refreshHazardDataset(
+            hazardDatasetMode === 'observed'
+                ? '최근 5년(2021~2025) 100m 자료로 전환했습니다. H01~H10을 사용할 수 있습니다.'
+                : `미래 ${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 100m 자료로 전환했습니다. H01~H09를 사용할 수 있습니다.`
+        );
+    }
+
+    function analysisRequiredGroups(source = indicators) {
+        const hasCompleteHev = requiredGroups.every((group) => selectedIndicatorsFor(group, source).length > 0);
+        if (hasCompleteHev || !nationalLab) return requiredGroups;
+        return selectedIndicatorsFor('기후위험', source).length ? ['기후위험'] : requiredGroups;
+    }
+
+    async function refreshHazardDataset(message) {
+        indicators = configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
+            .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
+        loadedPreviewIndicators = await loadIndicatorInputs(indicators.map((item) => ({ ...item })));
+        indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
+        const url = new URL(window.location.href);
+        url.searchParams.set('hazardPeriod', hazardDatasetMode);
+        url.searchParams.set('scenario', hazardScenario);
+        url.searchParams.set('futurePeriod', hazardFuturePeriod);
+        window.history.replaceState({}, '', url);
+        markAnalysisDirty(message);
+    }
+
+    async function setHazardScenario(value) {
+        hazardScenario = hazardScenarios.includes(value) ? value : 'ssp245';
+        await refreshHazardDataset(`${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 전국 100m 미래지표로 전환했습니다.`);
+    }
+
+    async function setHazardFuturePeriod(value) {
+        hazardFuturePeriod = hazardFuturePeriods.includes(value) ? value : '2050';
+        await refreshHazardDataset(`${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 전국 100m 미래지표로 전환했습니다.`);
+    }
+
+    async function setNationalRegion(nextCode) {
+        const nextRegion = getRegionByCode(nextCode);
+        if (!nextRegion || nextRegion.code === regionCode) return;
+
+        const runId = ++regionChangeRunId;
+        regionCode = nextRegion.code;
+        region = nextRegion.fullName;
+        selectedSido = nextRegion.sido;
+        indicators = configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
+            .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
+        loadedPreviewIndicators = [];
+        indicatorPreviewGrid = null;
+        mapSource = `${region} 전국 100m 원본 연결 중`;
+        markAnalysisDirty(`${region}의 100m Hazard 자료를 불러오는 중입니다.`);
+
+        const loaded = await loadIndicatorInputs(indicators.map((item) => ({ ...item })));
+        if (runId !== regionChangeRunId) return;
+        loadedPreviewIndicators = loaded;
+        indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
+        mapResetKey += 1;
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('regionCode', regionCode);
+        url.searchParams.set('regionName', region);
+        url.searchParams.set('hazardPeriod', hazardDatasetMode);
+        url.searchParams.set('scenario', hazardScenario);
+        url.searchParams.set('futurePeriod', hazardFuturePeriod);
+        window.history.replaceState({}, '', url);
+        markAnalysisDirty(`${region} 행정경계에 맞춘 100m 지표를 연결했습니다.`);
+    }
+
+    function setNationalSido(value) {
+        selectedSido = value;
+        const firstRegion = getRegionOptionsBySido(selectedSido)[0];
+        if (firstRegion) setNationalRegion(firstRegion.code);
+    }
+
+    async function setIndicatorEnabled(id, enabled) {
         indicators = indicators.map((item) => item.id === id ? { ...item, enabled } : item);
         markAnalysisDirty();
+
+        const target = indicators.find((item) => item.id === id);
+        const cached = loadedPreviewIndicators.some((item) => item.id === id && isGridValueCollection(item.gridValues));
+        if (enabled && target?.dataPath && !cached) {
+            const [loaded] = await loadIndicatorInputs([{ ...target }]);
+            loadedPreviewIndicators = [
+                ...loadedPreviewIndicators.filter((item) => item.id !== id),
+                loaded
+            ];
+        }
+
+        const currentById = new Map(indicators.map((item) => [item.id, item]));
+        loadedPreviewIndicators = loadedPreviewIndicators.map((item) => ({
+            ...item,
+            enabled: Boolean(currentById.get(item.id)?.enabled),
+            weight: currentById.get(item.id)?.weight ?? item.weight,
+            direction: currentById.get(item.id)?.direction ?? item.direction
+        }));
+        indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
     }
 
     function setIndicatorWeight(id, value) {
@@ -1221,7 +1499,8 @@
         const runDimensionWeights = { ...dimensionWeights };
         const snapshot = indicators.map((item) => ({ ...item }));
         const enrichedSnapshot = await loadIndicatorInputs(snapshot);
-        const missingAfterLoad = requiredGroups.find((group) => selectedIndicatorsFor(group, enrichedSnapshot).length === 0);
+        const missingAfterLoad = analysisRequiredGroups(enrichedSnapshot)
+            .find((group) => selectedIndicatorsFor(group, enrichedSnapshot).length === 0);
         if (missingAfterLoad) {
             analysisMessage = `분석을 실행할 수 없습니다. ${missingAfterLoad} 영역의 입력자료를 읽지 못했습니다.`;
             running = false;
@@ -1232,9 +1511,14 @@
         const result = computeAnalysis(enrichedSnapshot);
         setTimeout(() => {
             const validCells = result.gridResult?.stats?.validCells;
-            const nextAnalysisMessage = Number.isFinite(validCells)
-                ? `${runGridUnit} 기준 격자 ${validCells.toLocaleString()}셀 · ${result.indicators.length}개 지표로 Risk 분석 완료`
-                : `${runGridUnit} 기준 격자 · ${result.indicators.length}개 지표로 Risk 분석 완료`;
+            const riskModeLabel = result.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk';
+            const usesDemoFallback = result.indicators.some((item) => item.demoFallback);
+            const completedMessage = Number.isFinite(validCells)
+                ? `${runGridUnit} 기준 격자 ${validCells.toLocaleString()}셀 · ${result.indicators.length}개 지표로 ${riskModeLabel} 분석 완료`
+                : `${runGridUnit} 기준 격자 · ${result.indicators.length}개 지표로 ${riskModeLabel} 분석 완료`;
+            const nextAnalysisMessage = usesDemoFallback
+                ? `${completedMessage} · 공개 시연용 대체 패턴 포함(실제 Hazard 원자료 아님)`
+                : completedMessage;
 
             alternatives = alternatives.map((alternative, index) => index === analysisAlternativeIndex
                 ? {
@@ -1248,7 +1532,7 @@
                     appliedIndicators: result.indicators.map((item) => ({ ...item })),
                     analysisDone: true,
                     analysisMessage: nextAnalysisMessage,
-                    parcelCandidateMessage: 'Risk 분석 완료. 지도에서 필지 후보 도출을 실행하세요.',
+                    parcelCandidateMessage: 'Risk 분석 완료. 지도에서 실천권역도출하기를 실행하세요.',
                     selectedCandidate: 0,
                     detailCandidateKey: null,
                     activeLayer,
@@ -1263,7 +1547,7 @@
                 selectedCandidate = 0;
                 detailCandidateKey = null;
                 focusedCandidate = null;
-                parcelCandidateMessage = 'Risk 분석 완료. 지도에서 필지 후보 도출을 실행하세요.';
+                parcelCandidateMessage = 'Risk 분석 완료. 지도에서 실천권역도출하기를 실행하세요.';
                 analysisMessage = nextAnalysisMessage;
                 analysisDone = true;
                 activeStep = 4;
@@ -1275,10 +1559,10 @@
     }
 
     function handleParcelCandidates(candidates, message, sourceAlternativeId = activeAlternativeId) {
-        const nextCandidates = Array.isArray(candidates) ? candidates : [];
+        const nextCandidates = enrichPracticeDistricts(Array.isArray(candidates) ? candidates : []);
         const nextMessage = message || (nextCandidates.length
-            ? `${nextCandidates.length}개 필지 후보 클러스터 도출`
-            : '필지 후보가 아직 없습니다.');
+            ? `실천권역 내 ${nextCandidates.length}개 유형별 실천지구 도출`
+            : '실천권역이 아직 없습니다.');
         const targetIndex = alternatives.findIndex((alternative) => alternative.id === sourceAlternativeId);
         if (targetIndex < 0) return;
         const safeTargetIndex = targetIndex;
@@ -1440,6 +1724,11 @@
             area: candidate.area,
             reason: candidate.reason,
             basis: candidate.basis,
+            practiceType: candidate.practiceType,
+            practiceTypeLabel: candidate.practiceTypeLabel,
+            classificationVersion: candidate.classificationVersion,
+            classificationRule: candidate.classificationRule,
+            classificationReason: candidate.classificationReason,
             parcelCount,
             hotspotCount: candidate.hotspotCount,
             totalAreaSqm: candidate.totalAreaSqm,
@@ -1471,6 +1760,11 @@
             v: candidate.v,
             reason: candidate.reason,
             basis: candidate.basis,
+            practiceType: candidate.practiceType,
+            practiceTypeLabel: candidate.practiceTypeLabel,
+            classificationVersion: candidate.classificationVersion,
+            classificationRule: candidate.classificationRule,
+            classificationReason: candidate.classificationReason,
             parcelCount,
             hotspotCount: candidate.hotspotCount,
             totalAreaSqm: candidate.totalAreaSqm,
@@ -1748,13 +2042,13 @@
     }
 
     function resetActiveAlternative() {
-        const nextMessage = '현재 대안의 Risk 분석 결과와 필지 후보를 초기화했습니다. 지표 설정을 확인한 뒤 다시 실행하세요.';
+        const nextMessage = '현재 대안의 Risk 분석 결과와 실천권역을 초기화했습니다. 지표 설정을 확인한 뒤 다시 실행하세요.';
 
         analysisResult = null;
         appliedIndicators = [];
         analysisDone = false;
         analysisMessage = nextMessage;
-        parcelCandidateMessage = 'Risk 분석 후 지도에서 필지 후보를 도출하세요.';
+        parcelCandidateMessage = 'Risk 분석 후 지도에서 실천권역도출하기를 실행하세요.';
         selectedCandidate = 0;
         detailCandidateKey = null;
         focusedCandidate = null;
@@ -1809,7 +2103,7 @@
         alternatives = sourceAlternatives;
         const payload = buildDepartmentHandoffPayload(sourceAlternatives);
         if (!payload.candidates.length) {
-            handoffMessage = '전달할 필지 후보가 없습니다. Risk 분석 후 필지 후보 도출을 먼저 실행하세요.';
+            handoffMessage = '전달할 실천권역이 없습니다. Risk 분석 후 실천권역도출하기를 먼저 실행하세요.';
             return;
         }
 
@@ -1966,10 +2260,7 @@
         }
         indicatorDialog = { ...indicatorDialog, fileName: file.name, uploadedValues: null, uploadedMeta: null, processing: true, error: '' };
         try {
-            const [{ default: parseGeoraster }, { default: proj4 }] = await Promise.all([
-                import('georaster'),
-                import('proj4')
-            ]);
+            const { default: parseGeoraster } = await import('georaster');
             proj4.defs('EPSG:5179', '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs');
             proj4.defs('EPSG:5186', '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs');
             const raster = await parseGeoraster(await file.arrayBuffer());
@@ -2092,7 +2383,7 @@
             appliedIndicators: [],
             analysisDone: false,
             analysisMessage: '새 대안이 추가되었습니다. 설정을 확인한 뒤 Risk 분석을 실행하세요.',
-            parcelCandidateMessage: 'Risk 분석 후 지도에서 필지 후보를 도출하세요.',
+            parcelCandidateMessage: 'Risk 분석 후 지도에서 실천권역도출하기를 실행하세요.',
             selectedCandidate: 0,
             detailCandidateKey: null,
             activeLayer: 'Risk'
@@ -2210,8 +2501,26 @@
                     <p>{config.heroDescription}</p>
                 </div>
                 <div class="hero-actions">
-                    <label>분석 대상 지역<input value={region} readonly /></label>
-                    <label>행정구역 코드<input value={regionCode} readonly /></label>
+                    {#if nationalLab}
+                        <label>시·도
+                            <select value={selectedSido} onchange={(event) => setNationalSido(event.currentTarget.value)}>
+                                {#each sidos as sido}
+                                    <option value={sido}>{sido}</option>
+                                {/each}
+                            </select>
+                        </label>
+                        <label>시·군·구
+                            <select value={regionCode} onchange={(event) => setNationalRegion(event.currentTarget.value)}>
+                                {#each availableRegions as regionOption}
+                                    <option value={regionOption.code}>{getSigunguLabel(regionOption)}</option>
+                                {/each}
+                            </select>
+                        </label>
+                        <label>선택 행정구역<input value={`${region} · ${regionCode}`} readonly /></label>
+                    {:else}
+                        <label>분석 대상 지역<input value={region} readonly /></label>
+                        <label>행정구역 코드<input value={regionCode} readonly /></label>
+                    {/if}
                     <small>{config.sampleNotice}</small>
                     <div class="request-manager">
                         <button type="button" class="request-manager-toggle" onclick={() => requestListOpen = !requestListOpen}>
@@ -2263,6 +2572,26 @@
                 </ol>
             </aside>
 
+            {#if nationalLab}
+                <section class="lab-analysis-runner" class:complete={analysisDone} aria-label="기후위험 실험실 분석 실행">
+                    <div class="lab-analysis-runner-copy">
+                        <span>기존 실천권역 분석 기능</span>
+                        <strong>{region} · {hazardDatasetMode === 'observed' ? '2021~2025 최근 5년' : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod}`}</strong>
+                        <small>{analysisDone ? analysisMessage : 'H01~H10 기후위험 지표와 기존 노출·취약성·적응역량 지표를 결합해 Risk를 계산합니다.'}</small>
+                    </div>
+                    <div class="lab-analysis-flow" aria-label="분석 흐름">
+                        <span class:active={!analysisDone}><b>1</b> Risk 분석</span>
+                        <i aria-hidden="true">→</i>
+                        <span class:active={analysisDone}><b>2</b> 실천권역 도출</span>
+                        <i aria-hidden="true">→</i>
+                        <span><b>3</b> 유형별 실천지구</span>
+                    </div>
+                    <button type="button" onclick={runAnalysis} disabled={running}>
+                        {running ? 'Risk 계산 중...' : analysisDone ? 'Risk 다시 분석하기' : 'Risk 분석 실행'}
+                    </button>
+                </section>
+            {/if}
+
             <section class="content-grid">
                 <div class="panel indicator-panel">
                     <div class="panel-head">
@@ -2275,6 +2604,28 @@
                             <strong>단위격자 기준으로 지표를 요약해 Risk를 계산합니다.</strong>
                             <p>{analysisMessage}</p>
                         </div>
+                        <label>Hazard 기준기간
+                            <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
+                                <option value="observed">최근 5년 · 2021~2025</option>
+                                <option value="future">미래 시나리오 · 2026~2100</option>
+                            </select>
+                        </label>
+                        {#if hazardDatasetMode === 'future'}
+                            <label>SSP 시나리오
+                                <select value={hazardScenario} onchange={(event) => setHazardScenario(event.currentTarget.value)}>
+                                    {#each hazardScenarios as scenario}
+                                        <option value={scenario}>{scenario.toUpperCase()}</option>
+                                    {/each}
+                                </select>
+                            </label>
+                            <label>미래 기간
+                                <select value={hazardFuturePeriod} onchange={(event) => setHazardFuturePeriod(event.currentTarget.value)}>
+                                    {#each hazardFuturePeriods as period}
+                                        <option value={period}>{period}</option>
+                                    {/each}
+                                </select>
+                            </label>
+                        {/if}
                         <label>분석 단위 격자
                             <select value={gridUnit} onchange={(event) => setGridUnit(event.currentTarget.value)}>
                                 {#each gridOptions as option}
@@ -2370,7 +2721,7 @@
                                 onParcelCandidateFocus={handleMapParcelCandidateFocus}
                             />
                             <section class="score-row map-score-overlay" aria-label="리스크 평가 결과">
-                                <div class="score-card risk"><span>종합 위험도</span><strong>{formatScore(resultRiskScore)}</strong><small>{analysisDone ? `${analysisResult.gridUnit} 분석 결과` : '분석 실행 대기'}</small></div>
+                                <div class="score-card risk"><span>{analysisResult?.hazardOnly ? '예비 위험도' : '종합 위험도'}</span><strong>{formatScore(resultRiskScore)}</strong><small>{analysisDone ? `${analysisResult.gridUnit} · ${analysisResult.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk'}` : '분석 실행 대기'}</small></div>
                                 <div class="score-card"><span><b class="dot h"></b>기후위험 H</span><strong>{formatScore(resultScores.H)}</strong><label class="dimension-weight">통합 가중치<input type="number" min="0" step="0.1" value={dimensionWeights.H} oninput={(event) => setDimensionWeight('H', event.currentTarget.value)} /></label><div class="bar"><i style={`width:${(resultScores.H || 0) * 100}%`}></i></div></div>
                                 <div class="score-card"><span><b class="dot e"></b>노출 E</span><strong>{formatScore(resultScores.E)}</strong><label class="dimension-weight">통합 가중치<input type="number" min="0" step="0.1" value={dimensionWeights.E} oninput={(event) => setDimensionWeight('E', event.currentTarget.value)} /></label><div class="bar"><i style={`width:${(resultScores.E || 0) * 100}%`}></i></div></div>
                                 <div class="score-card"><span><b class="dot v"></b>취약성 V</span><strong>{formatScore(resultScores.V)}</strong><label class="dimension-weight">통합 가중치<input type="number" min="0" step="0.1" value={dimensionWeights.V} oninput={(event) => setDimensionWeight('V', event.currentTarget.value)} /></label><div class="bar"><i style={`width:${(resultScores.V || 0) * 100}%`}></i></div></div>
@@ -2382,28 +2733,46 @@
 
             <section class="panel candidates wide-candidates">
                 <div class="panel-head">
-                    <div><span class="section-number">02</span><h2>우선관리 후보지</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 필지 후보 도출을 실행하면 실제 후보지가 표시됩니다.'}</p></div>
-                    <span class="count-badge">{candidateList.length}개 후보</span>
+                    <div><span class="section-number">02</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
+                    <span class="count-badge">실천지구 {candidateList.length}개</span>
                 </div>
                 {#if candidateList.length}
-                    <div class="candidate-list">
-                        {#each candidateList.slice(0, 10) as candidate, index}
-                            <article class="candidate-card" class:active={selectedCandidate === index}>
-                                <button class="candidate-main" type="button" onclick={() => selectCandidate(candidate, index)}>
-                                    <span class="rank">{String(candidate.rank).padStart(2, '0')}</span>
-                                    <span><strong>{candidate.name}</strong><small>{candidate.area}</small></span>
-                                    <b>{formatScore(candidate.risk)}</b>
-                                </button>
-                                <button class="candidate-detail-toggle" type="button" title="후보지 상세보기" aria-label={`${candidate.name} 상세보기`} onclick={() => showCandidateDetail(candidate, index)}>!</button>
-                            </article>
+                    <div class="practice-type-note">
+                        <strong>시연용 분류 v1</strong>
+                        <span>공간 규모가 큰 권역은 계획행정수단, Risk 집중 권역은 시설지원사업, 소규모 생활권은 시민실천으로 임시 분류했습니다.</span>
+                    </div>
+                    <div class="practice-district-groups">
+                        {#each practiceDistrictGroups as group}
+                            <section class="practice-district-group" style={`--practice-color:${group.color};--practice-fill:${group.fillColor}`}>
+                                <header>
+                                    <i aria-hidden="true"></i>
+                                    <span><strong>{group.label}</strong><small>{group.shortDescription}</small></span>
+                                    <b>{group.candidates.length}개</b>
+                                </header>
+                                <div class="candidate-list">
+                                    {#each group.candidates as candidate}
+                                        {@const index = candidateList.findIndex((item) => candidateIdentity(item) === candidateIdentity(candidate))}
+                                        <article class="candidate-card" class:active={selectedCandidate === index}>
+                                            <button class="candidate-main" type="button" onclick={() => selectCandidate(candidate, index)}>
+                                                <span class="rank">{String(candidate.districtNumber || candidate.rank).padStart(2, '0')}</span>
+                                                <span><strong>{candidate.name}</strong><small>{candidate.area}</small></span>
+                                                <b>{formatScore(candidate.risk)}</b>
+                                            </button>
+                                            <button class="candidate-detail-toggle" type="button" title="분류 사유 보기" aria-label={`${candidate.name} 분류 사유 보기`} onclick={() => showCandidateDetail(candidate, index)}>!</button>
+                                        </article>
+                                    {/each}
+                                </div>
+                            </section>
                         {/each}
                     </div>
                     {#if detailCandidateItem}
-                        <aside class="candidate-detail-panel" aria-label="후보지 상세보기">
+                        <aside class="candidate-detail-panel" aria-label="실천지구 분류 상세보기" style={`--practice-color:${detailCandidateItem.practiceTypeColor}`}>
                             <div>
-                                <span>후보지 상세</span>
+                                <span>실천지구 분류 사유 · 시연용</span>
                                 <strong>{detailCandidateItem.name}</strong>
-                                <small>{detailCandidateItem.reason || detailCandidateItem.area}</small>
+                                <em>{detailCandidateItem.practiceTypeLabel}</em>
+                                <small>{detailCandidateItem.classificationReason}</small>
+                                <small class="classification-rule">적용 규칙: {detailCandidateItem.classificationRule}</small>
                             </div>
                             <dl>
                                 <div><dt>총 필지 면적</dt><dd>{candidateTotalAreaLabel(detailCandidateItem)}</dd></div>
@@ -2417,8 +2786,8 @@
                     {/if}
                 {:else}
                     <div class="empty-candidate-state">
-                        <strong>필지 후보 도출 대기</strong>
-                        <span>Risk 분석과 필지 후보 도출이 끝나면 실제 핫스팟-필지 교차 후보가 여기에 표시됩니다.</span>
+                        <strong>실천권역 도출 대기</strong>
+                        <span>Risk 분석과 실천권역 도출이 끝나면 실천권역을 구성하는 실제 핫스팟-필지 교차 실천지구가 3개 시연 유형으로 표시됩니다.</span>
                     </div>
                 {/if}
             </section>

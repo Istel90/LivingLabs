@@ -1,7 +1,5 @@
 <script>
     import { onMount } from 'svelte';
-    import html2canvas from 'html2canvas';
-    import { toBlob as domToImageBlob } from 'html-to-image';
     import {
         getBoundaryFeaturesForRegionCode,
         getRegionByCode,
@@ -10,7 +8,6 @@
     } from '$lib/data/administrativeRegions.js';
     import { enrichPracticeDistricts, PRACTICE_TYPE_META } from '$lib/data/practiceDistricts.js';
     import {
-        canUseVWorldData,
         createVWorldDataUrl,
         createVWorldWmsOptions,
         hasVWorldApiKey,
@@ -59,7 +56,6 @@
     };
 
     let mapElement;
-    let mapWrapElement;
     let map;
     let mapLoading = $state(true);
     let marker;
@@ -82,8 +78,6 @@
     let cadastralVisible = $state(false);
     let parcelCandidateRunning = $state(false);
     let parcelCandidateStatus = $state('Risk 분석 후 실행');
-    let mapExporting = $state(false);
-    let mapExportStatus = $state('');
     let parcelCandidateLegend = $state([]);
     let focusedParcelCandidateKey = $state('');
     let renderedParcelCandidateScope = $state('');
@@ -640,10 +634,7 @@
     }
 
     function hotspotRequestBoxes(points) {
-        // Keep each VWorld query small enough to stay below the 1,000 feature
-        // response cap in dense urban blocks. Large boxes regularly return
-        // thousands of parcels and silently lose the parcels after page one.
-        const tileSize = 0.0024;
+        const tileSize = 0.006;
         const boxes = new Map();
 
         points.forEach((hotspot) => {
@@ -670,12 +661,12 @@
 
         return [...boxes.values()]
             .sort((left, right) => (right.maxRisk - left.maxRisk) || (right.count - left.count))
-            .slice(0, 20)
+            .slice(0, 12)
             .map((box) => ({
-                minLng: box.minLng - 0.00035,
-                minLat: box.minLat - 0.00035,
-                maxLng: box.maxLng + 0.00035,
-                maxLat: box.maxLat + 0.00035,
+                minLng: box.minLng - 0.0012,
+                minLat: box.minLat - 0.0012,
+                maxLng: box.maxLng + 0.0012,
+                maxLat: box.maxLat + 0.0012,
                 count: box.count
             }));
     }
@@ -696,157 +687,59 @@
         return new Promise((resolve) => window.setTimeout(resolve, 0));
     }
 
-    function wait(milliseconds) {
-        return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-    }
+    async function fetchJsonWithTimeout(url, timeoutMs = 9000) {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), timeoutMs);
 
-    function isTransientVWorldStatus(status) {
-        return [408, 425, 429, 500, 502, 503, 504].includes(Number(status));
-    }
-
-    async function fetchJsonWithRetry(url, { timeoutMs = 12000, retries = 1 } = {}) {
-        let lastError;
-
-        for (let attempt = 0; attempt <= retries; attempt += 1) {
-            const controller = new AbortController();
-            const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-
-            try {
-                const response = await fetch(url, {
-                    signal: controller.signal,
-                    headers: { Accept: 'application/json' }
-                });
-                const text = await response.text();
-
-                if (!response.ok) {
-                    const error = new Error(`VWorld ${response.status}`);
-                    error.status = response.status;
-                    throw error;
-                }
-
-                try {
-                    return JSON.parse(text);
-                } catch {
-                    throw new Error('VWorld invalid-json');
-                }
-            } catch (error) {
-                lastError = error?.name === 'AbortError' ? new Error('request-timeout') : error;
-                const retryable = error?.name === 'AbortError' ||
-                    error instanceof TypeError ||
-                    isTransientVWorldStatus(error?.status);
-                if (!retryable || attempt >= retries) throw lastError;
-                await wait(450 * (attempt + 1));
-            } finally {
-                window.clearTimeout(timer);
-            }
+        try {
+            const response = await fetch(url, { signal: controller.signal });
+            if (!response.ok) throw new Error(`VWorld ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            if (error?.name === 'AbortError') throw new Error('request-timeout');
+            throw error;
+        } finally {
+            window.clearTimeout(timer);
         }
-
-        throw lastError || new Error('VWorld request-failed');
     }
 
-    async function fetchVWorldCadastralFeatures(
-        boxes,
-        { timeoutMs = 75000, concurrency = 1, onProgress = () => {} } = {}
-    ) {
+    async function fetchVWorldCadastralFeatures(boxes, { timeoutMs = 45000 } = {}) {
         const featuresById = new Map();
-        // VWorld intermittently returns 502 for large cadastral payloads even when
-        // the same extent succeeds in smaller pages. Keep each payload modest and
-        // page through the tile instead of silently losing the tail of the result.
-        const pageSize = 400;
-        const maxPagesPerBox = 3;
-        const maxFeatures = 8000;
+        const pageSize = 650;
+        const maxPages = 1;
+        const maxFeatures = 5000;
         const deadline = Date.now() + timeoutMs;
-        const queue = [...boxes];
-        const failures = [];
-        let completed = 0;
-        let nextRequestAt = 0;
 
-        async function throttleVWorldRequest() {
-            const delay = nextRequestAt - Date.now();
-            if (delay > 0) await wait(delay);
-        }
-
-        async function fetchBox(box) {
+        for (const box of boxes) {
+            if (featuresById.size >= maxFeatures) break;
             if (Date.now() > deadline) throw new Error('request-timeout');
-            const geomFilter = `BOX(${box.minLng},${box.minLat},${box.maxLng},${box.maxLat})`;
-            const features = [];
-            let total = 0;
-
-            for (let page = 1; page <= maxPagesPerBox; page += 1) {
+            for (let page = 1; page <= maxPages; page += 1) {
                 if (Date.now() > deadline) throw new Error('request-timeout');
-                try {
-                    const url = createVWorldDataUrl(VWORLD_DATASETS.cadastral, {
-                        geomFilter,
-                        size: pageSize,
-                        page
-                    });
-                    const remainingTime = Math.max(3000, Math.min(12000, deadline - Date.now()));
-                    await throttleVWorldRequest();
-                    let payload;
-                    try {
-                        payload = await fetchJsonWithRetry(url, { timeoutMs: remainingTime });
-                    } finally {
-                        // VWorld becomes unreliable under back-to-back cadastral
-                        // requests. Leave breathing room before the next page/tile.
-                        nextRequestAt = Date.now() + 900;
-                    }
-                    if (payload?.response?.status === 'ERROR') {
-                        const code = payload.response.error?.code || 'API_ERROR';
-                        const text = payload.response.error?.text || 'VWorld 데이터 API 오류';
-                        const error = new Error(`VWorld ${code}: ${text}`);
-                        error.vworldCode = code;
-                        throw error;
-                    }
-
-                    const pageFeatures = extractVWorldFeatures(payload);
-                    features.push(...pageFeatures);
-                    total = Number(payload?.response?.record?.total) || pageFeatures.length;
-                    if (pageFeatures.length < pageSize || features.length >= total || Date.now() > deadline - 3000) break;
-                } catch (error) {
-                    if (page === 1 || !features.length) throw error;
-                    return { features, truncated: true };
+                const geomFilter = `BOX(${box.minLng},${box.minLat},${box.maxLng},${box.maxLat})`;
+                const url = createVWorldDataUrl(VWORLD_DATASETS.cadastral, {
+                    geomFilter,
+                    size: pageSize,
+                    page
+                });
+                const payload = await fetchJsonWithTimeout(url);
+                if (payload?.response?.status === 'ERROR') {
+                    const code = payload.response.error?.code || 'API_ERROR';
+                    const text = payload.response.error?.text || 'VWorld 데이터 API 오류';
+                    throw new Error(`VWorld ${code}: ${text}`);
                 }
-            }
+                const features = extractVWorldFeatures(payload);
+                features.forEach((feature) => {
+                    const id = featureId(feature);
+                    if (id) featuresById.set(id, feature);
+                });
 
-            return { features, truncated: total > features.length };
-        }
-
-        async function worker() {
-            while (queue.length && featuresById.size < maxFeatures) {
-                const box = queue.shift();
-                try {
-                    const result = await fetchBox(box);
-                    const features = result.features;
-                    features.forEach((feature) => {
-                        const id = featureId(feature);
-                        if (id) featuresById.set(id, feature);
-                    });
-                    if (result.truncated) failures.push(new Error('VWorld response-truncated'));
-                } catch (error) {
-                    failures.push(error);
-                } finally {
-                    completed += 1;
-                    onProgress({ completed, total: boxes.length, failed: failures.length, features: featuresById.size });
-                    await yieldToBrowser();
-                }
+                await yieldToBrowser();
+                if (featuresById.size >= maxFeatures) break;
+                if (features.length < pageSize) break;
             }
         }
 
-        await Promise.all(
-            Array.from({ length: Math.min(concurrency, Math.max(1, boxes.length)) }, () => worker())
-        );
-
-        if (!featuresById.size && failures.length) {
-            const timeoutFailure = failures.find((error) => error?.message === 'request-timeout');
-            throw timeoutFailure || failures[0];
-        }
-
-        return {
-            features: [...featuresById.values()],
-            failureCount: failures.length,
-            completedCount: completed,
-            requestedCount: boxes.length
-        };
+        return [...featuresById.values()];
     }
 
     function parcelLabel(feature) {
@@ -1105,7 +998,7 @@
             (candidate.pnuList || []).length &&
             candidate.bounds
         );
-        if (!missingGeometry.length || !canUseVWorldData()) return;
+        if (!missingGeometry.length || !hasVWorldApiKey()) return;
 
         const requestBoxes = missingGeometry.map(candidateRequestBox).filter(Boolean);
         if (!requestBoxes.length) return;
@@ -1115,13 +1008,7 @@
         parcelCandidateStatus = `저장된 필지 도형 복원 중 · ${missingGeometry.length}개 후보`;
 
         try {
-            const fetchResult = await fetchVWorldCadastralFeatures(requestBoxes, {
-                timeoutMs: 60000,
-                onProgress: ({ completed, total, failed }) => {
-                    parcelCandidateStatus = `저장된 필지 도형 복원 중 · ${completed}/${total} 구역${failed ? ` · ${failed}개 재조회 실패` : ''}`;
-                }
-            });
-            const fetchedFeatures = fetchResult.features;
+            const fetchedFeatures = await fetchVWorldCadastralFeatures(requestBoxes, { timeoutMs: 45000 });
             if (parcelCandidateRunId !== runId || parcelCandidateLayerScope(parcelCandidates) !== scope) return;
 
             const featureById = new Map(fetchedFeatures.map((feature) => [String(featureId(feature)), feature]));
@@ -1357,8 +1244,8 @@
             parcelCandidateStatus = 'Risk 분석 결과가 먼저 필요합니다.';
             return;
         }
-        if (!canUseVWorldData()) {
-            parcelCandidateStatus = 'VWorld 필지 API 연결 주소가 설정되지 않았습니다.';
+        if (!hasVWorldApiKey()) {
+            parcelCandidateStatus = 'VWorld API 키가 없어 필지 geometry를 가져올 수 없습니다.';
             return;
         }
 
@@ -1373,12 +1260,7 @@
 
             const requestBoxes = hotspotRequestBoxes(hotspots);
             parcelCandidateStatus = `연속지적도 API 요청 중 · ${requestBoxes.length}개 구역`;
-            const fetchResult = await fetchVWorldCadastralFeatures(requestBoxes, {
-                onProgress: ({ completed, total, failed, features }) => {
-                    parcelCandidateStatus = `연속지적도 API 조회 · ${completed}/${total} 구역 · ${features.toLocaleString()}필지${failed ? ` · ${failed}개 구역 재조회 실패` : ''}`;
-                }
-            });
-            const cadastralFeatures = fetchResult.features;
+            const cadastralFeatures = await fetchVWorldCadastralFeatures(requestBoxes);
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             if (!cadastralFeatures.length) throw new Error('parcel-empty');
 
@@ -1407,17 +1289,17 @@
                 featureLimit: features?.length || 0,
                 featureTotal: features?.length || 0
             }));
-            const partialLabel = fetchResult.failureCount
-                ? ` · ${fetchResult.failureCount}개 구역은 응답 누락으로 부분 분석`
-                : '';
             const message = candidates.length
-                ? `실천권역 내 ${candidates.length}개 실천지구 도출 · ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류${partialLabel}`
+                ? `실천권역 내 ${candidates.length}개 실천지구 도출 · ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류`
                 : '교차된 필지가 있으나 실천지구 기준을 충족하지 못했습니다.';
             parcelCandidateStatus = message;
             onParcelCandidatesChange(slimCandidates, message, runCandidateContextKey);
         } catch (error) {
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             console.error(error);
+            parcelCandidateLayer?.remove();
+            parcelCandidateLayer = null;
+            parcelCandidateLegend = [];
             const message = error?.message === 'parcel-empty'
                 ? '연속지적도 API에서 필지 geometry를 받지 못했습니다.'
                 : error?.message === 'intersection-empty'
@@ -1430,12 +1312,7 @@
                             ? error.message
                             : '실천권역 도출 실패 · VWorld API 응답을 확인하세요.';
             parcelCandidateStatus = message;
-            // A transient API failure must not erase a previously completed
-            // analysis. Keep the last valid candidates visible and only report
-            // the failed refresh in the status area.
-            if (!(parcelCandidates || []).length) {
-                onParcelCandidatesChange([], message, runCandidateContextKey);
-            }
+            onParcelCandidatesChange([], message, runCandidateContextKey);
         } finally {
             if (parcelCandidateRunId === runId) parcelCandidateRunning = false;
         }
@@ -1756,14 +1633,11 @@
                     pane: 'selectedBoundaryPane',
                     interactive: false,
                     style: {
-                        color: '#172033',
-                        weight: 4,
-                        opacity: 0.96,
-                        dashArray: '12 8',
-                        lineCap: 'round',
-                        lineJoin: 'round',
-                        fillColor: '#ffffff',
-                        fillOpacity: 0.04
+                        color: '#2563eb',
+                        weight: 3,
+                        opacity: 1,
+                        fillColor: '#60a5fa',
+                        fillOpacity: 0.22
                     }
                 }
             ).bindTooltip(`${label} 행정경계`, { sticky: true });
@@ -1803,180 +1677,6 @@
             layer.addTo(map);
         } else {
             layer.remove();
-        }
-    }
-
-    function mapExportFileName() {
-        const region = String(regionName || regionCode || '지역').replace(/[\\/:*?"<>|]+/g, '-').trim();
-        const layer = gridLayerLabels[selectedGridLayer] || selectedGridLayer || 'Risk';
-        const date = new Date().toISOString().slice(0, 10);
-        return `${region}_${layer}_결과지도_${date}.png`;
-    }
-
-    function withExportTimeout(promise, timeoutMs, message) {
-        let timer;
-        return Promise.race([
-            promise,
-            new Promise((_, reject) => {
-                timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
-            })
-        ]).finally(() => window.clearTimeout(timer));
-    }
-
-    function shouldIncludeExportNode(node, includeBaseMap = true) {
-        if (node?.dataset?.mapExportIgnore === 'true') return false;
-        if (includeBaseMap) return true;
-        return ![
-            'leaflet-tile-pane',
-            'leaflet-marker-pane',
-            'leaflet-shadow-pane'
-        ].some((className) => node?.classList?.contains(className));
-    }
-
-    function captureResultMapBlob(includeBaseMap = true) {
-        return domToImageBlob(mapWrapElement, {
-            backgroundColor: '#e8f3f5',
-            pixelRatio: Math.min(2, Math.max(1.5, window.devicePixelRatio || 1)),
-            cacheBust: false,
-            skipFonts: true,
-            filter: (node) => shouldIncludeExportNode(node, includeBaseMap)
-        });
-    }
-
-    function captureResultMapCanvas() {
-        return html2canvas(mapWrapElement, {
-            backgroundColor: '#e8f3f5',
-            scale: Math.min(2, Math.max(1.5, window.devicePixelRatio || 1)),
-            useCORS: true,
-            allowTaint: false,
-            logging: false,
-            imageTimeout: 3000,
-            ignoreElements: (element) => !shouldIncludeExportNode(element, false)
-        });
-    }
-
-    function exportErrorLabel(error) {
-        const message = String(error?.message || error || 'unknown-error')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .slice(0, 90);
-        return message || 'unknown-error';
-    }
-
-    async function waitForMapTiles(timeoutMs = 5000) {
-        const startedAt = Date.now();
-        while (Date.now() - startedAt < timeoutMs) {
-            const tiles = [...(mapElement?.querySelectorAll?.('.leaflet-tile') || [])];
-            const pending = tiles.some((tile) => !tile.complete);
-            if (!pending) return;
-            await new Promise((resolve) => window.setTimeout(resolve, 120));
-        }
-    }
-
-    function disableExportBlurEffects() {
-        return [...mapWrapElement.querySelectorAll(
-            '.map-refresh-loading, .layer-panel, .analysis-legend, .parcel-candidate-panel'
-        )].map((element) => {
-            const originalStyle = element.getAttribute('style');
-            element.style.setProperty('backdrop-filter', 'none', 'important');
-            element.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
-            return { element, originalStyle };
-        });
-    }
-
-    function restoreExportBlurEffects(snapshots) {
-        snapshots.forEach(({ element, originalStyle }) => {
-            if (originalStyle === null) {
-                element.removeAttribute('style');
-            } else {
-                element.setAttribute('style', originalStyle);
-            }
-        });
-    }
-
-    async function saveMapBlob(blob, fileHandle) {
-        if (fileHandle) {
-            const writable = await fileHandle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-            return '선택한 위치에 PNG 저장 완료';
-        }
-
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = mapExportFileName();
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        return '기본 다운로드 폴더에 PNG 저장 완료';
-    }
-
-    async function downloadResultMap() {
-        if (!mapWrapElement || !map || mapLoading || mapExporting) return;
-        mapExporting = true;
-
-        let fileHandle = null;
-        if (typeof window.showSaveFilePicker === 'function') {
-            mapExportStatus = '저장 위치 선택 중...';
-            try {
-                fileHandle = await window.showSaveFilePicker({
-                    suggestedName: mapExportFileName(),
-                    types: [{
-                        description: 'PNG 이미지',
-                        accept: { 'image/png': ['.png'] }
-                    }]
-                });
-            } catch (pickerError) {
-                if (pickerError?.name === 'AbortError') {
-                    mapExportStatus = 'PNG 저장을 취소했습니다.';
-                    mapExporting = false;
-                    return;
-                }
-                console.warn('Save picker unavailable; using the default download folder.', pickerError);
-            }
-        }
-
-        mapExportStatus = '결과 지도 이미지 생성 중...';
-        const exportBlurSnapshots = disableExportBlurEffects();
-
-        try {
-            await new Promise((resolve) => window.requestAnimationFrame(resolve));
-            map?.closePopup?.();
-            map?.invalidateSize?.({ pan: false });
-            await waitForMapTiles();
-            await new Promise((resolve) => window.setTimeout(resolve, 180));
-
-            let blob;
-            try {
-                blob = await withExportTimeout(captureResultMapBlob(true), 15000, 'full-map-export-timeout');
-                if (!blob) throw new Error('full-map-png-empty');
-            } catch (primaryError) {
-                console.warn('Full map capture failed; retrying with analysis layers only.', primaryError);
-                mapExportStatus = '배경지도 제외 후 결과 레이어 저장 중...';
-                try {
-                    blob = await withExportTimeout(captureResultMapBlob(false), 10000, 'layer-export-timeout');
-                    if (!blob) throw new Error('layer-png-empty');
-                } catch (secondaryError) {
-                    console.warn('DOM capture failed; retrying in compatibility mode.', secondaryError);
-                    mapExportStatus = '호환 모드로 결과 지도 저장 중...';
-                    const canvas = await withExportTimeout(captureResultMapCanvas(), 9000, 'compatibility-export-timeout');
-                    blob = await withExportTimeout(
-                        new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.95)),
-                        5000,
-                        'png-encoding-timeout'
-                    );
-                }
-            }
-            if (!blob) throw new Error('png-empty');
-            mapExportStatus = await saveMapBlob(blob, fileHandle);
-        } catch (error) {
-            console.error(error);
-            mapExportStatus = `이미지 저장 실패 · ${exportErrorLabel(error)}`;
-        } finally {
-            restoreExportBlurEffects(exportBlurSnapshots);
-            mapExporting = false;
         }
     }
 
@@ -2031,19 +1731,18 @@
 
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors',
-            maxZoom: 19,
-            crossOrigin: true
+            maxZoom: 19
         }).addTo(map);
 
         if (hasVWorldApiKey()) {
             sidoLayer = L.tileLayer
-                .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sidoBoundary, { opacity: 0.35, crossOrigin: true }));
+                .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sidoBoundary, { opacity: 0.35 }));
             sggLayer = L.tileLayer
-                .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sigunguBoundary, { opacity: 0.65, crossOrigin: true }));
+                .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sigunguBoundary, { opacity: 0.65 }));
             if (showCadastral) {
                 cadastralLayer = L.tileLayer.wms(
                     VWORLD_WMS_URL,
-                    createVWorldWmsOptions(VWORLD_WMS_LAYERS.cadastral, { opacity: 0.55, crossOrigin: true })
+                    createVWorldWmsOptions(VWORLD_WMS_LAYERS.cadastral, { opacity: 0.55 })
                 );
             }
             toggleLayer(sidoLayer, sidoBoundaryVisible);
@@ -2158,22 +1857,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </svelte:head>
 
-<div class="map-export-toolbar" data-map-export-ignore="true">
-    <div>
-        <strong>지도 이미지 내보내기</strong>
-        <small>현재 화면의 경계·위험도·실천지구를 PNG로 저장합니다.</small>
-    </div>
-    <button
-        class="map-export-button"
-        type="button"
-        disabled={mapExporting || mapLoading}
-        onclick={downloadResultMap}
-    >
-        {mapExporting ? 'PNG 생성 중...' : '⬇ 결과 지도 PNG 저장'}
-    </button>
-    {#if mapExportStatus}<span class="map-export-status" aria-live="polite">{mapExportStatus}</span>{/if}
-</div>
-<div class="region-map-wrap" bind:this={mapWrapElement}>
+<div class="region-map-wrap">
     <div class:locked-map={locked} class="region-map" bind:this={mapElement} style={`height:${height}`}></div>
     {#if mapLoading}
         <div class="map-refresh-loading" role="status" aria-live="polite">
@@ -2252,7 +1936,7 @@
                     <div class="parcel-candidate-tools">
                         <button
                             type="button"
-                            disabled={parcelCandidateRunning || !canUseVWorldData()}
+                            disabled={parcelCandidateRunning || !hasVWorldApiKey()}
                             onclick={deriveParcelCandidates}
                         >
                             {parcelCandidateRunning ? '실천권역 분석 중...' : '실천권역도출하기'}
@@ -2290,10 +1974,7 @@
     {/if}
     <div class="layer-panel">
         <strong>베이스·행정 레이어</strong>
-        <span class="local-boundary">
-            <i aria-hidden="true"></i>
-            {selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}
-        </span>
+        <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
         <label>
             <input
                 type="checkbox"
@@ -2336,76 +2017,6 @@
         border: 1px solid #d9e7ee;
         border-radius: 1rem;
         background: #e8f3f5;
-    }
-
-    .map-export-toolbar {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: .75rem;
-        margin-bottom: .6rem;
-        border: 1px solid rgb(15 118 110 / 28%);
-        border-radius: .85rem;
-        background: #ecfdf5;
-        padding: .7rem .8rem;
-        box-shadow: 0 6px 18px rgb(15 23 42 / 10%);
-    }
-
-    .map-export-toolbar > div {
-        display: grid;
-        gap: .14rem;
-        min-width: 0;
-    }
-
-    .map-export-toolbar strong {
-        color: #065f56;
-        font-size: .78rem;
-        font-weight: 950;
-    }
-
-    .map-export-toolbar small {
-        overflow: hidden;
-        color: #475569;
-        font-size: .66rem;
-        font-weight: 750;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .map-export-toolbar .map-export-button {
-        border: 0;
-        border-radius: .65rem;
-        background: #0f766e;
-        color: #ffffff;
-        padding: .62rem .82rem;
-        box-shadow: 0 8px 18px rgb(15 118 110 / 22%);
-        font-size: .72rem;
-        font-weight: 900;
-        white-space: nowrap;
-        cursor: pointer;
-    }
-
-    .map-export-toolbar .map-export-button:disabled {
-        opacity: .62;
-        cursor: wait;
-    }
-
-    .map-export-toolbar .map-export-status {
-        grid-column: 1 / -1;
-        color: #0f766e;
-        font-size: .66rem;
-        font-weight: 900;
-        line-height: 1.35;
-    }
-
-    @media (max-width: 640px) {
-        .map-export-toolbar {
-            grid-template-columns: 1fr;
-        }
-
-        .map-export-toolbar .map-export-button {
-            width: 100%;
-        }
     }
 
     .map-refresh-loading {
@@ -2632,13 +2243,6 @@
         cursor: pointer;
     }
 
-    .parcel-candidate-tools .map-export-button {
-        border: 1px solid #0f766e;
-        background: #ffffff;
-        color: #0f766e;
-    }
-
-
     .parcel-candidate-tools button:disabled {
         opacity: .58;
         cursor: wait;
@@ -2650,13 +2254,6 @@
         font-weight: 800;
         line-height: 1.35;
     }
-    .parcel-candidate-tools .map-export-status {
-        color: #0f766e;
-        font-size: .64rem;
-        font-weight: 900;
-        line-height: 1.3;
-    }
-
 
     .parcel-candidate-legend {
         margin-top: .65rem;
@@ -2709,13 +2306,13 @@
         height: .66rem;
         border-radius: 999px;
         background: var(--practice-color, #f97316);
-        box-shadow: 0 0 0 3px rgb(249 115 22 / 18%);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--practice-color, #f97316) 18%, transparent);
     }
 
     .candidate-legend-items button.priority i,
     .candidate-legend-items button.active i {
         background: var(--practice-color, #dc2626);
-        box-shadow: 0 0 0 3px rgb(220 38 38 / 20%);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--practice-color, #dc2626) 20%, transparent);
     }
 
     .candidate-legend-items b {
@@ -2780,7 +2377,7 @@
         height: .62rem;
         border-radius: 999px;
         background: var(--legend-color);
-        box-shadow: 0 0 0 3px rgb(15 118 110 / 18%);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--legend-color) 18%, transparent);
     }
 
     .legend-items b {
@@ -2825,17 +2422,6 @@
     }
 
     .local-boundary {
-        display: flex;
-        align-items: center;
-        gap: .42rem;
-        color: #172033 !important;
-    }
-
-    .local-boundary i {
-        display: inline-block;
-        width: 2rem;
-        height: 0;
-        border-top: 3px dashed #172033;
-        filter: drop-shadow(0 1px 0 #ffffff);
+        color: #047857 !important;
     }
 </style>
