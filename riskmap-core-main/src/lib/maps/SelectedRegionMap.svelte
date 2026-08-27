@@ -268,7 +268,9 @@
                     logging: false,
                     backgroundColor: '#e8f3f5',
                     scale: Math.min(2.5, Math.max(2, window.devicePixelRatio || 1)),
-                    ignoreElements: (element) => element.hasAttribute?.('data-map-export-ignore')
+                    ignoreElements: (element) =>
+                        element.hasAttribute?.('data-map-export-ignore') ||
+                        element.classList?.contains('leaflet-control-zoom')
                 });
             } finally {
                 restoreRiskCanvas();
