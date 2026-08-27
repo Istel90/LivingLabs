@@ -632,8 +632,27 @@
 
     onMount(async () => {
         const params = new URLSearchParams(window.location.search);
-        region = params.get('regionName') || region;
-        regionCode = params.get('regionCode') || regionCode;
+        const rawRegionCode = params.get('regionCode') || regionCode;
+        const embeddedQueryIndex = rawRegionCode.indexOf('&');
+        const embeddedParams = embeddedQueryIndex >= 0
+            ? new URLSearchParams(rawRegionCode.slice(embeddedQueryIndex + 1))
+            : null;
+        const normalizedRegionCode = rawRegionCode.match(/^\\d{5}/)?.[0] || regionCode;
+
+        region = params.get('regionName') || embeddedParams?.get('regionName') || region;
+        regionCode = normalizedRegionCode;
+
+        if (embeddedParams) {
+            const cleanParams = new URLSearchParams(params);
+            cleanParams.set('regionCode', regionCode);
+            cleanParams.set('regionName', region);
+            for (const key of ['build', 'resumeDraft']) {
+                const value = embeddedParams.get(key);
+                if (value && !cleanParams.has(key)) cleanParams.set(key, value);
+            }
+            window.history.replaceState(null, '', `${window.location.pathname}?${cleanParams.toString()}${window.location.hash}`);
+        }
+
         indicators = configureIndicatorsForRegion(config.indicators, regionCode)
             .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
         operatorName = window.localStorage.getItem('livinglabs.priorityAreaOperator') || operatorName;
