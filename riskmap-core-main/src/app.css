@@ -1241,3 +1241,73 @@ button { cursor: pointer; }
     .indicator-data-box, .indicator-effect-summary { margin-inline: 18px; }
     .indicator-pattern-grid { grid-template-columns: 1fr; }
 }
+
+
+/* Priority management responsive header */
+@media (max-width: 900px) {
+    .main {
+        max-width: 100vw;
+        padding: 20px 14px 48px;
+    }
+    .hero {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    .hero-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: end;
+        width: 100%;
+    }
+    .hero-actions label,
+    .hero-actions small,
+    .request-manager {
+        min-width: 0;
+    }
+    .hero-actions input,
+    .hero-actions select {
+        width: 100%;
+    }
+    .hero-actions small,
+    .request-manager {
+        grid-column: 1 / -1;
+        max-width: none;
+    }
+    .request-manager-toggle {
+        width: 100%;
+        justify-content: center;
+    }
+    .panel-head.map-head {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    .map-toolbar,
+    .database-actions {
+        width: 100%;
+    }
+    .database-actions input {
+        min-width: 0;
+        flex: 1 1 130px;
+    }
+}
+
+@media (max-width: 560px) {
+    .hero-actions {
+        grid-template-columns: 1fr;
+    }
+    .hero-actions small,
+    .request-manager {
+        grid-column: auto;
+    }
+    .database-actions label {
+        width: 100%;
+    }
+    .database-actions input {
+        width: 100%;
+    }
+    .analysis-control-card > .primary {
+        width: 100%;
+    }
+}
