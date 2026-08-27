@@ -1,5 +1,5 @@
 <script>
-    import PriorityManagementArea from '$lib/tools/PriorityManagementArea.svelte';
+    import ClimateHazardLab from '$lib/tools/ClimateHazardLab.svelte';
 </script>
 
-<PriorityManagementArea hazard="heatwave" nationalLab={true} />
+<ClimateHazardLab hazard="heatwave" nationalLab={true} />

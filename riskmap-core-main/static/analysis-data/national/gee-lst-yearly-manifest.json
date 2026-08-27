@@ -1,0 +1,62 @@
+{
+  "title": "Annual nationwide Landsat summer LST P90",
+  "source": "Google Earth Engine Landsat 8/9 Collection 2 Level 2 ST_B10",
+  "years": [
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "summerMonths": [
+    6,
+    7,
+    8,
+    9
+  ],
+  "crs": "EPSG:5179",
+  "scaleMeters": 100,
+  "generatedAt": "2026-08-07T09:24:25.342337+00:00",
+  "layers": [
+    {
+      "year": 2021,
+      "file": "kor_lst_summer_p90_2021_100m_epsg5179.tif",
+      "sizeBytes": 47384394,
+      "md5": "abe7fc392b9ccab8baa6d48a2130a304",
+      "status": "COMPLETED",
+      "taskId": null
+    },
+    {
+      "year": 2022,
+      "file": "kor_lst_summer_p90_2022_100m_epsg5179.tif",
+      "sizeBytes": 48054227,
+      "md5": "8723b5d8691160487bcea00774749a71",
+      "status": "COMPLETED",
+      "taskId": "6ASFZHAWQTOM5ANN5L3FBJ54"
+    },
+    {
+      "year": 2023,
+      "file": "kor_lst_summer_p90_2023_100m_epsg5179.tif",
+      "sizeBytes": 48756751,
+      "md5": "59e010db3ef464441e824faff4720a01",
+      "status": "COMPLETED",
+      "taskId": "C3CWNITABNGD5WTCTGQTISSO"
+    },
+    {
+      "year": 2024,
+      "file": "kor_lst_summer_p90_2024_100m_epsg5179.tif",
+      "sizeBytes": 48212899,
+      "md5": "4f6a64a872324ed342717382a49ab3fb",
+      "status": "COMPLETED",
+      "taskId": "XXLUJTO6JMRMORBHZF7X5RP4"
+    },
+    {
+      "year": 2025,
+      "file": "kor_lst_summer_p90_2025_100m_epsg5179.tif",
+      "sizeBytes": 48565282,
+      "md5": "984d716aba1b10edea0449bd622b5c81",
+      "status": "COMPLETED",
+      "taskId": "FSNK4QZPVEIQFPLVIAYBWBDZ"
+    }
+  ]
+}
