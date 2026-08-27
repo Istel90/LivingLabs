@@ -2883,7 +2883,7 @@
                                         <article class="candidate-card" class:active={selectedCandidate === index}>
                                             <button class="candidate-main" type="button" onclick={() => selectCandidate(candidate, index)}>
                                                 <span class="rank">{String(candidate.districtNumber || candidate.rank).padStart(2, '0')}</span>
-                                                <span><strong>{candidate.name}</strong><small>{candidate.area}</small></span>
+                                                <span class="candidate-name-row"><strong>{candidate.name}</strong><small>{candidate.area}</small></span>
                                                 <b>{formatScore(candidate.risk)}</b>
                                             </button>
                                             <button class="candidate-detail-toggle" type="button" title="분류 사유 보기" aria-label={`${candidate.name} 분류 사유 보기`} onclick={() => showCandidateDetail(candidate, index)}>!</button>

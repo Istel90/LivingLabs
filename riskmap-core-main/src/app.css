@@ -989,6 +989,8 @@ button { cursor: pointer; }
     padding: 0 10px 10px;
 }
 .practice-district-group {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
     border: 1px solid color-mix(in srgb, var(--practice-color) 24%, #dbe7e3);
     border-radius: 11px;
@@ -1018,7 +1020,10 @@ button { cursor: pointer; }
 .practice-district-group > header b { color: var(--practice-color); font-size: 11px; }
 .wide-candidates .practice-district-group .candidate-list {
     grid-template-columns: 1fr;
+    align-content: start;
+    flex: 1;
     padding: 7px;
+    gap: 5px;
 }
 .practice-district-group .candidate-card.active {
     border-color: var(--practice-color);
@@ -1033,13 +1038,27 @@ button { cursor: pointer; }
 }
 .wide-candidates .candidate-main {
     grid-template-columns: 22px minmax(0, 1fr) auto;
-    padding: 8px;
+    padding: 6px 8px;
 }
 .wide-candidates .candidate-main strong,
 .wide-candidates .candidate-main small {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+.wide-candidates .candidate-name-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+}
+.wide-candidates .candidate-name-row strong {
+    flex: 0 1 auto;
+}
+.wide-candidates .candidate-name-row small {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
 }
 .candidate-detail-toggle {
     border: 0;
@@ -1056,6 +1075,7 @@ button { cursor: pointer; }
 .candidate-detail-panel {
     display: grid;
     grid-template-columns: minmax(210px, .9fr) minmax(0, 2fr);
+    align-items: start;
     gap: 12px;
     margin: 0 10px 12px;
     border: 1px solid #fed7aa;
