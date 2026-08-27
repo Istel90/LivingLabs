@@ -338,7 +338,7 @@ button { cursor: pointer; }
 .lab-analysis-runner > button:disabled { opacity: .68; cursor: wait; }
 .analysis-control-card {
     display: grid;
-    grid-template-columns: minmax(150px, .9fr) minmax(130px, .7fr) minmax(220px, 1.2fr) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
     align-items: end;
     border-bottom: 1px solid #e4e9e4;
@@ -420,7 +420,9 @@ button { cursor: pointer; }
     white-space: nowrap;
 }
 .analysis-control-card > .primary {
-    min-width: 118px;
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
     white-space: nowrap;
 }
 .content-grid {
@@ -1052,7 +1054,7 @@ button { cursor: pointer; }
 
 @media(max-width:1400px){
     .workflow-guide { display: none; }
-    .analysis-control-card { grid-template-columns: repeat(2, minmax(150px, 1fr)) minmax(220px, 1.2fr) auto; }
+    .analysis-control-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .data-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .content-grid { grid-template-columns: 1fr; }
     .map-score-overlay {
