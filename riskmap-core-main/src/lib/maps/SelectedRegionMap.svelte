@@ -151,6 +151,53 @@
         }));
     }
 
+    async function flattenRiskCanvasForExport(captureElement) {
+        const sourceCanvases = Array.from(mapElement?.querySelectorAll('.risk-grid-canvas') || []);
+        if (!sourceCanvases.length) return () => {};
+
+        const rootRect = captureElement.getBoundingClientRect();
+        const cleanupTasks = [];
+        const imageLoads = [];
+
+        sourceCanvases.forEach((sourceCanvas) => {
+            if (!(sourceCanvas instanceof HTMLCanvasElement) || !sourceCanvas.width || !sourceCanvas.height) return;
+            const rect = sourceCanvas.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+
+            const snapshot = document.createElement('img');
+            snapshot.className = 'map-export-canvas-snapshot';
+            snapshot.alt = '';
+            snapshot.setAttribute('aria-hidden', 'true');
+            snapshot.src = sourceCanvas.toDataURL('image/png');
+            Object.assign(snapshot.style, {
+                left: `${rect.left - rootRect.left}px`,
+                top: `${rect.top - rootRect.top}px`,
+                width: `${rect.width}px`,
+                height: `${rect.height}px`
+            });
+
+            const previousVisibility = sourceCanvas.style.visibility;
+            sourceCanvas.style.visibility = 'hidden';
+            captureElement.appendChild(snapshot);
+
+            imageLoads.push(
+                typeof snapshot.decode === 'function'
+                    ? snapshot.decode().catch(() => {})
+                    : new Promise((resolve) => {
+                        snapshot.addEventListener('load', resolve, { once: true });
+                        snapshot.addEventListener('error', resolve, { once: true });
+                    })
+            );
+            cleanupTasks.push(() => {
+                sourceCanvas.style.visibility = previousVisibility;
+                snapshot.remove();
+            });
+        });
+
+        await Promise.all(imageLoads);
+        return () => cleanupTasks.reverse().forEach((cleanup) => cleanup());
+    }
+
     function canvasToPngBlob(canvas) {
         return new Promise((resolve, reject) => {
             canvas.toBlob((blob) => {
@@ -204,16 +251,23 @@
             await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
             const captureElement = mapElement.closest('.region-map-wrap') || mapElement;
-            setExportStatus('고해상도 PNG 생성 중...');
-            const canvas = await html2canvas(captureElement, {
-                allowTaint: false,
-                useCORS: true,
-                imageTimeout: 12000,
-                logging: false,
-                backgroundColor: '#e8f3f5',
-                scale: Math.min(2.5, Math.max(2, window.devicePixelRatio || 1)),
-                ignoreElements: (element) => element.hasAttribute?.('data-map-export-ignore')
-            });
+            setExportStatus('격자와 경계 위치 맞춤 중...');
+            const restoreRiskCanvas = await flattenRiskCanvasForExport(captureElement);
+            let canvas;
+            try {
+                setExportStatus('고해상도 PNG 생성 중...');
+                canvas = await html2canvas(captureElement, {
+                    allowTaint: false,
+                    useCORS: true,
+                    imageTimeout: 12000,
+                    logging: false,
+                    backgroundColor: '#e8f3f5',
+                    scale: Math.min(2.5, Math.max(2, window.devicePixelRatio || 1)),
+                    ignoreElements: (element) => element.hasAttribute?.('data-map-export-ignore')
+                });
+            } finally {
+                restoreRiskCanvas();
+            }
             const blob = await canvasToPngBlob(canvas);
             const result = await writeMapImage(blob, mapExportFilename());
 
@@ -2284,6 +2338,14 @@
         border: 1px solid #d9e7ee;
         border-radius: 1rem;
         background: #e8f3f5;
+    }
+
+    .map-export-canvas-snapshot {
+        position: absolute;
+        z-index: 430;
+        max-width: none;
+        pointer-events: none;
+        image-rendering: auto;
     }
 
     .map-export-toolbar {
