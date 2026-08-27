@@ -1,5 +1,6 @@
 <script>
-    import { onMount } from 'svelte';
+    import { onDestroy, onMount } from 'svelte';
+    import html2canvas from 'html2canvas';
     import {
         getBoundaryFeaturesForRegionCode,
         getRegionByCode,
@@ -83,6 +84,158 @@
     let parcelCandidateRunId = 0;
     let parcelCandidateHydrationScope = '';
     let appliedMapResetKey;
+    let exportBusy = $state(false);
+    let exportStatus = $state('');
+    let exportStatusTimer;
+
+    const exportHazardLabels = {
+        heatwave: '폭염',
+        flood: '홍수',
+        ecosystem: '생태계'
+    };
+
+    function safeFilenamePart(value, fallback = '지도') {
+        const cleaned = String(value || '')
+            .replace(/[\\/:*?"<>|]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        return cleaned || fallback;
+    }
+
+    function exportDateStamp() {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).formatToParts(new Date());
+        const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+        return `${values.year}-${values.month}-${values.day}`;
+    }
+
+    function mapExportFilename() {
+        const hazardLabel = exportHazardLabels[hazard] || hazard;
+        const layerLabel = gridLayerLabels[selectedGridLayer] || selectedGridLayer;
+        return [
+            safeFilenamePart(regionName, regionCode),
+            safeFilenamePart(hazardLabel, '기후위험'),
+            safeFilenamePart(layerLabel, '결과'),
+            '결과지도',
+            exportDateStamp()
+        ].join('_') + '.png';
+    }
+
+    function setExportStatus(message, clearAfter = 0) {
+        exportStatus = message;
+        if (exportStatusTimer) window.clearTimeout(exportStatusTimer);
+        if (clearAfter > 0) {
+            exportStatusTimer = window.setTimeout(() => {
+                exportStatus = '';
+                exportStatusTimer = null;
+            }, clearAfter);
+        }
+    }
+
+    function waitForVisibleMapTiles(timeout = 7000) {
+        const tiles = Array.from(mapElement?.querySelectorAll('.leaflet-tile') || [])
+            .filter((tile) => tile instanceof HTMLImageElement && tile.offsetParent !== null);
+        if (!tiles.length) return Promise.resolve();
+
+        return Promise.all(tiles.map((tile) => {
+            if (tile.complete && tile.naturalWidth > 0) return Promise.resolve();
+            return new Promise((resolve) => {
+                const finish = () => resolve();
+                tile.addEventListener('load', finish, { once: true });
+                tile.addEventListener('error', finish, { once: true });
+                window.setTimeout(finish, timeout);
+            });
+        }));
+    }
+
+    function canvasToPngBlob(canvas) {
+        return new Promise((resolve, reject) => {
+            canvas.toBlob((blob) => {
+                if (blob) resolve(blob);
+                else reject(new Error('PNG 파일을 만들 수 없습니다.'));
+            }, 'image/png');
+        });
+    }
+
+    async function writeMapImage(blob, filename) {
+        if (typeof window.showSaveFilePicker === 'function') {
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: filename,
+                    types: [{
+                        description: 'PNG 지도 이미지',
+                        accept: { 'image/png': ['.png'] }
+                    }]
+                });
+                const writable = await handle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                return 'selected-location';
+            } catch (error) {
+                if (error?.name === 'AbortError') return 'cancelled';
+                console.warn('선택 위치 저장 실패, 기본 다운로드 방식으로 전환합니다.', error);
+            }
+        }
+
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.rel = 'noopener';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return 'downloads';
+    }
+
+    async function exportMapImage() {
+        if (exportBusy || mapLoading || !mapElement) return;
+        exportBusy = true;
+        setExportStatus('배경지도 준비 중...');
+
+        try {
+            map?.closePopup();
+            map?.invalidateSize({ pan: false });
+            await waitForVisibleMapTiles();
+            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+            const captureElement = mapElement.closest('.region-map-wrap') || mapElement;
+            setExportStatus('고해상도 PNG 생성 중...');
+            const canvas = await html2canvas(captureElement, {
+                allowTaint: false,
+                useCORS: true,
+                imageTimeout: 12000,
+                logging: false,
+                backgroundColor: '#e8f3f5',
+                scale: Math.min(2.5, Math.max(2, window.devicePixelRatio || 1)),
+                ignoreElements: (element) => element.hasAttribute?.('data-map-export-ignore')
+            });
+            const blob = await canvasToPngBlob(canvas);
+            const result = await writeMapImage(blob, mapExportFilename());
+
+            if (result === 'cancelled') {
+                setExportStatus('저장을 취소했습니다.', 3000);
+            } else if (result === 'selected-location') {
+                setExportStatus('선택한 위치에 PNG를 저장했습니다.', 5000);
+            } else {
+                setExportStatus('기본 다운로드 폴더에 PNG를 저장했습니다.', 5000);
+            }
+        } catch (error) {
+            console.error('지도 PNG 저장 실패', error);
+            setExportStatus(`이미지 저장 실패 · ${error?.message || '잠시 후 다시 시도해 주세요.'}`);
+        } finally {
+            exportBusy = false;
+        }
+    }
+
+    onDestroy(() => {
+        if (exportStatusTimer) window.clearTimeout(exportStatusTimer);
+    });
 
     function groupsForGridLayer(layer) {
         if (layer === 'H') return ['기후위험'];
@@ -1842,6 +1995,7 @@
 
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors',
+            crossOrigin: true,
             maxZoom: 19
         }).addTo(map);
 
@@ -1968,15 +2122,22 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </svelte:head>
 
-<div class="region-map-wrap">
+<div class={`region-map-wrap${exportBusy ? ' map-exporting' : ''}`}>
     <div class:locked-map={locked} class="region-map" bind:this={mapElement} style={`height:${height}`}></div>
     {#if mapLoading}
-        <div class="map-refresh-loading" role="status" aria-live="polite">
+        <div class="map-refresh-loading" role="status" aria-live="polite" data-map-export-ignore>
             <span></span>
             <strong>지도 준비 중</strong>
             <small>선택 지역의 배경지도와 분석 레이어를 준비하고 있습니다.</small>
         </div>
     {/if}
+    <div class="map-export-toolbar" data-map-export-ignore aria-live="polite">
+        <button type="button" onclick={exportMapImage} disabled={mapLoading || exportBusy}>
+            <span aria-hidden="true">↓</span>
+            {exportBusy ? 'PNG 생성 중...' : '지도 PNG 저장'}
+        </button>
+        {#if exportStatus}<small>{exportStatus}</small>{/if}
+    </div>
     {#if showAnalysisLegend}
         <div class="analysis-overlay-stack">
             <div class="analysis-legend" aria-label="분석 범례">
@@ -2128,6 +2289,56 @@
         border: 1px solid #d9e7ee;
         border-radius: 1rem;
         background: #e8f3f5;
+    }
+
+    .map-export-toolbar {
+        position: absolute;
+        right: .85rem;
+        bottom: 4.15rem;
+        z-index: 900;
+        display: grid;
+        justify-items: end;
+        gap: .35rem;
+        pointer-events: auto;
+    }
+
+    .map-export-toolbar button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: .4rem;
+        border: 1px solid rgb(255 255 255 / 46%);
+        border-radius: .72rem;
+        background: #0f766e;
+        color: #fff;
+        padding: .68rem .9rem;
+        box-shadow: 0 14px 28px rgb(15 118 110 / 28%);
+        font-size: .76rem;
+        font-weight: 900;
+        cursor: pointer;
+    }
+
+    .map-export-toolbar button:hover { background: #0b5f59; }
+    .map-export-toolbar button:disabled { opacity: .65; cursor: wait; }
+    .map-export-toolbar button span { font-size: 1rem; line-height: 1; }
+
+    .map-export-toolbar small {
+        max-width: 18rem;
+        border-radius: .55rem;
+        background: rgb(15 23 42 / 88%);
+        color: #fff;
+        padding: .42rem .58rem;
+        font-size: .66rem;
+        font-weight: 800;
+        line-height: 1.35;
+        text-align: right;
+    }
+
+    .map-exporting .analysis-legend,
+    .map-exporting .parcel-candidate-panel,
+    .map-exporting .layer-panel {
+        background: #fff;
+        backdrop-filter: none;
     }
 
     .map-refresh-loading {
