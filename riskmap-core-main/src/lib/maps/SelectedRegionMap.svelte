@@ -390,11 +390,27 @@
         renderRiskGridLayer();
     }
 
+    function escapeTooltipHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
     function createAnalysisLayer(L, item) {
         if (!item.geojson) return null;
 
         const color = item.color || '#64748b';
         const tooltip = `${item.group} · ${item.label}`;
+        const hasPointFeatures = item.geojson?.features?.some((feature) => feature?.geometry?.type === 'Point');
+        if (hasPointFeatures && map && !map.getPane('analysis-point-pane')) {
+            const pane = map.createPane('analysis-point-pane');
+            pane.style.zIndex = '640';
+            pane.style.pointerEvents = 'auto';
+        }
+
         return L.geoJSON(item.geojson, {
             interactive: true,
             style: {
@@ -405,13 +421,30 @@
                 weight: 2
             },
             pointToLayer: (_feature, latlng) => L.circleMarker(latlng, {
-                radius: 7,
-                color,
+                pane: 'analysis-point-pane',
+                radius: 5,
+                color: '#ffffff',
                 fillColor: color,
-                fillOpacity: 0.75,
-                weight: 2
-            })
-        }).bindTooltip(tooltip);
+                fillOpacity: 0.98,
+                opacity: 1,
+                weight: 1.5
+            }),
+            onEachFeature: (feature, layer) => {
+                if (feature?.geometry?.type !== 'Point') {
+                    layer.bindTooltip(tooltip);
+                    return;
+                }
+                const properties = feature.properties || {};
+                const name = escapeTooltipHtml(properties.name || item.label);
+                const address = escapeTooltipHtml(properties.address || '');
+                const capacity = Number(properties.capacity);
+                const details = [
+                    address,
+                    Number.isFinite(capacity) ? `최대수용 ${capacity.toLocaleString()}명` : ''
+                ].filter(Boolean);
+                layer.bindTooltip(`<b>${name}</b>${details.length ? `<br>${details.join('<br>')}` : ''}`);
+            }
+        });
     }
 
     function renderAnalysisLayers() {

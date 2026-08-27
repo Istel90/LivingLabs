@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { extname, resolve } from 'node:path';
 import pg from 'pg';
+import XLSX from 'xlsx';
 
 const { Pool } = pg;
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -19,20 +20,46 @@ try {
 
 const argument = (name) => process.argv.find((value) => value.startsWith(`--${name}=`))?.slice(name.length + 3);
 const sourcePath = argument('source');
-if (!sourcePath) throw new Error('Use --source=<civil_defense_shelter.json>');
+if (!sourcePath) throw new Error('Use --source=<civil_defense_shelter.json|csv>');
 
-const source = JSON.parse(readFileSync(resolve(sourcePath), 'utf8'));
-const parsedRows = (source.rows || []).map((row) => {
-  const longitude = Number(row.LONGITUDE);
-  const latitude = Number(row.LATITUDE);
-  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
-  const name = String(row.CLNS_SHUNT_FCLTY_NM || '').trim();
-  const roadAddress = String(row.RDNMADR || '').trim();
-  const parcelAddress = String(row.LNMADR || '').trim();
+const resolvedSourcePath = resolve(sourcePath);
+const sourceExtension = extname(resolvedSourcePath).toLowerCase();
+let sourceRows;
+if (sourceExtension === '.json') {
+  sourceRows = JSON.parse(readFileSync(resolvedSourcePath, 'utf8')).rows || [];
+} else if (sourceExtension === '.csv') {
+  const workbook = XLSX.read(readFileSync(resolvedSourcePath), { type: 'buffer', codepage: 949 });
+  sourceRows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' });
+} else {
+  throw new Error('The source must be a JSON or CSV file');
+}
+
+function normalizedDate(value) {
+  if (Number.isFinite(Number(value)) && Number(value) > 20_000) {
+    const parsed = XLSX.SSF.parse_date_code(Number(value));
+    if (parsed) {
+      return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+    }
+  }
+  return String(value || '').match(/\d{4}-\d{2}-\d{2}/)?.[0] || null;
+}
+
+const parsedRows = sourceRows.map((row) => {
+  const longitude = Number(row['경도(EPSG4326)'] ?? row.LONGITUDE);
+  const latitude = Number(row['위도(EPSG4326)'] ?? row.LATITUDE);
+  if (
+    !Number.isFinite(longitude) || !Number.isFinite(latitude) ||
+    longitude < 124 || longitude > 132 || latitude < 33 || latitude > 39
+  ) return null;
+  const name = String(row['시설명'] ?? row.CLNS_SHUNT_FCLTY_NM ?? '').trim();
+  const roadAddress = String(row['도로명전체주소'] ?? row.RDNMADR ?? '').trim();
+  const parcelAddress = String(row['소재지전체주소'] ?? row.LNMADR ?? '').trim();
+  const managementId = String(row['관리번호'] ?? '').trim();
   const shelterId = createHash('sha256')
-    .update(`${name}\u241f${roadAddress}\u241f${parcelAddress}\u241f${longitude}\u241f${latitude}`)
+    .update(managementId || `${name}\u241f${roadAddress}\u241f${parcelAddress}\u241f${longitude}\u241f${latitude}`)
     .digest('hex');
-  const capacity = Number.parseInt(row.ACEPTNC_POSBL_CO, 10);
+  const capacity = Number.parseInt(row['최대수용인원'] ?? row.ACEPTNC_POSBL_CO, 10);
+  const operatingStatus = String(row['운영상태'] ?? row.OPEN_YN ?? '').trim().toUpperCase();
   return {
     shelter_id: shelterId,
     source_key: 'civil_defense_shelter',
@@ -40,8 +67,8 @@ const parsedRows = (source.rows || []).map((row) => {
     road_address: roadAddress || null,
     parcel_address: parcelAddress || null,
     capacity: Number.isFinite(capacity) ? capacity : null,
-    open_yn: String(row.OPEN_YN || '').trim().toUpperCase() === 'Y' ? 'Y' : 'N',
-    reference_date: String(row.REFERENCE_DATE || '').trim() || null,
+    open_yn: ['Y', '사용중', '운영중'].includes(operatingStatus) ? 'Y' : 'N',
+    reference_date: normalizedDate(row['최종수정시점'] ?? row.REFERENCE_DATE),
     longitude,
     latitude,
   };
@@ -61,6 +88,7 @@ const client = await pool.connect();
 try {
   await client.query('BEGIN');
   await client.query(readFileSync(resolve(root, 'scripts', 'analysis-civil-defense-shelter-points.sql'), 'utf8'));
+  await client.query("DELETE FROM analysis.civil_defense_shelter_points WHERE source_key = 'civil_defense_shelter'");
   for (let offset = 0; offset < rows.length; offset += 500) {
     const batch = rows.slice(offset, offset + 500);
     await client.query({

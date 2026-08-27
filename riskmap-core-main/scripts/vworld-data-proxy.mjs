@@ -461,7 +461,7 @@ const regionalAnalysisIndicators = {
   'facility-shelter': {
     pointTable: 'analysis.civil_defense_shelter_points', sourceKey: 'civil_defense_shelter',
     kernelBandwidthMeters: 400, kernelMethod: 'quartic', label: '민방위 대피시설 400m 커널밀도',
-    rawUnit: '개/km²', sourceResolution: '공공데이터포털 민방위 대피시설 실제 위치 · 중복 제거 후 개방 시설 5,095개 · EPSG:5179 100m 격자 · quartic kernel 400m', normalization: 'linear', zeroFill: true,
+    rawUnit: '개/km²', sourceResolution: '행정안전부 전국 민방위 대피시설 현행 원본 · 사용 중 시설 17,228개 · EPSG:5179 100m 격자 · quartic kernel 400m', normalization: 'linear', zeroFill: true,
   },
   'facility-rail-station': {
     table: 'analysis.national_facility_grid_100m', column: 'facility_count', sourceKey: 'urban_rail_station', label: '도시철도 역사 수',
@@ -582,6 +582,49 @@ async function fetchRegionalAnalysisGrid(searchParams) {
     });
   }
 
+  let pointFeatureCollection = null;
+  if (config.pointTable) {
+    const pointResult = await cadastrePool.query({
+      text: `
+        WITH region_centers AS (
+          SELECT cells.geom
+          FROM analysis.region_grid_cells_100m regional
+          JOIN analysis.grid_cells_100m cells ON cells.cell_id = regional.cell_id
+          WHERE regional.region_code = $1
+        ),
+        regional_points AS (
+          SELECT DISTINCT ON (source.shelter_id)
+                 source.shelter_id, source.name, source.road_address,
+                 source.parcel_address, source.capacity, source.geom
+          FROM region_centers cells
+          JOIN ${config.pointTable} source
+            ON source.geom && ST_Expand(cells.geom, 71)
+           AND ST_DWithin(cells.geom, source.geom, 71)
+          WHERE source.source_key = $2
+            AND source.open_yn = 'Y'
+          ORDER BY source.shelter_id
+        )
+        SELECT jsonb_build_object(
+          'type', 'FeatureCollection',
+          'features', COALESCE(jsonb_agg(jsonb_build_object(
+            'type', 'Feature',
+            'id', shelter_id,
+            'geometry', ST_AsGeoJSON(ST_Transform(geom, 4326), 7)::jsonb,
+            'properties', jsonb_build_object(
+              'shelterId', shelter_id,
+              'name', name,
+              'address', COALESCE(road_address, parcel_address),
+              'capacity', capacity
+            )
+          )), '[]'::jsonb)
+        ) AS collection
+        FROM regional_points
+      `,
+      values: [regionCode, config.sourceKey],
+    });
+    pointFeatureCollection = pointResult.rows[0]?.collection || null;
+  }
+
   const rowsWithValues = result.rows
     .map((row) => ({ index: Number(row.cell_index), value: Number(row.value) }))
     .filter((row) => Number.isInteger(row.index) && row.index >= 0 && row.index < valueCount && Number.isFinite(row.value));
@@ -634,6 +677,8 @@ async function fetchRegionalAnalysisGrid(searchParams) {
     sourceResolution: config.sourceResolution,
     spatialMethod: config.kernelMethod || null,
     bandwidthMeters: config.kernelBandwidthMeters || null,
+    pointFeatureCollection,
+    pointFeatureCount: pointFeatureCollection?.features?.length || 0,
     normalization: {
       method: `local-${config.normalization}-p02-p98`,
       lowerRaw: Number(rawLower.toFixed(4)),
