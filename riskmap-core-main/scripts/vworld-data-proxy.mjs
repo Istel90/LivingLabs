@@ -39,10 +39,10 @@ const port = Number(process.env.VWORLD_PROXY_PORT || process.argv.find((arg) => 
 const staticRootArgument = process.argv.find((arg) => arg.startsWith('--static-root='))?.slice('--static-root='.length);
 const staticRoot = staticRootArgument ? resolve(workspaceRoot, staticRootArgument) : '';
 const cadastrePool = new Pool({
-  host: process.env.VWORLD_POSTGIS_HOST || env.VWORLD_POSTGIS_HOST || '127.0.0.1',
-  port: Number(process.env.VWORLD_POSTGIS_PORT || env.VWORLD_POSTGIS_PORT || 55432),
-  database: process.env.VWORLD_POSTGIS_DATABASE || env.VWORLD_POSTGIS_DATABASE || 'vworld_cadastral',
-  user: process.env.VWORLD_POSTGIS_USER || env.VWORLD_POSTGIS_USER || 'postgres',
+  host: process.argv.find((arg) => arg.startsWith('--postgis-host='))?.split('=')[1] || process.env.VWORLD_POSTGIS_HOST || env.VWORLD_POSTGIS_HOST || '127.0.0.1',
+  port: Number(process.argv.find((arg) => arg.startsWith('--postgis-port='))?.split('=')[1] || process.env.VWORLD_POSTGIS_PORT || env.VWORLD_POSTGIS_PORT || 55432),
+  database: process.argv.find((arg) => arg.startsWith('--postgis-database='))?.split('=')[1] || process.env.VWORLD_POSTGIS_DATABASE || env.VWORLD_POSTGIS_DATABASE || 'vworld_cadastral',
+  user: process.argv.find((arg) => arg.startsWith('--postgis-user='))?.split('=')[1] || process.env.VWORLD_POSTGIS_USER || env.VWORLD_POSTGIS_USER || 'postgres',
   password: process.env.VWORLD_POSTGIS_PASSWORD || env.VWORLD_POSTGIS_PASSWORD || undefined,
   max: 4,
   connectionTimeoutMillis: 3000,
@@ -459,8 +459,9 @@ const regionalAnalysisIndicators = {
     rawUnit: '개/100m 셀', sourceResolution: '공공데이터포털 전국횡단보도표준데이터 · 부산·대구·세종 보완 필요 · EPSG:5179 100m 셀 집계', normalization: 'log1p', zeroFill: true,
   },
   'facility-shelter': {
-    table: 'analysis.national_facility_grid_100m', column: 'facility_count', sourceKey: 'civil_defense_shelter', label: '민방위 대피시설 수',
-    rawUnit: '개/100m 셀', sourceResolution: '현재 적재된 민방위 대피시설 5,160개 · 74개 행정구역 커버리지 · 추가 보완 필요', normalization: 'log1p', zeroFill: true,
+    pointTable: 'analysis.civil_defense_shelter_points', sourceKey: 'civil_defense_shelter',
+    kernelBandwidthMeters: 400, kernelMethod: 'quartic', label: '민방위 대피시설 400m 커널밀도',
+    rawUnit: '개/km²', sourceResolution: '공공데이터포털 민방위 대피시설 실제 위치 · 중복 제거 후 개방 시설 5,095개 · EPSG:5179 100m 격자 · quartic kernel 400m', normalization: 'linear', zeroFill: true,
   },
   'facility-rail-station': {
     table: 'analysis.national_facility_grid_100m', column: 'facility_count', sourceKey: 'urban_rail_station', label: '도시철도 역사 수',
@@ -518,7 +519,37 @@ async function fetchRegionalAnalysisGrid(searchParams) {
   }
 
   let result;
-  if (config.rasterTable) {
+  if (config.pointTable && config.kernelBandwidthMeters) {
+    result = await cadastrePool.query({
+      text: `
+        WITH regional_centers AS (
+          SELECT regional.cell_index,
+                 ST_SetSRID(ST_MakePoint(cells.x, cells.y), 5179) AS center
+          FROM analysis.region_grid_cells_100m regional
+          JOIN analysis.grid_cells_100m cells ON cells.cell_id = regional.cell_id
+          WHERE regional.region_code = $1
+        )
+        SELECT regional.cell_index,
+               COALESCE(
+                 SUM(
+                   (3.0 / (pi() * $2 * $2))
+                   * power(1 - power(ST_Distance(regional.center, source.geom) / $2, 2), 2)
+                   * 1000000.0
+                 ),
+                 0
+               ) AS value
+        FROM regional_centers regional
+        LEFT JOIN ${config.pointTable} source
+          ON source.source_key = $3
+         AND source.open_yn = 'Y'
+         AND source.geom && ST_Expand(regional.center, $2)
+         AND ST_DWithin(regional.center, source.geom, $2)
+        GROUP BY regional.cell_index
+        ORDER BY regional.cell_index
+      `,
+      values: [regionCode, config.kernelBandwidthMeters, config.sourceKey],
+    });
+  } else if (config.rasterTable) {
     result = await cadastrePool.query({
       text: `
         SELECT regional.cell_index,
@@ -601,6 +632,8 @@ async function fetchRegionalAnalysisGrid(searchParams) {
     rawUnit: config.rawUnit,
     unit: '정규화 점수',
     sourceResolution: config.sourceResolution,
+    spatialMethod: config.kernelMethod || null,
+    bandwidthMeters: config.kernelBandwidthMeters || null,
     normalization: {
       method: `local-${config.normalization}-p02-p98`,
       lowerRaw: Number(rawLower.toFixed(4)),

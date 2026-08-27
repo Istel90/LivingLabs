@@ -36,6 +36,10 @@ $apps = @(
     Args = @(
       "riskmap-core-main/scripts/vworld-data-proxy.mjs",
       "--port=4173",
+      "--postgis-host=127.0.0.1",
+      "--postgis-port=55432",
+      "--postgis-database=livinglabs_postgis",
+      "--postgis-user=postgres",
       "--static-root=pages-dist"
     )
   }
