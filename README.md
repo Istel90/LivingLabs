@@ -52,6 +52,19 @@ npm.cmd run dev:internal-tools
 npm.cmd run build:all
 ```
 
+## PostGIS 백업과 다른 컴퓨터 이전
+
+현재 `livinglabs_postgis` 전체 DB 백업은 다음 명령으로 생성합니다.
+
+```powershell
+npm.cmd run postgis:backup
+```
+
+백업은 기본적으로 `D:\90_Data\LivingLabs\transfer_to_other_pc`에 생성되며 GitHub에는 포함되지 않습니다.
+다른 컴퓨터에 현재 분석 결과를 그대로 옮길 때는 덤프와 `*.manifest.json`을 함께 복사합니다.
+
+자세한 복원 및 원본 데이터 기준은 [다른 컴퓨터 설정](docs/OTHER_COMPUTER_SETUP.md)을 참고합니다.
+
 ## 선택 환경변수
 
 설문 앱이나 지도 앱을 다른 주소에서 실행할 때 루트에 `.env.local`을 만들고

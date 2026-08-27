@@ -18,6 +18,8 @@
     "platform:dev": "npm run platform:start:dev",
     "platform:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/status-platform.ps1",
     "platform:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-platform.ps1",
+    "postgis:backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-livinglabs-postgis.ps1",
+    "postgis:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/status-livinglabs-postgis.ps1",
     "platform:refresh": "npm run build:unified && npm run platform:stop && npm run platform:start",
     "weather:build-lst-catalog": "node scripts/build-gyeonggi-lst-catalog.mjs",
     "install:all": "npm install && npm --prefix \"Survey platform for collaboration\" install && npm --prefix riskmap-core-main install"

@@ -1,18 +1,31 @@
 param(
   [string]$PgHome = 'D:\90_Data\VWORLD\tools\pgsql-17.11\pgsql',
-  [string]$OutputDirectory = 'D:\90_Data\VWORLD\transfer_to_other_pc',
+  [string]$OutputDirectory = 'D:\90_Data\LivingLabs\transfer_to_other_pc',
   [string]$HostName = '127.0.0.1',
   [int]$Port = 55432,
-  [string]$Database = 'vworld_cadastral',
+  [string]$Database = 'livinglabs_postgis',
   [int]$CompressionLevel = 6,
   [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
+function Get-Sha256Hex {
+  param([Parameter(Mandatory = $true)][string]$Path)
+
+  $stream = [System.IO.File]::OpenRead($Path)
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([System.BitConverter]::ToString($sha256.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $sha256.Dispose()
+    $stream.Dispose()
+  }
+}
 $pgDump = Join-Path $PgHome 'bin\pg_dump.exe'
 $pgIsReady = Join-Path $PgHome 'bin\pg_isready.exe'
+$psql = Join-Path $PgHome 'bin\psql.exe'
 
-foreach ($required in @($pgDump, $pgIsReady)) {
+foreach ($required in @($pgDump, $pgIsReady, $psql)) {
   if (-not (Test-Path -LiteralPath $required)) {
     throw "Required PostgreSQL tool does not exist: $required"
   }
@@ -24,7 +37,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
-$dateLabel = Get-Date -Format 'yyyy-MM-dd'
+$dateLabel = Get-Date -Format 'yyyy-MM-dd_HHmmss'
 $dumpFile = Join-Path $OutputDirectory "livinglabs_postgis_full_$dateLabel.dump"
 $manifestFile = "$dumpFile.manifest.json"
 
@@ -48,7 +61,24 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $dump = Get-Item -LiteralPath $dumpFile
-$hash = Get-FileHash -LiteralPath $dumpFile -Algorithm SHA256
+$hash = Get-Sha256Hex -Path $dumpFile
+$databaseBytes = [long](& $psql -h $HostName -p $Port -U postgres -d $Database -Atc 'SELECT pg_database_size(current_database());')
+$postgisVersion = (& $psql -h $HostName -p $Port -U postgres -d $Database -Atc 'SELECT postgis_full_version();').Trim()
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$gitBranch = (& git -C $repoRoot rev-parse --abbrev-ref HEAD 2>$null)
+$gitCommit = (& git -C $repoRoot rev-parse HEAD 2>$null)
+$requiredTables = @(
+  'cadastre.parcels',
+  'analysis.grid_cells_100m',
+  'analysis.region_grid_cells_100m',
+  'analysis.flood_values_100m',
+  'analysis.hev_values_100m',
+  'analysis.flood_building_sensitivity_100m',
+  'analysis.kma_extreme_rainfall_grid_100m',
+  'analysis.civil_defense_shelter_points',
+  'analysis.national_road_links',
+  'population.grid_100m'
+)
 $manifest = [ordered]@{
   schemaVersion = 'livinglabs-postgis-transfer/v1'
   createdAt = (Get-Date).ToString('o')
@@ -56,8 +86,21 @@ $manifest = [ordered]@{
   source = "${HostName}:$Port"
   dumpFile = $dump.Name
   bytes = $dump.Length
-  sha256 = $hash.Hash.ToLowerInvariant()
+  sourceDatabaseBytes = $databaseBytes
+  postgisVersion = $postgisVersion
+  git = [ordered]@{
+    branch = $gitBranch
+    commit = $gitCommit
+  }
+  sha256 = $hash
   requiredSchemas = @('cadastre', 'analysis', 'raw', 'population')
+  requiredTables = $requiredTables
+  rawSourceDataRequiredForRestore = $false
+  rawSourceDataRequiredForRebuildOrUpdate = $true
+  rawSourceRoots = @(
+    'D:\90_Data\VWORLD',
+    'D:\90_Data\LivingLabs'
+  )
   restoreScript = 'scripts/restore-livinglabs-postgis.ps1'
 }
 

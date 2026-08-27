@@ -16,3 +16,5 @@ riskmap-core-main.zip
 .codex/
 outputs/
 /data/
+*.dump
+*.dump.manifest.json
