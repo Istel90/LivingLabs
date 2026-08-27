@@ -151,9 +151,10 @@
         }));
     }
 
-    async function flattenRiskCanvasForExport(captureElement) {
+    async function flattenMapOverlaysForExport(captureElement) {
         const sourceCanvases = Array.from(mapElement?.querySelectorAll('.risk-grid-canvas') || []);
-        if (!sourceCanvases.length) return () => {};
+        const sourceVectors = Array.from(mapElement?.querySelectorAll('.leaflet-pane svg.leaflet-zoom-animated') || []);
+        if (!sourceCanvases.length && !sourceVectors.length) return () => {};
 
         const rootRect = captureElement.getBoundingClientRect();
         const cleanupTasks = [];
@@ -195,6 +196,42 @@
             );
             cleanupTasks.push(() => {
                 sourceCanvas.style.visibility = previousVisibility;
+                snapshot.remove();
+            });
+        });
+
+        sourceVectors.forEach((sourceVector) => {
+            if (!(sourceVector instanceof SVGElement)) return;
+            const rect = sourceVector.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+
+            const snapshot = sourceVector.cloneNode(true);
+            snapshot.classList.remove('leaflet-zoom-animated');
+            snapshot.classList.add('map-export-vector-snapshot');
+            snapshot.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+            snapshot.setAttribute('aria-hidden', 'true');
+            const pane = sourceVector.closest('.leaflet-pane');
+            const paneZIndex = Number.parseInt(window.getComputedStyle(pane || sourceVector).zIndex, 10) || 420;
+            Object.assign(snapshot.style, {
+                position: 'absolute',
+                left: `${rect.left - rootRect.left}px`,
+                top: `${rect.top - rootRect.top}px`,
+                width: `${rect.width}px`,
+                height: `${rect.height}px`,
+                zIndex: String(paneZIndex),
+                maxWidth: 'none',
+                margin: '0',
+                transform: 'none',
+                transformOrigin: '0 0',
+                pointerEvents: 'none',
+                overflow: 'visible'
+            });
+
+            const previousVisibility = sourceVector.style.visibility;
+            sourceVector.style.visibility = 'hidden';
+            captureElement.appendChild(snapshot);
+            cleanupTasks.push(() => {
+                sourceVector.style.visibility = previousVisibility;
                 snapshot.remove();
             });
         });
@@ -257,7 +294,7 @@
 
             const captureElement = mapElement.closest('.region-map-wrap') || mapElement;
             setExportStatus('격자와 경계 위치 맞춤 중...');
-            const restoreRiskCanvas = await flattenRiskCanvasForExport(captureElement);
+            const restoreMapOverlays = await flattenMapOverlaysForExport(captureElement);
             let canvas;
             try {
                 setExportStatus('고해상도 PNG 생성 중...');
@@ -273,7 +310,7 @@
                         element.classList?.contains('leaflet-control-zoom')
                 });
             } finally {
-                restoreRiskCanvas();
+                restoreMapOverlays();
             }
             const blob = await canvasToPngBlob(canvas);
             const result = await writeMapImage(blob, mapExportFilename());
