@@ -1,26 +1,29 @@
 export const PRACTICE_TYPE_ORDER = ['citizen', 'facility', 'planning'];
 
+export const PRACTICE_DISTRICT_COLOR = '#7c3aed';
+export const PRACTICE_DISTRICT_FILL_COLOR = '#a78bfa';
+
 export const PRACTICE_TYPE_META = {
     citizen: {
         label: '시민실천',
         districtLabel: '시민실천지구',
         shortDescription: '생활권 참여·운영 중심',
-        color: '#0f8b6d',
-        fillColor: '#34d399'
+        color: PRACTICE_DISTRICT_COLOR,
+        fillColor: PRACTICE_DISTRICT_FILL_COLOR
     },
     facility: {
         label: '시설지원사업',
         districtLabel: '시설지원실천지구',
         shortDescription: '시설 설치·개선 투자 중심',
-        color: '#c2410c',
-        fillColor: '#fb923c'
+        color: PRACTICE_DISTRICT_COLOR,
+        fillColor: PRACTICE_DISTRICT_FILL_COLOR
     },
     planning: {
         label: '계획행정수단',
         districtLabel: '계획실천지구',
         shortDescription: '계획·기준·지구 관리 중심',
-        color: '#4f46e5',
-        fillColor: '#818cf8'
+        color: PRACTICE_DISTRICT_COLOR,
+        fillColor: PRACTICE_DISTRICT_FILL_COLOR
     }
 };
 

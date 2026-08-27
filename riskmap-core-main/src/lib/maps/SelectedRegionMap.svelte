@@ -7,7 +7,11 @@
         getRegionCenter,
         regionZoom
     } from '$lib/data/administrativeRegions.js';
-    import { enrichPracticeDistricts, PRACTICE_TYPE_META } from '$lib/data/practiceDistricts.js';
+    import {
+        enrichPracticeDistricts,
+        PRACTICE_DISTRICT_COLOR,
+        PRACTICE_DISTRICT_FILL_COLOR
+    } from '$lib/data/practiceDistricts.js';
     import {
         createVWorldWmsOptions,
         hasVWorldApiKey,
@@ -1424,12 +1428,10 @@
         const key = String(feature?.properties?.candidateId || feature?.properties?.candidateName || '');
         const selected = focusedParcelCandidateKey && key === focusedParcelCandidateKey;
         const priority = rank <= 3;
-        const type = feature?.properties?.practiceType || 'facility';
-        const meta = PRACTICE_TYPE_META[type] || PRACTICE_TYPE_META.facility;
         return {
-            color: selected ? '#111827' : meta.color,
+            color: PRACTICE_DISTRICT_COLOR,
             weight: selected ? 4 : priority ? 2.4 : 1.4,
-            fillColor: meta.fillColor,
+            fillColor: PRACTICE_DISTRICT_FILL_COLOR,
             fillOpacity: selected ? 0.48 : priority ? 0.32 : 0.22
         };
     }
