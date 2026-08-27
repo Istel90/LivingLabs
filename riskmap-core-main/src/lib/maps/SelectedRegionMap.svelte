@@ -58,7 +58,6 @@
     let mapElement;
     let map;
     let mapLoading = $state(true);
-    let marker;
     let selectedBoundaryLayer;
     let regionViewBounds;
     let sidoLayer;
@@ -1839,8 +1838,6 @@
     }
 
     function clearSelectedRegion() {
-        marker?.remove();
-        marker = null;
         selectedBoundaryLayer?.remove();
         selectedBoundaryLayer = null;
     }
@@ -1920,7 +1917,6 @@
                     animate: true,
                     duration: 0.65
                 });
-                marker = L.marker(bounds.getCenter()).bindTooltip(label, { permanent: true, direction: 'top' }).addTo(map);
                 return;
             }
         }
@@ -1931,7 +1927,6 @@
             map.setMinZoom(9);
             regionViewBounds = null;
             map.setView(center, regionZoom(region));
-            marker = L.marker(center).bindTooltip(label, { permanent: true, direction: 'top' }).addTo(map);
         }
     }
 
