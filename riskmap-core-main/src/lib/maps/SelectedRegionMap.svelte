@@ -157,87 +157,87 @@
         if (!sourceCanvases.length && !sourceVectors.length) return () => {};
 
         const rootRect = captureElement.getBoundingClientRect();
-        const cleanupTasks = [];
-        const imageLoads = [];
+        const mapRect = mapElement.getBoundingClientRect();
+        const rasterScale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+        const composite = document.createElement('canvas');
+        composite.width = Math.max(1, Math.round(mapRect.width * rasterScale));
+        composite.height = Math.max(1, Math.round(mapRect.height * rasterScale));
+        const context = composite.getContext('2d');
+        context.scale(rasterScale, rasterScale);
 
-        sourceCanvases.forEach((sourceCanvas) => {
-            if (!(sourceCanvas instanceof HTMLCanvasElement) || !sourceCanvas.width || !sourceCanvas.height) return;
-            const rect = sourceCanvas.getBoundingClientRect();
-            if (!rect.width || !rect.height) return;
+        const sources = [...sourceCanvases, ...sourceVectors]
+            .map((source, order) => {
+                const rect = source.getBoundingClientRect();
+                const pane = source.closest('.leaflet-pane');
+                const zIndex = Number.parseInt(window.getComputedStyle(pane || source).zIndex, 10) || 420;
+                return { source, rect, zIndex, order };
+            })
+            .filter(({ rect }) => rect.width > 0 && rect.height > 0)
+            .sort((left, right) => left.zIndex - right.zIndex || left.order - right.order);
 
-            const snapshot = document.createElement('img');
-            snapshot.className = 'map-export-canvas-snapshot';
-            snapshot.alt = '';
-            snapshot.setAttribute('aria-hidden', 'true');
-            snapshot.src = sourceCanvas.toDataURL('image/png');
-            Object.assign(snapshot.style, {
-                position: 'absolute',
-                left: `${rect.left - rootRect.left}px`,
-                top: `${rect.top - rootRect.top}px`,
+        const waitForImage = (image) => (
+            typeof image.decode === 'function'
+                ? image.decode().catch(() => {})
+                : new Promise((resolve) => {
+                    image.addEventListener('load', resolve, { once: true });
+                    image.addEventListener('error', resolve, { once: true });
+                })
+        );
+
+        for (const { source, rect } of sources) {
+            const left = rect.left - mapRect.left;
+            const top = rect.top - mapRect.top;
+            if (source instanceof HTMLCanvasElement) {
+                context.drawImage(source, left, top, rect.width, rect.height);
+                continue;
+            }
+            if (!(source instanceof SVGElement)) continue;
+
+            const vector = source.cloneNode(true);
+            vector.classList.remove('leaflet-zoom-animated');
+            vector.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+            vector.setAttribute('width', String(rect.width));
+            vector.setAttribute('height', String(rect.height));
+            Object.assign(vector.style, {
                 width: `${rect.width}px`,
                 height: `${rect.height}px`,
-                zIndex: '430',
-                maxWidth: 'none',
-                pointerEvents: 'none',
-                imageRendering: 'auto'
-            });
-
-            const previousVisibility = sourceCanvas.style.visibility;
-            sourceCanvas.style.visibility = 'hidden';
-            captureElement.appendChild(snapshot);
-
-            imageLoads.push(
-                typeof snapshot.decode === 'function'
-                    ? snapshot.decode().catch(() => {})
-                    : new Promise((resolve) => {
-                        snapshot.addEventListener('load', resolve, { once: true });
-                        snapshot.addEventListener('error', resolve, { once: true });
-                    })
-            );
-            cleanupTasks.push(() => {
-                sourceCanvas.style.visibility = previousVisibility;
-                snapshot.remove();
-            });
-        });
-
-        sourceVectors.forEach((sourceVector) => {
-            if (!(sourceVector instanceof SVGElement)) return;
-            const rect = sourceVector.getBoundingClientRect();
-            if (!rect.width || !rect.height) return;
-
-            const snapshot = sourceVector.cloneNode(true);
-            snapshot.classList.remove('leaflet-zoom-animated');
-            snapshot.classList.add('map-export-vector-snapshot');
-            snapshot.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-            snapshot.setAttribute('aria-hidden', 'true');
-            const pane = sourceVector.closest('.leaflet-pane');
-            const paneZIndex = Number.parseInt(window.getComputedStyle(pane || sourceVector).zIndex, 10) || 420;
-            Object.assign(snapshot.style, {
-                position: 'absolute',
-                left: `${rect.left - rootRect.left}px`,
-                top: `${rect.top - rootRect.top}px`,
-                width: `${rect.width}px`,
-                height: `${rect.height}px`,
-                zIndex: String(paneZIndex),
-                maxWidth: 'none',
                 margin: '0',
                 transform: 'none',
                 transformOrigin: '0 0',
-                pointerEvents: 'none',
                 overflow: 'visible'
             });
+            const image = new Image();
+            image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(vector))}`;
+            await waitForImage(image);
+            context.drawImage(image, left, top, rect.width, rect.height);
+        }
 
-            const previousVisibility = sourceVector.style.visibility;
-            sourceVector.style.visibility = 'hidden';
-            captureElement.appendChild(snapshot);
-            cleanupTasks.push(() => {
-                sourceVector.style.visibility = previousVisibility;
-                snapshot.remove();
-            });
+        const snapshot = document.createElement('img');
+        snapshot.className = 'map-export-canvas-snapshot';
+        snapshot.alt = '';
+        snapshot.setAttribute('aria-hidden', 'true');
+        snapshot.src = composite.toDataURL('image/png');
+        Object.assign(snapshot.style, {
+            position: 'absolute',
+            left: `${mapRect.left - rootRect.left}px`,
+            top: `${mapRect.top - rootRect.top}px`,
+            width: `${mapRect.width}px`,
+            height: `${mapRect.height}px`,
+            zIndex: '620',
+            maxWidth: 'none',
+            pointerEvents: 'none',
+            imageRendering: 'auto'
         });
 
-        await Promise.all(imageLoads);
-        return () => cleanupTasks.reverse().forEach((cleanup) => cleanup());
+        const previousVisibility = sources.map(({ source }) => [source, source.style.visibility]);
+        previousVisibility.forEach(([source]) => { source.style.visibility = 'hidden'; });
+        captureElement.appendChild(snapshot);
+        await waitForImage(snapshot);
+
+        return () => {
+            previousVisibility.forEach(([source, visibility]) => { source.style.visibility = visibility; });
+            snapshot.remove();
+        };
     }
 
     function canvasToPngBlob(canvas) {
