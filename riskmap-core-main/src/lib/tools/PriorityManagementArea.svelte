@@ -192,7 +192,9 @@
 
     const config = hazardConfigs[hazard] || hazardConfigs.heatwave;
     function proxyDataPath(route) {
-        const baseUrl = analysisApiUrl || vworldProxyUrl;
+        // Analysis grids are served by the current origin in local/demo builds.
+        // The VWorld proxy URL includes its own route and must not be reused here.
+        const baseUrl = analysisApiUrl;
         return baseUrl ? `${baseUrl.replace(/\/$/, '')}${route}` : route;
     }
 
