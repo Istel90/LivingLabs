@@ -17,6 +17,19 @@
         VWORLD_WMS_URL
     } from '../../../../shared/map/vworld.js';
 
+    const BASE_TILE_STYLES = {
+        default: {
+            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        },
+        grayscale: {
+            url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            maxZoom: 19
+        }
+    };
+
     let {
         regionCode = '41110',
         regionName = '경기도 수원시',
@@ -61,6 +74,8 @@
     let map;
     let mapLoading = $state(true);
     let marker;
+    let baseLayer;
+    let baseMapStyle = $state('default');
     let selectedBoundaryLayer;
     let regionViewBounds;
     let sidoLayer;
@@ -1850,6 +1865,23 @@
         }
     }
 
+    function createBaseLayer(L, style) {
+        const config = BASE_TILE_STYLES[style] || BASE_TILE_STYLES.grayscale;
+        return L.tileLayer(config.url, {
+            attribution: config.attribution,
+            maxZoom: config.maxZoom
+        });
+    }
+
+    function setBaseMapStyle(style) {
+        if (style === baseMapStyle || !BASE_TILE_STYLES[style]) return;
+        baseMapStyle = style;
+        if (!map || !window.L) return;
+        const nextLayer = createBaseLayer(window.L, style).addTo(map);
+        if (baseLayer) baseLayer.remove();
+        baseLayer = nextLayer;
+    }
+
     function waitForLeaflet() {
         if (window.L) return Promise.resolve(window.L);
 
@@ -1899,10 +1931,7 @@
             map.getPane('selectedBoundaryPane').style.pointerEvents = 'none';
         }
 
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors',
-            maxZoom: 19
-        }).addTo(map);
+        baseLayer = createBaseLayer(L, baseMapStyle).addTo(map);
 
         if (hasVWorldApiKey()) {
             sidoLayer = L.tileLayer
@@ -2244,9 +2273,29 @@
                 </div>
             {/if}
         </div>
+        <button
+            type="button"
+            class="icon-control-button"
+            class:active={baseMapStyle === 'grayscale'}
+            aria-pressed={baseMapStyle === 'grayscale'}
+            aria-label={baseMapStyle === 'grayscale' ? '베이스맵 컬러로 전환' : '베이스맵 무채색으로 전환'}
+            onclick={() => setBaseMapStyle(baseMapStyle === 'grayscale' ? 'default' : 'grayscale')}
+        >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                <path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" />
+            </svg>
+            <span class="icon-tooltip">{baseMapStyle === 'grayscale' ? '컬러 지도로 전환' : '무채색 지도로 전환'}</span>
+        </button>
         {#if !locked}
             <button type="button" class="icon-control-button" onclick={returnToSelectedRegion}>
-                <span class="icon-glyph" aria-hidden="true">⌖</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                    <line x1="12" y1="1" x2="12" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    <line x1="1" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    <line x1="19" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
                 <span class="icon-tooltip">{regionReturnLabel()}</span>
             </button>
         {/if}
@@ -2342,10 +2391,6 @@
         height: 1.15rem;
     }
 
-    .icon-control-button .icon-glyph {
-        font-size: 1.15rem;
-        line-height: 1;
-    }
 
     .icon-tooltip {
         position: absolute;
