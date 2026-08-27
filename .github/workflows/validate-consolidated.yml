@@ -1,0 +1,37 @@
+name: Validate consolidated national PostGIS build
+
+on:
+  push:
+    branches:
+      - codex/consolidate-national-postgis
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            Survey platform for collaboration/package-lock.json
+            riskmap-core-main/package-lock.json
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix "Survey platform for collaboration"
+          npm ci --prefix riskmap-core-main
+      - name: Build portal
+        run: npm run build
+      - name: Build survey
+        run: npm run build --prefix "Survey platform for collaboration"
+      - name: Build internal tools
+        run: npm run build --prefix riskmap-core-main
