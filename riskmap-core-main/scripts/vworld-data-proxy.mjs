@@ -624,9 +624,9 @@ async function fetchFloodGrid(searchParams) {
   const regionCode = (searchParams.get('regionCode') || '').trim();
   if (!/^\d{5}$/.test(regionCode)) throw new Error('regionCode must be exactly 5 digits');
   const indicator = (searchParams.get('indicator') || '').trim().toUpperCase();
-  const columns = { FH01: 'fh01', FH02: 'fh02', FH03: 'fh03', FE01: 'fe01', FE02: 'fe02', FE03: 'fe03' };
+  const columns = { FH01: 'fh01', FH02: 'fh02', FH03: 'fh03', FE01: 'fe01', FE02: 'fe02', FE03: 'fe03', UF50: 'uf50', UF80: 'uf80', UF100: 'uf100' };
   const column = columns[indicator];
-  if (!column) throw new Error('indicator must be FH01 through FH03 or FE01 through FE03');
+  if (!column) throw new Error('indicator must be FH01 through FH03, FE01 through FE03, or UF50/UF80/UF100');
 
   const metaResult = await cadastrePool.query({
     text: `
