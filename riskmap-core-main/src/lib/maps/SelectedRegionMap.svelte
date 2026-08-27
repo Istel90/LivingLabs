@@ -170,10 +170,15 @@
             snapshot.setAttribute('aria-hidden', 'true');
             snapshot.src = sourceCanvas.toDataURL('image/png');
             Object.assign(snapshot.style, {
+                position: 'absolute',
                 left: `${rect.left - rootRect.left}px`,
                 top: `${rect.top - rootRect.top}px`,
                 width: `${rect.width}px`,
-                height: `${rect.height}px`
+                height: `${rect.height}px`,
+                zIndex: '430',
+                maxWidth: 'none',
+                pointerEvents: 'none',
+                imageRendering: 'auto'
             });
 
             const previousVisibility = sourceCanvas.style.visibility;
@@ -2188,7 +2193,7 @@
         {#if exportStatus}<small>{exportStatus}</small>{/if}
     </div>
     {#if showAnalysisLegend}
-        <div class="analysis-overlay-stack">
+        <div class="analysis-overlay-stack" data-map-export-ignore>
             <div class="analysis-legend" aria-label="분석 범례">
                 <strong>분석 범례</strong>
                 <span class="legend-note">
@@ -2293,7 +2298,7 @@
             {/if}
         </div>
     {/if}
-    <div class="layer-panel">
+    <div class="layer-panel" data-map-export-ignore>
         <strong>베이스·행정 레이어</strong>
         <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
         <label>
