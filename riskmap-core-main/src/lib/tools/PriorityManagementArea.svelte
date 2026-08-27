@@ -2627,7 +2627,7 @@
                 <div class="left-panel">
                     <div class="left-panel-tabs" role="tablist" aria-label="좌측 패널 탭">
                         <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 구성</button>
-                        <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} disabled={!candidateList.length} onclick={() => (leftPanelTab = '03')}>03 실천권역 구성</button>
+                        <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => (leftPanelTab = '03')}>03 실천권역 구성</button>
                     </div>
                     <div class="left-panel-body">
                 {#if leftPanelTab === '01'}
@@ -2799,7 +2799,7 @@
                         <div class="panel-head">
                             <div><span class="section-number">02</span><h2>분석 지도</h2><p>{region} · 행정구역 코드 {regionCode}</p></div>
                             <div class="panel-head-actions">
-                                <button class="add-button" onclick={openHandoffReview} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
+                                <button class="add-button handoff-request-button" onclick={openHandoffReview} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
                                 <small class="handoff-inline-status">{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '후보 도출 필요'}</small>
                             </div>
                         </div>
