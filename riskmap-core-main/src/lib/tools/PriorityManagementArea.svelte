@@ -120,6 +120,7 @@
                 { id: 209, floodIndicator: 'UF50', icon: '≈', label: '도시침수 50년', description: '50년 빈도 도시침수지도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#1e40af' },
                 { id: 210, floodIndicator: 'UF80', icon: '≈', label: '도시침수 80년', description: '80년 빈도 도시침수지도 5m 원자료 · 전국 묶음 중 2개 지역 원본 누락', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#3730a3' },
                 { id: 219, floodIndicator: 'UF100', icon: '≈', label: '도시침수 100년', description: '100년 빈도 도시침수지도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#312e81' },
+                { id: 220, floodIndicator: 'UFMAX', icon: '≈', label: '도시침수 기왕최대', description: '홍수위험지도 정보제공포털이 공개한 행정구역별 기왕최대 도시침수지도 85건을 전국 100m 셀에 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#581c87' },
                 { id: 202, floodIndicator: 'FH02', icon: '≋', label: 'H02 · 국가하천 100년', description: '국가하천 범람 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#1d4ed8' },
                 { id: 203, floodIndicator: 'FH03', icon: '≋', label: 'H03 · 지방하천 50년', description: '지방하천 범람 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#0369a1' },
                 { id: 204, analysisIndicator: 'rain-max-1h', icon: '☔', label: '1시간 최대강우량', description: 'ASOS 97개소 최근접 관측값으로 실제 100m 강우면은 아님', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-KMA-100m', supportedGridUnits: ['100m'], color: '#0284c7' },
@@ -192,7 +193,10 @@
 
     const config = hazardConfigs[hazard] || hazardConfigs.heatwave;
     function proxyDataPath(route) {
-        const baseUrl = analysisApiUrl || vworldProxyUrl;
+        // Flood/analysis grids are served by the platform API itself. The
+        // VWorld proxy URL may contain the `/vworld-data` endpoint, which is
+        // only for upstream VWorld requests and cannot serve these routes.
+        const baseUrl = analysisApiUrl;
         return baseUrl ? `${baseUrl.replace(/\/$/, '')}${route}` : route;
     }
 
@@ -302,6 +306,7 @@
     let appliedIndicators = [];
     let loadedPreviewIndicators = [];
     let indicatorPreviewGrid = null;
+    let focusedPreviewIndicatorId = null;
     const indicatorGroupMeta = {
         '기후위험': { english: 'Hazard', dimension: 'H', direction: 'positive', color: '#ef6c4d', icon: '☀' },
         '노출': { english: 'Exposure', dimension: 'E', direction: 'positive', color: '#3b82c4', icon: '◎' },
@@ -761,7 +766,9 @@
             if (!usableIndicator(item) || !item.dataPath) return item;
 
             try {
-                const dataUrl = /^https?:\/\//.test(item.dataPath) ? item.dataPath : asset(item.dataPath);
+                const dataUrl = /^https?:\/\//.test(item.dataPath) || item.dataPath.startsWith('/')
+                    ? item.dataPath
+                    : asset(item.dataPath);
                 const response = await fetch(dataUrl, gridFetchOptions(dataUrl));
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const grid = await response.json();
@@ -837,6 +844,8 @@
     }
 
     function indicatorStatusText(item) {
+        if (item.previewLoading) return '지도자료 불러오는 중';
+        if (item.loadError) return '지도자료 연결 실패';
         if (item.dataStatus === 'missing') return '연결대기';
         if (item.dataStatus === 'partial') return '지역·품질 제한';
         if (item.supportedGridUnits && !item.supportedGridUnits.includes(gridUnit)) return '격자미지원';
@@ -893,7 +902,9 @@
 
     function gridValue(item, index) {
         if (!Array.isArray(item.gridValues)) return null;
-        return finiteGridValue(item.gridValues[index]);
+        const value = item.gridValues[index];
+        if (value === null || value === undefined || value === '') return 0;
+        return finiteGridValue(value);
     }
 
     function weightedCellMean(items, index, valueGetter = gridValue) {
@@ -1184,9 +1195,56 @@
         markAnalysisDirty('분석 단위 격자가 변경되었습니다. Risk 분석을 다시 실행하세요.');
     }
 
-    function setIndicatorEnabled(id, enabled) {
-        indicators = indicators.map((item) => item.id === id ? { ...item, enabled } : item);
-        markAnalysisDirty();
+    async function setIndicatorEnabled(id, enabled) {
+        const selected = indicators.find((item) => item.id === id);
+        if (!selected) return;
+
+        indicators = indicators.map((item) => item.id === id
+            ? { ...item, enabled, loadError: enabled ? '' : item.loadError }
+            : item
+        );
+
+        if (!enabled) {
+            if (focusedPreviewIndicatorId === String(id)) focusedPreviewIndicatorId = null;
+            markAnalysisDirty(`${selected.label} 지표를 지도와 Risk 분석에서 제외했습니다.`);
+            return;
+        }
+
+        activeLayer = selected.dimension;
+        focusedPreviewIndicatorId = String(id);
+        const cached = loadedPreviewIndicators.find((item) =>
+            item.id === id && Array.isArray(item.gridValues) && item.gridValues.length
+        );
+        if (cached) {
+            markAnalysisDirty(`${selected.label} 지표를 지도에 표시했습니다. 필요하면 Risk 분석을 다시 실행하세요.`);
+            return;
+        }
+
+        indicators = indicators.map((item) => item.id === id ? { ...item, previewLoading: true } : item);
+        markAnalysisDirty(`${selected.label} 지도자료를 불러오는 중입니다.`);
+
+        const [loaded] = await loadIndicatorInputs([{ ...selected, enabled: true }]);
+        const loadedSuccessfully = Array.isArray(loaded?.gridValues) && loaded.gridValues.length > 0;
+        loadedPreviewIndicators = [
+            ...loadedPreviewIndicators.filter((item) => item.id !== id),
+            loaded
+        ];
+        indicators = indicators.map((item) => item.id === id
+            ? {
+                ...item,
+                previewLoading: false,
+                enabled: loadedSuccessfully && item.enabled,
+                dataStatus: loadedSuccessfully ? item.dataStatus : loaded?.dataStatus || 'missing',
+                loadError: loadedSuccessfully ? '' : loaded?.loadError || `${selected.label} 입력자료를 읽지 못했습니다.`
+            }
+            : item
+        );
+        indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
+
+        markAnalysisDirty(loadedSuccessfully
+            ? `${selected.label} 지표를 지도에 표시했습니다. 필요하면 Risk 분석을 다시 실행하세요.`
+            : `${selected.label} 지도자료를 불러오지 못했습니다. 데이터 서버 연결을 확인하세요.`
+        );
     }
 
     function setIndicatorWeight(id, value) {
@@ -2293,7 +2351,12 @@
                         <div class="indicator-group">
                             <div class="group-label">{group} ({indicatorGroupMeta[group].english})<span>{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span></div>
                             {#each indicators.filter((item) => item.group === group) as item}
-                                <div class="indicator-item" class:disabled={!item.enabled} class:unavailable={!isIndicatorAvailable(item)}>
+                                <div
+                                    class="indicator-item"
+                                    class:disabled={!item.enabled}
+                                    class:unavailable={!isIndicatorAvailable(item)}
+                                    data-indicator-code={item.floodIndicator || item.analysisIndicator || String(item.id)}
+                                >
                                     <input
                                         type="checkbox"
                                         checked={item.enabled}
@@ -2360,6 +2423,7 @@
                                 analysisIndicators={analysisDone ? appliedIndicators : previewAnalysisIndicators}
                                 riskGrid={analysisResult?.gridResult || indicatorPreviewGrid}
                                 activeGridLayer={activeLayer}
+                                focusedAnalysisIndicatorId={focusedPreviewIndicatorId}
                                 onGridLayerChange={setActiveGridLayer}
                                 showAnalysisLegend={true}
                                 parcelCandidates={analysisResult?.parcelCandidates || []}

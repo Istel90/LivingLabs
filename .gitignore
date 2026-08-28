@@ -11,6 +11,9 @@ build/
 __pycache__/
 *.pyc
 pages-dist/
+pages-dist.previous/
+.tmp/
+riskmap-core-main/data/
 riskmap-core-main.zip
 .tools/
 .codex/

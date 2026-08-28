@@ -28,6 +28,7 @@
         analysisIndicators = [],
         riskGrid = null,
         activeGridLayer = 'Risk',
+        focusedAnalysisIndicatorId = null,
         onGridLayerChange = () => {},
         onParcelCandidatesChange = () => {},
         onParcelCandidateFocus = () => {},
@@ -75,6 +76,7 @@
     let riskGridVisible = $state(true);
     let selectedGridLayer = $state(activeGridLayer);
     let visibleLayerScopeKey = $state('');
+    let appliedFocusedAnalysisIndicatorId = '';
     let selectedBoundaryVisible = $state(true);
     let sidoBoundaryVisible = $state(showSidoBoundary);
     let sigunguBoundaryVisible = $state(showSigunguBoundary);
@@ -127,6 +129,20 @@
         if (!sameIdList(visibleAnalysisLayerIds, nextVisibleIds)) {
             visibleAnalysisLayerIds = nextVisibleIds;
         }
+    }
+
+    function syncFocusedAnalysisIndicator() {
+        const focusedId = focusedAnalysisIndicatorId === null || focusedAnalysisIndicatorId === undefined
+            ? ''
+            : String(focusedAnalysisIndicatorId);
+        if (!focusedId) {
+            appliedFocusedAnalysisIndicatorId = '';
+            return;
+        }
+        if (appliedFocusedAnalysisIndicatorId === focusedId) return;
+        if (!enabledAnalysisIndicators().some((item) => String(item.id) === focusedId)) return;
+        visibleAnalysisLayerIds = [focusedId];
+        appliedFocusedAnalysisIndicatorId = focusedId;
     }
 
     function toggleAnalysisLayer(id, visible) {
@@ -1512,7 +1528,9 @@
                 context.globalAlpha = 0.58;
 
                 for (const cell of drawableCells) {
-                    const value = Number(values[cell.index]);
+                    const rawValue = values[cell.index];
+                    if (rawValue === null || rawValue === undefined || rawValue === '') continue;
+                    const value = Number(rawValue);
                     if (!Number.isFinite(value)) continue;
                     if (Number.isFinite(hotspotThreshold) && value < hotspotThreshold) continue;
 
@@ -1989,7 +2007,9 @@
         riskGridVisible;
         selectedGridLayer;
         showAnalysisLegend;
+        focusedAnalysisIndicatorId;
         syncVisibleAnalysisLayers();
+        syncFocusedAnalysisIndicator();
         renderAnalysisLayers();
         renderRiskGridLayer();
         syncParcelCandidateLayerFromProps();

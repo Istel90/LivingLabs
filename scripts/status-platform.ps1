@@ -48,11 +48,16 @@ function Test-Url($url) {
 
 $rows = foreach ($app in $apps) {
   $processId = Get-PortProcessId $app.Port
+  $commandLine = if ($processId) {
+    [string](Get-CimInstance Win32_Process -Filter "ProcessId=$processId" -ErrorAction SilentlyContinue).CommandLine
+  } else { '' }
+  $normalized = $commandLine.Replace('\', '/').ToLowerInvariant()
+  $owned = $processId -and $normalized.Contains('riskmap-core-main/scripts/vworld-data-proxy.mjs') -and $normalized.Contains('--port=4173')
   [pscustomobject]@{
     Service = $app.Label
     Url = $app.Url
     Port = $app.Port
-    State = if ($processId) { "Running" } else { "Stopped" }
+    State = if ($owned) { "Running" } elseif ($processId) { "Occupied by another process" } else { "Stopped" }
     PID = if ($processId) { $processId } else { "-" }
     HTTP = if ($processId) { Test-Url $app.Url } else { "-" }
   }

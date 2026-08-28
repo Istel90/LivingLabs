@@ -8,6 +8,7 @@ const FLOOD_COLUMNS = Object.freeze({
   UF50: 'uf50',
   UF80: 'uf80',
   UF100: 'uf100',
+  UFMAX: 'ufmax',
 });
 
 const ANALYSIS_INDICATORS = Object.freeze({
@@ -107,7 +108,7 @@ export function createFloodAnalysisGridService({ pool }) {
     const regionCode = regionCodeFrom(searchParams);
     const indicator = (searchParams.get('indicator') || '').trim().toUpperCase();
     const column = FLOOD_COLUMNS[indicator];
-    if (!column) throw new Error('indicator must be FH01 through FH03, FE01 through FE03, or UF50/UF80/UF100');
+    if (!column) throw new Error('indicator must be FH01 through FH03, FE01 through FE03, or UF50/UF80/UF100/UFMAX');
 
     const metaResult = await pool.query({
       text: `

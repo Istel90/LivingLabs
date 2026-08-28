@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const outputRoot = join(workspaceRoot, 'pages-dist');
+const stagingRoot = `${outputRoot}.next`;
+const previousRoot = `${outputRoot}.previous`;
 const vworldProxyUrl = process.env.VITE_VWORLD_PROXY_URL || 'http://127.0.0.1:4173/vworld-data';
 const analysisApiUrl = process.env.VITE_ANALYSIS_API_URL || '';
 
@@ -49,9 +51,6 @@ runBuild('Internal tools', join(workspaceRoot, 'riskmap-core-main'), {
   VITE_ANALYSIS_API_URL: analysisApiUrl,
 });
 
-rmSync(outputRoot, { recursive: true, force: true });
-mkdirSync(outputRoot, { recursive: true });
-
 const portalDist = join(workspaceRoot, 'dist');
 const surveyDist = join(workspaceRoot, 'Survey platform for collaboration', 'dist');
 const internalToolsDist = join(workspaceRoot, 'riskmap-core-main', 'build');
@@ -60,8 +59,36 @@ for (const path of [portalDist, surveyDist, internalToolsDist]) {
   if (!existsSync(path)) throw new Error(`Missing build output: ${path}`);
 }
 
-cpSync(portalDist, outputRoot, { recursive: true });
-cpSync(surveyDist, join(outputRoot, 'survey'), { recursive: true });
-cpSync(internalToolsDist, join(outputRoot, 'internal-tools'), { recursive: true });
+rmSync(stagingRoot, { recursive: true, force: true });
+mkdirSync(stagingRoot, { recursive: true });
 
-console.log(`\n[build] Unified platform assembled at ${outputRoot}`);
+cpSync(portalDist, stagingRoot, { recursive: true });
+cpSync(surveyDist, join(stagingRoot, 'survey'), { recursive: true });
+cpSync(internalToolsDist, join(stagingRoot, 'internal-tools'), { recursive: true });
+
+for (const path of [
+  join(stagingRoot, 'index.html'),
+  join(stagingRoot, 'survey', 'index.html'),
+  join(stagingRoot, 'internal-tools', 'index.html'),
+]) {
+  if (!existsSync(path)) throw new Error(`Incomplete unified build: ${path}`);
+}
+
+rmSync(previousRoot, { recursive: true, force: true });
+let currentMoved = false;
+
+try {
+  if (existsSync(outputRoot)) {
+    renameSync(outputRoot, previousRoot);
+    currentMoved = true;
+  }
+  renameSync(stagingRoot, outputRoot);
+} catch (error) {
+  if (currentMoved && !existsSync(outputRoot) && existsSync(previousRoot)) {
+    renameSync(previousRoot, outputRoot);
+  }
+  throw error;
+}
+
+console.log(`\n[build] Unified platform assembled atomically at ${outputRoot}`);
+console.log(`[build] Previous known-good build retained at ${previousRoot}`);
