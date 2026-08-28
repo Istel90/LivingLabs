@@ -59,9 +59,22 @@ $sourceRoots = @(
 $latestSource = $sourceRoots | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object {
   Get-ChildItem -LiteralPath $_ -File -Recurse -Force | Select-Object -ExpandProperty LastWriteTime
 } | Sort-Object -Descending | Select-Object -First 1
-if (Test-Path -LiteralPath $unifiedIndex) {
+$buildMarker = Join-Path $root 'pages-dist\.livinglabs-build.json'
+if (Test-Path -LiteralPath $buildMarker) {
+  $buildInfo = Get-Content -LiteralPath $buildMarker -Raw | ConvertFrom-Json
+  $buildWrite = [DateTimeOffset]::Parse([string]$buildInfo.builtAt).LocalDateTime
+  Add-Check 'Build freshness' $(if ($latestSource -le $buildWrite) { 'PASS' } else { 'WARN' }) "source=$latestSource; build=$buildWrite; revision=$($buildInfo.sourceRevision)"
+} elseif (Test-Path -LiteralPath $unifiedIndex) {
   $buildWrite = (Get-Item -LiteralPath $unifiedIndex).LastWriteTime
-  Add-Check 'Build freshness' $(if ($latestSource -le $buildWrite) { 'PASS' } else { 'WARN' }) "source=$latestSource; build=$buildWrite"
+  Add-Check 'Build freshness' $(if ($latestSource -le $buildWrite) { 'PASS' } else { 'WARN' }) "legacy source=$latestSource; build=$buildWrite"
+}
+
+$analysisContract = Join-Path $root 'riskmap-core-main\src\lib\domain\priority-management\analysisGridContract.js'
+$analysisContractTest = Join-Path $root 'scripts\test-ui-analysis-contract.mjs'
+Add-Check 'Analysis UI contract' $(if ((Test-Path -LiteralPath $analysisContract) -and (Test-Path -LiteralPath $analysisContractTest)) { 'PASS' } else { 'FAIL' }) $analysisContract
+if (Test-Path -LiteralPath $analysisContractTest) {
+  & node $analysisContractTest | Out-Null
+  Add-Check 'Analysis contract test' $(if ($LASTEXITCODE -eq 0) { 'PASS' } else { 'FAIL' }) $analysisContractTest
 }
 
 $platformPid = Get-PortProcessId 4173

@@ -41,6 +41,8 @@ npm.cmd run platform:refresh
 - 종료: `npm.cmd run platform:stop`
 
 통합 방식은 하나의 서버만 실행하므로 개별 개발 서버의 포트가 종료되어 링크가 끊기는 문제를 줄입니다.
+갱신할 때는 새 빌드를 먼저 준비한 뒤 서버를 잠깐 중단하고 결과 폴더를 교체하므로,
+Windows에서 실행 중인 페이지 폴더가 잠겨 갱신이 실패하는 문제를 피합니다.
 
 ## 개별 개발 서버 실행
 
@@ -91,4 +93,6 @@ VITE_VWORLD_API_KEY=발급받은_VWorld_API_KEY
 다른 컴퓨터에서 사용하던 설문 데이터는 자동으로 옮겨지지 않습니다.
 
 통합 구조와 공통 데이터 관리 기준은 `docs/ARCHITECTURE.md`를 참고합니다.
+세 버전의 역할은 `docs/WORKSPACE_VERSIONS.md`, UI 작업본 반영 규칙은
+`docs/UI_INTEGRATION_CONTRACT.md`가 기준입니다.
   

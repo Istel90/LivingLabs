@@ -7,6 +7,10 @@ LivingLabs/
 ├─ src/                                  메인 포털
 ├─ Survey platform for collaboration/    지역 리스크 우선순위 설문조사 도구
 ├─ riskmap-core-main/                    지도 기반 내부 도구 실행 앱
+│  ├─ src/lib/domain/                    UI가 의존하는 분석 계약·업무 규칙
+│  ├─ src/lib/maps/                      지도 표현과 지도 상호작용
+│  ├─ src/lib/tools/                     도구 화면 조립과 사용자 흐름
+│  ├─ scripts/                           데이터 API와 분석 서비스
 │  └─ src/routes/
 │     ├─ priority-management-area/       기후적응실천권역 선정 지원도구 메인
 │     │  ├─ heatwave/                    폭염 분석
@@ -16,8 +20,16 @@ LivingLabs/
 ├─ shared/
 │  ├─ data/                              공통 행정구역·격자·인구 데이터
 │  └─ map/                               공통 베이스맵·레이어 설정
+├─ scripts/                              통합 실행·DB·수집·검증 작업
 └─ docs/                                 구조 및 이전 기준
 ```
+
+`pages-dist/`, `dist/`, `build/`, `.svelte-kit/`은 다시 만드는 결과물이므로 직접
+수정하지 않는다. 대용량 원본과 PostGIS 백업은 저장소 밖 `D:\90_Data`가 기준이며,
+Git에는 코드·작은 파생 자료·복구 절차만 둔다.
+
+작업본·공개본·UI 작업본의 구분은 `docs/WORKSPACE_VERSIONS.md`, UI 반영 경계는
+`docs/UI_INTEGRATION_CONTRACT.md`를 기준으로 한다.
 
 ## 도구 구분
 

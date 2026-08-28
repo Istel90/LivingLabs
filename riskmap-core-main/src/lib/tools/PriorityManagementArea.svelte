@@ -2,6 +2,11 @@
     import { onDestroy, onMount } from 'svelte';
     import { base } from '$app/paths';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
+    import {
+        configurePriorityIndicators,
+        indicatorContractKey,
+        loadIndicatorGrid
+    } from '$lib/domain/priority-management/analysisGridContract.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
     import { markPlatformHandoffStatus, savePlatformHandoff } from '../../../../shared/services/platformHandoffs.js';
     import {
@@ -192,58 +197,13 @@
     };
 
     const config = hazardConfigs[hazard] || hazardConfigs.heatwave;
-    function proxyDataPath(route) {
-        // Flood/analysis grids are served by the platform API itself. The
-        // VWorld proxy URL may contain the `/vworld-data` endpoint, which is
-        // only for upstream VWorld requests and cannot serve these routes.
-        const baseUrl = analysisApiUrl;
-        return baseUrl ? `${baseUrl.replace(/\/$/, '')}${route}` : route;
-    }
-
-    function gridFetchOptions(url) {
-        if (!supabaseAnonKey || !url.includes('.supabase.co/functions/v1/')) return {};
-        return {
-            headers: {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`
-            }
-        };
-    }
-
     function configureIndicatorsForRegion(sourceIndicators, code) {
-        return sourceIndicators.map((item) => {
-            if (hazard !== 'flood') return { ...item };
-
-            let dataPath = null;
-            const covered = !item.coveragePrefix || code?.startsWith(item.coveragePrefix);
-            if (item.floodIndicator && code && covered) {
-                dataPath = proxyDataPath(`/flood-grid?regionCode=${encodeURIComponent(code)}&indicator=${encodeURIComponent(item.floodIndicator)}`);
-            } else if (item.analysisIndicator && code && covered) {
-                dataPath = proxyDataPath(`/analysis-grid?regionCode=${encodeURIComponent(code)}&indicator=${encodeURIComponent(item.analysisIndicator)}`);
-            }
-
-            if (!item.floodIndicator && !item.analysisIndicator) return { ...item };
-            const status = dataPath ? item.dataStatus : 'missing';
-            return {
-                ...item,
-                dataPath,
-                dataStatus: status,
-                enabled: Boolean(dataPath && item.enabled && status !== 'missing')
-            };
+        return configurePriorityIndicators({
+            sourceIndicators,
+            hazard,
+            regionCode: code,
+            analysisApiUrl
         });
-    }
-
-    function decodeGridValues(grid) {
-        if (Array.isArray(grid?.values)) return grid.values;
-        if (grid?.valueEncoding !== 'sparse-index-value' || !Array.isArray(grid?.sparseValues)) return null;
-        const valueCount = Number(grid.valueCount) || Number(grid.columns) * Number(grid.rows);
-        const values = new Array(valueCount).fill(null);
-        for (let offset = 0; offset < grid.sparseValues.length; offset += 2) {
-            const index = Number(grid.sparseValues[offset]);
-            const value = Number(grid.sparseValues[offset + 1]);
-            if (Number.isInteger(index) && index >= 0 && index < valueCount && Number.isFinite(value)) values[index] = value;
-        }
-        return values;
     }
 
 
@@ -766,38 +726,12 @@
             if (!usableIndicator(item) || !item.dataPath) return item;
 
             try {
-                const dataUrl = /^https?:\/\//.test(item.dataPath) || item.dataPath.startsWith('/')
-                    ? item.dataPath
-                    : asset(item.dataPath);
-                const response = await fetch(dataUrl, gridFetchOptions(dataUrl));
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const grid = await response.json();
-                const gridValues = decodeGridValues(grid);
-                const loadedValue = Number(grid?.stats?.normalizedMean ?? grid?.stats?.mean);
-                if (!Number.isFinite(loadedValue)) throw new Error('normalizedMean is missing');
-
                 return {
                     ...item,
-                    loadedValue,
-                    gridValues,
-                    gridMeta: {
-                        gridUnit: grid.gridUnit,
-                        rows: grid.rows,
-                        columns: grid.columns,
-                        extent: grid.extent,
-                        transform: grid.transform,
-                        crs: grid.crs
-                    },
-                    gridSummary: {
-                        gridUnit: grid.gridUnit,
-                        rows: grid.rows,
-                        columns: grid.columns,
-                        validCells: grid.stats?.validCells,
-                        rawUnit: grid.rawUnit || grid.unit || '',
-                        rawMean: grid.stats?.rawMean,
-                        normalizedMean: grid.stats?.normalizedMean ?? grid.stats?.mean,
-                        sourceResolution: grid.sourceResolution
-                    }
+                    ...await loadIndicatorGrid(item, {
+                        assetPath: asset,
+                        supabaseAnonKey
+                    })
                 };
             } catch (error) {
                 return {
@@ -2355,7 +2289,7 @@
                                     class="indicator-item"
                                     class:disabled={!item.enabled}
                                     class:unavailable={!isIndicatorAvailable(item)}
-                                    data-indicator-code={item.floodIndicator || item.analysisIndicator || String(item.id)}
+                                    data-indicator-code={indicatorContractKey(item)}
                                 >
                                     <input
                                         type="checkbox"

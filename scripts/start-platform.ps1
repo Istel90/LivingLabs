@@ -17,6 +17,7 @@ if (Test-Path -LiteralPath $postgisStartScript) {
 }
 
 $unifiedIndex = Join-Path $root "pages-dist\index.html"
+$unifiedBuildMarker = Join-Path $root "pages-dist\.livinglabs-build.json"
 $sourceRoots = @(
   (Join-Path $root "src"),
   (Join-Path $root "shared"),
@@ -34,7 +35,10 @@ $latestSourceWrite = ($sourceRoots | Where-Object { Test-Path -LiteralPath $_ } 
 }) + ($sourceFiles | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object {
   (Get-Item -LiteralPath $_).LastWriteTime
 }) | Sort-Object -Descending | Select-Object -First 1
-$unifiedBuildWrite = if (Test-Path -LiteralPath $unifiedIndex) {
+$unifiedBuildWrite = if (Test-Path -LiteralPath $unifiedBuildMarker) {
+  $buildInfo = Get-Content -LiteralPath $unifiedBuildMarker -Raw | ConvertFrom-Json
+  [DateTimeOffset]::Parse([string]$buildInfo.builtAt).LocalDateTime
+} elseif (Test-Path -LiteralPath $unifiedIndex) {
   (Get-Item -LiteralPath $unifiedIndex).LastWriteTime
 } else {
   [datetime]::MinValue
