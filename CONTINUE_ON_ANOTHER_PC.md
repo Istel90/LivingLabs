@@ -2,6 +2,30 @@
 
 작성일: 2026-08-28
 
+## 집 컴퓨터용 최신 기준
+
+- 기준 브랜치: `work/main`
+- 기준 커밋: `edd490f` 이상
+- USB 증분 패키지: `H:\LivingLabs_HOME_UPDATE_2026-08-28`
+- UI 작업본은 아직 직접 병합하지 않는다. 현재 점검 결과 서버·데이터 변경 35개,
+  작업본 중복 16개, 수동 병합 구간 9개가 있다.
+- UI와 분석 데이터 사이에는 `analysisGridContract.js` 계약이 추가되었다.
+- 로컬 갱신은 `npm.cmd run platform:refresh`를 사용한다. 새 빌드를 먼저 준비한 뒤
+  서버를 잠깐 중단하고 교체하므로 Windows 폴더 잠금 오류를 피한다.
+
+집 컴퓨터에서 기존 저장소가 있으면 새로 복제하지 말고 다음 순서로 갱신한다.
+
+    git fetch origin
+    git switch work/main
+    git pull --ff-only origin work/main
+    npm.cmd run install:all
+
+USB의 `04_analysis_workspace\riskmap-core-main-data.tar`는 GitHub에 없는 로컬 분석
+작업자료 3,167개를 원래 `data` 구조로 보존한 묶음이다. 집 컴퓨터 저장소의
+`riskmap-core-main` 폴더에서 `tar.exe -xf <TAR 경로>`로 풀되 기존 파일은 먼저
+삭제하지 않는다. USB의 DB 덤프 두 개를 복원하면 현재 지도 서비스 상태를 가장
+정확하게 재현할 수 있다.
+
 ## 새 채팅에서 시작
 
 새 컴퓨터의 Codex에서 이 파일을 첨부하고 다음 문장으로 시작한다.
@@ -30,6 +54,7 @@
 - 홍수 분석 API, LivingLabs PostGIS, VWorld 전국 연속지적도 연결이 구현되어 있다.
 - 공간 최적화 UI는 삭제하지 않고 복구하고 보호했다.
 - 포털, 홍수, 공간 최적화 핵심 페이지와 전체 빌드 검사를 통과했다.
+- UI·분석 계약, UI 병합 범위 점검, Windows 안전 갱신 절차가 구현되어 있다.
 
 ## 최근 분석체계 결정
 
@@ -60,6 +85,13 @@
 Node.js 20 이상, npm 10 이상을 사용한다.
 
 ### 2. 로컬 데이터 별도 복사
+
+집 컴퓨터에 기존 원본이 대부분 있는 경우에는 전체 74.93GB 대신 USB의 증분
+패키지 `LivingLabs_HOME_UPDATE_2026-08-28`만 사용한다. 이 패키지에는 최신
+LivingLabs DB, VWorld DB, 기왕최대 원본 87건, 대피시설 신규자료, Git에 없는
+분석 작업자료가 들어 있다. `README_FIRST.md`를 먼저 읽는다.
+
+전체 원본이 없는 컴퓨터에서 처음 복원할 때만 아래 전체 묶음이 필요하다.
 
 GitHub에는 대용량 원본, 가공 데이터, DB 덤프, 비밀키가 없다. 다음 두 묶음을 외장 디스크 등으로 복사한다.
 
