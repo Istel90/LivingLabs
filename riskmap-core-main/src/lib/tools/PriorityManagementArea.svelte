@@ -2573,6 +2573,38 @@
         <div class="project-meta">
             <div><span>프로젝트</span><strong>{projectName}</strong></div>
             <a class="ghost-link" href={portalToolsUrl}>지원도구 페이지로 돌아가기</a>
+            <div class="request-manager">
+                <button type="button" class="request-manager-toggle" onclick={() => requestListOpen = !requestListOpen}>
+                    보낸 요청 관리
+                    <span>{sentRequestCount}</span>
+                </button>
+                {#if requestListOpen}
+                    <div class="request-manager-panel">
+                        <div>
+                            <strong>보낸 검토 요청</strong>
+                            <small>초기화 후에도 이 목록에서 요청을 회수할 수 있습니다.</small>
+                        </div>
+                        {#if sentHandoffPackages.length}
+                            <ul>
+                                {#each sentHandoffPackages as request}
+                                    <li>
+                                        <div>
+                                            <b>{request.hazardLabel || config.label} · {request.region || region}</b>
+                                            <span>{request.alternativeCount || 0}개 대안 · {request.candidateCount || 0}개 후보 · {formatHandoffTime(request.deliveredAt)}</span>
+                                            <small>{request.packageId}</small>
+                                        </div>
+                                        <button type="button" onclick={() => recallDepartmentHandoff(request)}>회수</button>
+                                    </li>
+                                {/each}
+                            </ul>
+                            <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>전체 요청 회수</button>
+                        {:else}
+                            <p>현재 도구에 기록된 요청은 없습니다. 주관부서 화면에 이전 요청이 남아 있으면 아래 버튼으로 비울 수 있습니다.</p>
+                            <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>주관부서 요청 비우기</button>
+                        {/if}
+                    </div>
+                {/if}
+            </div>
             <button class="ghost-button" onclick={downloadConfig}>설정 내보내기</button>
             <div class="avatar">관리</div>
         </div>
@@ -2603,43 +2635,8 @@
                             </select>
                         </label>
                         <label>선택 행정구역<input value={`${region} · ${regionCode}`} readonly /></label>
-                    {:else}
-                        <label>분석 대상 지역<input value={region} readonly /></label>
-                        <label>행정구역 코드<input value={regionCode} readonly /></label>
+                        <small>{config.sampleNotice}</small>
                     {/if}
-                    <small>{config.sampleNotice}</small>
-                    <div class="request-manager">
-                        <button type="button" class="request-manager-toggle" onclick={() => requestListOpen = !requestListOpen}>
-                            보낸 요청 관리
-                            <span>{sentRequestCount}</span>
-                        </button>
-                        {#if requestListOpen}
-                            <div class="request-manager-panel">
-                                <div>
-                                    <strong>보낸 검토 요청</strong>
-                                    <small>초기화 후에도 이 목록에서 요청을 회수할 수 있습니다.</small>
-                                </div>
-                                {#if sentHandoffPackages.length}
-                                    <ul>
-                                        {#each sentHandoffPackages as request}
-                                            <li>
-                                                <div>
-                                                    <b>{request.hazardLabel || config.label} · {request.region || region}</b>
-                                                    <span>{request.alternativeCount || 0}개 대안 · {request.candidateCount || 0}개 후보 · {formatHandoffTime(request.deliveredAt)}</span>
-                                                    <small>{request.packageId}</small>
-                                                </div>
-                                                <button type="button" onclick={() => recallDepartmentHandoff(request)}>회수</button>
-                                            </li>
-                                        {/each}
-                                    </ul>
-                                    <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>전체 요청 회수</button>
-                                {:else}
-                                    <p>현재 도구에 기록된 요청은 없습니다. 주관부서 화면에 이전 요청이 남아 있으면 아래 버튼으로 비울 수 있습니다.</p>
-                                    <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>주관부서 요청 비우기</button>
-                                {/if}
-                            </div>
-                        {/if}
-                    </div>
                 </div>
             </section>
 
