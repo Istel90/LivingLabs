@@ -439,7 +439,11 @@
     });
 
     $: enabledCount = indicators.filter((item) => item.enabled).length;
-    $: availableCount = indicators.filter(isIndicatorAvailable).length;
+    $: dimensionSelectedCounts = {
+        H: indicators.filter((item) => item.enabled && item.dimension === 'H').length,
+        E: indicators.filter((item) => item.enabled && item.dimension === 'E').length,
+        V: indicators.filter((item) => item.enabled && item.dimension === 'V').length
+    };
 
     function priorityDraftKey(code = regionCode) {
         return `${PRIORITY_DRAFT_SCHEMA_VERSION}:${hazard}:${code || 'unknown'}`;
@@ -2628,56 +2632,59 @@
                     <div class="left-panel-tabs" role="tablist" aria-label="좌측 패널 탭">
                         <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 구성</button>
                         <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => (leftPanelTab = '03')}>03 실천권역 구성</button>
+                        {#if leftPanelTab === '01'}
+                            <button class="add-button left-panel-tabs-action" onclick={openIndicatorDialog}>+ 지표 업로드</button>
+                        {/if}
                     </div>
+                    {#if leftPanelTab === '01'}
+                        <div class="analysis-fixed-bar">
+                            <div class="analysis-fixed-selects">
+                                <label>Hazard 기준기간
+                                    <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
+                                        <option value="observed">최근 5년 · 2021~2025</option>
+                                        <option value="future">미래 시나리오 · 2026~2100</option>
+                                    </select>
+                                </label>
+                                {#if hazardDatasetMode === 'future'}
+                                    <label>SSP 시나리오
+                                        <select value={hazardScenario} onchange={(event) => setHazardScenario(event.currentTarget.value)}>
+                                            {#each hazardScenarios as scenario}
+                                                <option value={scenario}>{scenario.toUpperCase()}</option>
+                                            {/each}
+                                        </select>
+                                    </label>
+                                    <label>미래 기간
+                                        <select value={hazardFuturePeriod} onchange={(event) => setHazardFuturePeriod(event.currentTarget.value)}>
+                                            {#each hazardFuturePeriods as period}
+                                                <option value={period}>{period}</option>
+                                            {/each}
+                                        </select>
+                                    </label>
+                                {/if}
+                                <label>분석 단위 격자
+                                    <select value={gridUnit} onchange={(event) => setGridUnit(event.currentTarget.value)}>
+                                        {#each gridOptions as option}
+                                            <option value={option}>{option}</option>
+                                        {/each}
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="analysis-fixed-summary">
+                                <div class="analysis-dimension-counts">
+                                    <span>H {dimensionSelectedCounts.H}</span>
+                                    <span>E {dimensionSelectedCounts.E}</span>
+                                    <span>V {dimensionSelectedCounts.V}</span>
+                                    <small>{hazardDatasetMode === 'observed' ? '2021~2025' : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod}`} · {gridUnit}</small>
+                                </div>
+                                <button class="primary run-analysis-button" onclick={runAnalysis} disabled={running}>
+                                    <span class="play-icon" aria-hidden="true">▷</span>{running ? '계산 중...' : 'Risk 분석 실행'}
+                                </button>
+                            </div>
+                        </div>
+                    {/if}
                     <div class="left-panel-body">
                 {#if leftPanelTab === '01'}
                 <div class="panel indicator-panel">
-                    <div class="panel-head">
-                        <div><span class="section-number">01</span><h2>분석 지표 구성</h2><p>사용 가능 지표만 Risk 분석에 반영됩니다.</p></div>
-                        <button class="add-button" onclick={openIndicatorDialog}>+ 지표 추가</button>
-                    </div>
-                    <div class="analysis-control-card">
-                        <div class="analysis-control-copy">
-                            <span>ANALYSIS SETUP</span>
-                            <strong>단위격자 기준으로 지표를 요약해 Risk를 계산합니다.</strong>
-                            <p>{analysisMessage}</p>
-                        </div>
-                        <label>Hazard 기준기간
-                            <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
-                                <option value="observed">최근 5년 · 2021~2025</option>
-                                <option value="future">미래 시나리오 · 2026~2100</option>
-                            </select>
-                        </label>
-                        {#if hazardDatasetMode === 'future'}
-                            <label>SSP 시나리오
-                                <select value={hazardScenario} onchange={(event) => setHazardScenario(event.currentTarget.value)}>
-                                    {#each hazardScenarios as scenario}
-                                        <option value={scenario}>{scenario.toUpperCase()}</option>
-                                    {/each}
-                                </select>
-                            </label>
-                            <label>미래 기간
-                                <select value={hazardFuturePeriod} onchange={(event) => setHazardFuturePeriod(event.currentTarget.value)}>
-                                    {#each hazardFuturePeriods as period}
-                                        <option value={period}>{period}</option>
-                                    {/each}
-                                </select>
-                            </label>
-                        {/if}
-                        <label>분석 단위 격자
-                            <select value={gridUnit} onchange={(event) => setGridUnit(event.currentTarget.value)}>
-                                {#each gridOptions as option}
-                                    <option value={option}>{option}</option>
-                                {/each}
-                            </select>
-                        </label>
-                        <div class="control-stats">
-                            <span>{enabledCount}개 선택</span>
-                            <span>{availableCount}개 사용 가능</span>
-                            <span>{draftStorageStatus}</span>
-                        </div>
-                        <button class="primary" onclick={runAnalysis} disabled={running}>{running ? '계산 중...' : 'Risk 분석 실행'}</button>
-                    </div>
                     {#each ['기후위험', '노출', '민감도', '적응역량'] as group}
                         <div class="indicator-group" class:collapsed={!groupExpanded[group]}>
                             <button

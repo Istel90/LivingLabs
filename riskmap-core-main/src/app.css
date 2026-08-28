@@ -2,7 +2,7 @@
 
 :root { font-family: Inter, Pretendard, "Noto Sans KR", Arial, sans-serif; color: #172727; background: #f3f5f1; font-synthesis: none; }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 360px; }
+body { margin: 0; min-width: 1180px; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 .app-shell { min-height: 100vh; background: #f3f5f1; }
@@ -229,7 +229,7 @@ button { cursor: pointer; }
 
 /* Heatwave workspace refinements */
 .workspace { display: block; }
-.main { max-width: min(1720px, calc(100vw - 48px)); padding: 30px 28px 12px; }
+.main { max-width: 100%; padding: 30px 8px 12px; }
 .lab-analysis-runner {
     position: sticky;
     top: 10px;
@@ -271,95 +271,86 @@ button { cursor: pointer; }
 }
 .lab-analysis-runner > button:hover { background: #ea580c; }
 .lab-analysis-runner > button:disabled { opacity: .68; cursor: wait; }
-.analysis-control-card {
+.left-panel-tabs button.left-panel-tabs-action {
+    flex: 0 0 auto;
+    align-self: center;
+    margin-left: auto;
+    background: white;
+    border: 1px solid #bcc9c0;
+    border-bottom: 1px solid #bcc9c0;
+    color: #34544e;
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.analysis-fixed-bar {
     display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: end;
+    flex-direction: column;
+    flex: 0 0 auto;
+    gap: 8px;
     border-bottom: 1px solid #e4e9e4;
     background: #f7fbf7;
-    padding: 13px;
+    padding: 10px 16px;
 }
-.analysis-control-copy {
-    flex: 1 1 100%;
-    width: 100%;
-    min-width: 280px;
-    white-space: normal !important;
-    writing-mode: horizontal-tb !important;
-    text-orientation: initial !important;
-    word-break: keep-all !important;
-    overflow-wrap: break-word !important;
+.analysis-fixed-selects {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }
-.analysis-control-copy span {
-    display: block;
-    color: #0f766e;
-    font-size: 8px;
-    font-weight: 900;
-    letter-spacing: .08em;
-    writing-mode: horizontal-tb !important;
-    white-space: nowrap !important;
-    word-break: keep-all !important;
-}
-.analysis-control-copy strong {
-    display: block;
-    margin-top: 3px;
-    color: #1f3d39;
-    font-size: 11px;
-    line-height: 1.45;
-    white-space: normal !important;
-    writing-mode: horizontal-tb !important;
-    word-break: keep-all !important;
-    overflow-wrap: break-word !important;
-}
-.analysis-control-copy p {
-    margin: 4px 0 0;
-    color: #6d7f79;
-    font-size: 9px;
-    line-height: 1.4;
-    white-space: normal !important;
-    writing-mode: horizontal-tb !important;
-    word-break: keep-all !important;
-    overflow-wrap: break-word !important;
-}
-.analysis-control-card label {
-    flex: 1 1 140px;
+.analysis-fixed-selects label {
+    flex: 1 1 120px;
     min-width: 0;
     color: #71837c;
     font-size: 8px;
     font-weight: 800;
 }
-.analysis-control-card select {
+.analysis-fixed-selects select {
     display: block;
     width: 100%;
-    margin-top: 4px;
+    margin-top: 3px;
     border: 1px solid #cad4cc;
     border-radius: 4px;
     background: white;
     color: #244a45;
-    padding: 8px;
-    font-size: 11px;
+    padding: 6px 8px;
+    font-size: 10px;
     font-weight: 900;
 }
-.control-stats {
-    flex: 1 1 200px;
-    min-width: 0;
+.analysis-fixed-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.analysis-dimension-counts {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
 }
-.control-stats span {
-    border-radius: 999px;
-    background: #e8f3ef;
-    color: #315d54;
-    padding: 5px 8px;
-    font-size: 8px;
+.analysis-dimension-counts span {
+    color: #1f3d39;
+    font-size: 12px;
     font-weight: 900;
+}
+.analysis-dimension-counts small {
+    flex: 1 1 100%;
+    color: #899891;
+    font-size: 9px;
+    font-weight: 700;
+}
+.run-analysis-button {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 5px;
     white-space: nowrap;
 }
-.analysis-control-card > .primary {
-    flex: 0 0 auto;
-    min-width: 118px;
-    white-space: nowrap;
+.play-icon {
+    font-size: 10px;
 }
 .content-grid {
     grid-template-columns: minmax(340px, 380px) minmax(820px, 1fr);
@@ -464,7 +455,7 @@ button { cursor: pointer; }
 }
 @media (min-width: 1025px) {
     .workspace-split {
-        max-height: calc(100vh - 163px);
+        height: calc(100vh - 163px);
         grid-template-rows: minmax(0, 1fr);
     }
     .left-panel {
