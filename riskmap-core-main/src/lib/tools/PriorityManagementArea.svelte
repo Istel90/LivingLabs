@@ -4,6 +4,7 @@
     import proj4 from 'proj4';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
+    import { notify } from '$lib/ui/errorNotifications.svelte.js';
     import {
         enrichPracticeDistricts,
         PRACTICE_TYPE_META,
@@ -586,6 +587,14 @@
         } catch (error) {
             console.warn(error);
             draftStorageStatus = '임시 저장 실패 · 브라우저 저장소를 확인하세요';
+            notify({
+                type: 'data',
+                mode: 'toast',
+                title: '임시 저장 실패',
+                message: '브라우저 저장소에 접근하지 못했습니다. 저장 공간이나 브라우저 설정을 확인해 주세요.',
+                actionLabel: '다시 시도',
+                onAction: () => savePriorityDraft()
+            });
         }
     }
 
@@ -619,6 +628,14 @@
         } catch (error) {
             console.warn(error);
             supabaseStatus = error?.message || 'Supabase 이력 조회 실패';
+            notify({
+                type: 'server',
+                mode: 'toast',
+                title: '저장 이력 조회 실패',
+                message: error?.message || '서버와 연결되지 않았습니다. 잠시 후 다시 시도해 주세요.',
+                actionLabel: '다시 시도',
+                onAction: () => refreshSupabaseDrafts()
+            });
         } finally {
             supabaseBusy = false;
         }
@@ -750,6 +767,12 @@
             console.warn(error);
             draftLoadComplete = true;
             draftStorageStatus = '임시 저장소 연결 실패';
+            notify({
+                type: 'server',
+                mode: 'toast',
+                title: '임시 저장소 연결 실패',
+                message: '이전 작업 내용을 불러오지 못했습니다. 새 작업으로 계속 진행할 수 있습니다.'
+            });
         }
 
         if (config.dataSummaryPath && regionCode === '41110') {
@@ -759,6 +782,12 @@
                 dataBundleStatus = `${dataBundle.title} 연결됨`;
             } catch (error) {
                 dataBundleStatus = '수원 시연 원자료 요약 연결 실패';
+                notify({
+                    type: 'data',
+                    mode: 'toast',
+                    title: '시연 원자료 연결 실패',
+                    message: '수원 시연용 원자료 요약을 불러오지 못했습니다. 파일 경로와 형식을 확인해 주세요.'
+                });
             }
         }
 
@@ -1542,6 +1571,13 @@
             analysisMessage = `분석을 실행할 수 없습니다. ${missingAfterLoad} 영역의 입력자료를 읽지 못했습니다.`;
             running = false;
             activeStep = 2;
+            notify({
+                type: 'data',
+                title: '분석을 완료하지 못했습니다',
+                message: `선택한 지표 중 ${missingAfterLoad} 영역의 입력자료를 불러오지 못했습니다. 해당 지표의 데이터 경로와 형식을 확인해 주세요.`,
+                actionLabel: '다시 시도',
+                onAction: () => runAnalysis()
+            });
             return;
         }
 
