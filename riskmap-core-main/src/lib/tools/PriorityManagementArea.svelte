@@ -388,6 +388,11 @@
         })
     );
 
+    const dimensionColorVars = { H: '--color-hazard', E: '--color-exposure', V: '--color-vulnerability' };
+    function groupDimensionColorVar(group) {
+        return `var(${dimensionColorVars[indicatorGroupMeta[group].dimension]})`;
+    }
+
     function toggleGroupExpanded(group) {
         groupExpanded = { ...groupExpanded, [group]: !groupExpanded[group] };
     }
@@ -405,6 +410,8 @@
     function toggleIndicatorDescription(id) {
         expandedDescriptions = { ...expandedDescriptions, [id]: !expandedDescriptions[id] };
     }
+
+    let candidatesInfoOpen = false;
     $: previewAnalysisIndicators = indicators.map((item) => {
         const loaded = loadedPreviewIndicators.find((previewItem) => previewItem.id === item.id);
         return loaded
@@ -2567,7 +2574,7 @@
             <div class="brand-mark">CR</div>
             <div>
                 <strong>Climate Risk Lab</strong>
-                <span>기후위험 평가·의사결정 지원</span>
+                <span>기후위험(H)·노출(E)·취약성(V) 기반 우선 대응지 선정</span>
             </div>
         </div>
         <div class="project-meta">
@@ -2613,11 +2620,6 @@
     <div class="workspace">
         <main class="main">
             <section class="hero">
-                <div>
-                    <span class="eyebrow">LOCAL CLIMATE RISK ASSESSMENT</span>
-                    <h1>지역의 위험을 읽고, <em>{config.heroEmphasis}</em></h1>
-                    <p>{config.heroDescription}</p>
-                </div>
                 <div class="hero-actions">
                     {#if nationalLab}
                         <label>시·도
@@ -2704,9 +2706,9 @@
                             </div>
                             <div class="analysis-fixed-summary">
                                 <div class="analysis-dimension-counts">
-                                    <span>H {dimensionSelectedCounts.H}</span>
-                                    <span>E {dimensionSelectedCounts.E}</span>
-                                    <span>V {dimensionSelectedCounts.V}</span>
+                                    <span class="dim-h">H {dimensionSelectedCounts.H}</span>
+                                    <span class="dim-e">E {dimensionSelectedCounts.E}</span>
+                                    <span class="dim-v">V {dimensionSelectedCounts.V}</span>
                                     <small>{hazardDatasetMode === 'observed' ? '2021~2025' : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod}`} · {gridUnit}</small>
                                 </div>
                                 <button class="primary run-analysis-button" onclick={runAnalysis} disabled={running}>
@@ -2723,6 +2725,7 @@
                             <button
                                 type="button"
                                 class="group-label"
+                                style={`--group-dim-color:${groupDimensionColorVar(group)}`}
                                 aria-expanded={groupExpanded[group]}
                                 onclick={() => toggleGroupExpanded(group)}
                             >
@@ -2772,7 +2775,23 @@
                 {:else}
                 <section class="panel candidates wide-candidates">
                     <div class="panel-head">
-                        <div><span class="section-number">03</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
+                        <div>
+                            <span class="section-number">03</span>
+                            <span class="indicator-name-row">
+                                <h2>실천권역 구성</h2>
+                                <button
+                                    type="button"
+                                    class="info-toggle"
+                                    class:active={candidatesInfoOpen}
+                                    aria-expanded={candidatesInfoOpen}
+                                    aria-label={`실천권역 구성 설명 ${candidatesInfoOpen ? '닫기' : '보기'}`}
+                                    onclick={() => candidatesInfoOpen = !candidatesInfoOpen}
+                                >ⓘ</button>
+                            </span>
+                            <div class="indicator-description-wrap" class:open={candidatesInfoOpen}>
+                                <span>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</span>
+                            </div>
+                        </div>
                         <span class="count-badge">실천지구 {candidateList.length}개</span>
                     </div>
                     {#if candidateList.length}

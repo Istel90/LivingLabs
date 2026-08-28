@@ -2128,6 +2128,7 @@
                     {#each gridLayers as layer}
                         <button
                             type="button"
+                            data-layer={layer}
                             class:active={selectedGridLayer === layer}
                             disabled={riskGrid?.preview && ['Risk', 'Hotspot'].includes(layer)}
                             onclick={() => { selectedGridLayer = layer; onGridLayerChange(layer); renderRiskGridLayer(); }}
@@ -2637,6 +2638,24 @@
         background: #0f766e;
         color: #ffffff;
         box-shadow: 0 8px 18px rgb(15 118 110 / 22%);
+    }
+
+    .analysis-grid-tabs button[data-layer="H"].active {
+        border-color: var(--color-hazard);
+        background: var(--color-hazard);
+        box-shadow: 0 8px 18px color-mix(in srgb, var(--color-hazard) 30%, transparent);
+    }
+
+    .analysis-grid-tabs button[data-layer="E"].active {
+        border-color: var(--color-exposure);
+        background: var(--color-exposure);
+        box-shadow: 0 8px 18px color-mix(in srgb, var(--color-exposure) 30%, transparent);
+    }
+
+    .analysis-grid-tabs button[data-layer="V"].active {
+        border-color: var(--color-vulnerability);
+        background: var(--color-vulnerability);
+        box-shadow: 0 8px 18px color-mix(in srgb, var(--color-vulnerability) 30%, transparent);
     }
 
     .parcel-candidate-tools {
