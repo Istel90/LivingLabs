@@ -1537,6 +1537,13 @@
         markAnalysisDirty();
     }
 
+    function adjustIndicatorWeight(id, delta) {
+        const item = indicators.find((entry) => entry.id === id);
+        if (!item) return;
+        const next = Math.min(3, Math.max(0, Math.round((item.weight + delta) * 10) / 10));
+        setIndicatorWeight(id, next);
+    }
+
     function colorFor(value) {
         const adjusted = activeLayer === 'Hotspot' ? value * 1.12 : activeLayer === 'H' ? value * 0.9 : activeLayer === 'E' ? value * 1.04 : activeLayer === 'V' ? value * 0.96 : value;
         if (adjusted > 0.78) return '#d83b3e';
@@ -2755,7 +2762,26 @@
                                             </div>
                                         </div>
                                         <div class="dimension-tag" title={item.group === '적응역량' ? '값이 높을수록 위험도가 낮아집니다' : '값이 높을수록 위험도가 높아집니다'}>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
-                                        <label class="weight">가중치<input type="number" min="0" max="3" step="0.1" value={item.weight} oninput={(event) => setIndicatorWeight(item.id, event.currentTarget.value)} /></label>
+                                        <div class="weight">
+                                            가중치
+                                            <div class="weight-stepper">
+                                                <button
+                                                    type="button"
+                                                    class="weight-stepper-btn"
+                                                    aria-label="{item.label} 가중치 감소"
+                                                    disabled={item.weight <= 0}
+                                                    onclick={() => adjustIndicatorWeight(item.id, -0.1)}
+                                                >−</button>
+                                                <span class="weight-stepper-value">{item.weight.toFixed(1)}</span>
+                                                <button
+                                                    type="button"
+                                                    class="weight-stepper-btn"
+                                                    aria-label="{item.label} 가중치 증가"
+                                                    disabled={item.weight >= 3}
+                                                    onclick={() => adjustIndicatorWeight(item.id, 0.1)}
+                                                >+</button>
+                                            </div>
+                                        </div>
                                     </div>
                                 {/each}
                             {/if}
