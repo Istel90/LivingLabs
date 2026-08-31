@@ -333,6 +333,7 @@ button { cursor: pointer; }
 .analysis-dimension-counts .dim-h { color: var(--color-hazard); }
 .analysis-dimension-counts .dim-e { color: var(--color-exposure); }
 .analysis-dimension-counts .dim-v { color: var(--color-vulnerability); }
+.analysis-dimension-counts .dim-separator { color: #b8c4bd; font-weight: 700; }
 .run-analysis-button {
     flex: 0 0 auto;
     display: flex;
@@ -684,6 +685,7 @@ button { cursor: pointer; }
     align-items: baseline;
     gap: 6px;
     min-width: 60px;
+    max-width: 220px;
     border: 0;
     background: transparent;
     color: #55665f;
@@ -692,7 +694,28 @@ button { cursor: pointer; }
     font-weight: 900;
     cursor: pointer;
 }
+.browser-tab-label {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+    overflow: hidden;
+}
+.browser-tab-name {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+.browser-tab-desc {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #7c8d86;
+    font-size: 11px;
+    font-weight: 700;
+}
 .browser-tab-select small {
+    flex: 0 0 auto;
     color: #8a978f;
     font-size: 9px;
     font-weight: 800;

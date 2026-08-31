@@ -2079,16 +2079,16 @@
     {/if}
     {#if showAnalysisLegend}
         <div class="analysis-overlay-stack">
-            <div class="analysis-legend" class:legend-collapsed={legendCollapsed} aria-label="분석 범례">
+            <div class="analysis-legend" class:legend-collapsed={legendCollapsed} aria-label="표시 레이어">
                 <div class="legend-head">
-                    <strong>분석 범례</strong>
+                    <strong>표시 레이어</strong>
                     <div class="legend-head-actions">
                         <button
                             type="button"
                             class="legend-info-toggle"
                             class:active={legendDescriptionOpen}
                             aria-pressed={legendDescriptionOpen}
-                            aria-label={`분석 범례 설명 ${legendDescriptionOpen ? '숨기기' : '보기'}`}
+                            aria-label={`표시 레이어 설명 ${legendDescriptionOpen ? '숨기기' : '보기'}`}
                             title="설명 보기"
                             onclick={() => (legendDescriptionOpen = !legendDescriptionOpen)}
                         >ⓘ</button>
@@ -2096,7 +2096,7 @@
                             type="button"
                             class="legend-collapse-toggle"
                             aria-expanded={!legendCollapsed}
-                            aria-label={`분석 범례 ${legendCollapsed ? '펼치기' : '접기'}`}
+                            aria-label={`표시 레이어 ${legendCollapsed ? '펼치기' : '접기'}`}
                             title={legendCollapsed ? '펼치기' : '접기'}
                             onclick={() => (legendCollapsed = !legendCollapsed)}
                         >{legendCollapsed ? '▸' : '▾'}</button>
@@ -2107,7 +2107,7 @@
                         {riskGrid?.preview
                             ? '분석 전 미리보기 · H·E·V 탭과 눈 아이콘으로 01 지표 데이터를 확인합니다.'
                             : 'H·E·V 탭과 눈 아이콘으로 지도 시각화를 켜고 끌 수 있습니다.'}
-                        <br />눈 아이콘을 끄면 지도 레이어가 숨겨지고 범례 목록도 흐리게 표시되지만(다시 클릭해 언제든 복원 가능), 분석 결과(Risk 계산)에는 영향을 주지 않습니다. 분석 포함 여부는 01 분석 지표 구성에서 설정하세요.
+                        <br />눈 아이콘을 끄면 지도 레이어가 숨겨지고 범례 목록도 흐리게 표시되지만(다시 클릭해 언제든 복원 가능), 분석 결과(Risk 계산)에는 영향을 주지 않습니다. 분석 포함 여부는 01 분석 지표 선택에서 설정하세요.
                     </span>
                 {/if}
                 {#if !legendCollapsed}
@@ -2182,7 +2182,7 @@
                                         </button>
                                         <i style={`--legend-color:${item.color || '#64748b'}`}></i>
                                         <b>{item.label}</b>
-                                        <small>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</small>
+                                        <small title={item.group === '적응역량' ? '값이 높을수록 위험도가 낮아집니다' : '값이 높을수록 위험도가 높아집니다'}>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</small>
                                     </div>
                                 {/each}
                             </div>

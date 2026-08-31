@@ -336,7 +336,7 @@
     let supabaseDrafts = [];
     let supabaseHistoryOpen = false;
     let supabaseBusy = false;
-    let supabaseStatus = 'Supabase 저장 준비';
+    let supabaseStatus = '저장 준비 중';
     let supabaseSaveDialog = null;
     let indicatorDialog = null;
     let devResetPollTimer = null;
@@ -1427,7 +1427,7 @@
     function setGridUnit(value) {
         gridUnit = value;
         indicators = indicators.map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
-        markAnalysisDirty('분석 단위 격자가 변경되었습니다. Risk 분석을 다시 실행하세요.');
+        markAnalysisDirty('격자 크기가 변경되었습니다. Risk 분석을 다시 실행하세요.');
     }
 
     async function setHazardDatasetMode(value) {
@@ -2085,8 +2085,8 @@
         handoffDialog = null;
         handoffMessage = recalledPackageId
             ? (relayOk || supabaseOk)
-                ? `검토 요청 ${recalledPackageId}을 회수했습니다. 주관부서 화면에서도 요청이 비워집니다.`
-                : `검토 요청 ${recalledPackageId}을 회수했습니다. 주관부서 화면이 열려 있으면 새로고침해 주세요.`
+                ? `검토 요청 ${recalledPackageId}을 취소했습니다. 주관부서 화면에서도 요청이 비워집니다.`
+                : `검토 요청 ${recalledPackageId}을 취소했습니다. 주관부서 화면이 열려 있으면 새로고침해 주세요.`
             : '저장된 검토 요청을 비웠습니다. 필요하면 다시 전달하세요.';
         schedulePriorityDraftSave();
     }
@@ -2490,7 +2490,7 @@
             loadAlternative(nextIndex);
         }
         handoffMessage = latestHandoffPackage
-            ? `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다. 이미 전달한 요청은 필요하면 별도로 회수하세요.`
+            ? `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다. 이미 전달한 요청은 필요하면 별도로 취소하세요.`
             : `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다.`;
         schedulePriorityDraftSave();
     }
@@ -2572,14 +2572,14 @@
             <button class="ghost-button" onclick={downloadConfig}>설정 내보내기</button>
             <div class="request-manager">
                 <button type="button" class="request-manager-toggle ghost-button" onclick={() => requestListOpen = !requestListOpen}>
-                    보낸 요청 관리
+                    보낸 요청
                     <span class="request-manager-count">{sentRequestCount}</span>
                 </button>
                 {#if requestListOpen}
                     <div class="request-manager-panel">
                         <div>
                             <strong>보낸 검토 요청</strong>
-                            <small>초기화 후에도 이 목록에서 요청을 회수할 수 있습니다.</small>
+                            <small>초기화 후에도 이 목록에서 요청을 취소할 수 있습니다.</small>
                         </div>
                         {#if sentHandoffPackages.length}
                             <ul>
@@ -2590,11 +2590,11 @@
                                             <span>{request.alternativeCount || 0}개 대안 · {request.candidateCount || 0}개 후보 · {formatHandoffTime(request.deliveredAt)}</span>
                                             <small>{request.packageId}</small>
                                         </div>
-                                        <button type="button" onclick={() => recallDepartmentHandoff(request)}>회수</button>
+                                        <button type="button" onclick={() => recallDepartmentHandoff(request)}>취소</button>
                                     </li>
                                 {/each}
                             </ul>
-                            <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>전체 요청 회수</button>
+                            <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>전체 요청 취소</button>
                         {:else}
                             <p>현재 도구에 기록된 요청은 없습니다. 주관부서 화면에 이전 요청이 남아 있으면 아래 버튼으로 비울 수 있습니다.</p>
                             <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>주관부서 요청 비우기</button>
@@ -2654,16 +2654,16 @@
             <section class="workspace-split">
                 <div class="left-panel">
                     <div class="left-panel-tabs" role="tablist" aria-label="좌측 패널 탭">
-                        <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 구성</button>
+                        <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 선택</button>
                         <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => (leftPanelTab = '03')}>03 실천권역 구성</button>
                         {#if leftPanelTab === '01'}
-                            <button class="add-button left-panel-tabs-action" onclick={openIndicatorDialog}>+ 지표 업로드</button>
+                            <button class="add-button left-panel-tabs-action" onclick={openIndicatorDialog}>+ 새 지표</button>
                         {/if}
                     </div>
                     {#if leftPanelTab === '01'}
                         <div class="analysis-fixed-bar">
                             <div class="analysis-fixed-selects">
-                                <label>Hazard 기준기간
+                                <label>기후위험 기준기간
                                     <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
                                         <option value="observed">최근 5년 · 2021~2025</option>
                                         <option value="future">미래 시나리오 · 2026~2100</option>
@@ -2685,7 +2685,7 @@
                                         </select>
                                     </label>
                                 {/if}
-                                <label>분석 단위 격자
+                                <label>격자 크기
                                     <select value={gridUnit} onchange={(event) => setGridUnit(event.currentTarget.value)}>
                                         {#each gridOptions as option}
                                             <option value={option}>{option}</option>
@@ -2696,7 +2696,9 @@
                             <div class="analysis-fixed-summary">
                                 <div class="analysis-dimension-counts">
                                     <span class="dim-h">H {dimensionSelectedCounts.H}</span>
+                                    <span class="dim-separator" aria-hidden="true">·</span>
                                     <span class="dim-e">E {dimensionSelectedCounts.E}</span>
+                                    <span class="dim-separator" aria-hidden="true">·</span>
                                     <span class="dim-v">V {dimensionSelectedCounts.V}</span>
                                 </div>
                                 <button class="primary run-analysis-button" onclick={runAnalysis} disabled={running}>
@@ -2752,7 +2754,7 @@
                                                 <span>{indicatorStatusText(item)} · {item.description}</span>
                                             </div>
                                         </div>
-                                        <div class="dimension-tag">{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
+                                        <div class="dimension-tag" title={item.group === '적응역량' ? '값이 높을수록 위험도가 낮아집니다' : '값이 높을수록 위험도가 높아집니다'}>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
                                         <label class="weight">가중치<input type="number" min="0" max="3" step="0.1" value={item.weight} oninput={(event) => setIndicatorWeight(item.id, event.currentTarget.value)} /></label>
                                     </div>
                                 {/each}
@@ -2847,7 +2849,7 @@
                             <div><span class="section-number">02</span><h2>분석 지도</h2></div>
                             <div class="panel-head-actions">
                                 <button class="add-button handoff-request-button" onclick={openHandoffReview} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
-                                <small class="handoff-inline-status">{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '후보 도출 필요'}</small>
+                                <small class="handoff-inline-status">{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '실천권역 도출 후 요청 가능'}</small>
                             </div>
                         </div>
                         <div class="map-actions-band">
@@ -2866,8 +2868,8 @@
                             </div>
                             <div class="handoff-actions">
                                 <div class="handoff-button-row">
-                                    <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 회수</button>
-                                    <button class="secondary-action muted" onclick={resetAllAlternatives}>전체 대안 초기화</button>
+                                    <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 취소</button>
+                                    <button class="secondary-action muted" onclick={resetAllAlternatives}>모든 대안 삭제</button>
                                 </div>
                             </div>
                         </div>
@@ -2876,7 +2878,10 @@
                                 {#each alternatives as alternative, index}
                                     <div class="browser-tab" class:active={activeAlternative === index}>
                                         <button class="browser-tab-select" onclick={() => switchAlternative(index)}>
-                                            <span>{alternative.name}</span>
+                                            <span class="browser-tab-label">
+                                                <span class="browser-tab-name">{alternative.name}</span>
+                                                {#if alternative.description}<span class="browser-tab-desc">{alternative.description}</span>{/if}
+                                            </span>
                                             <small>{alternativeStatusLabel(alternative)}</small>
                                         </button>
                                         <button
@@ -3122,7 +3127,7 @@
                 <div><dt>패키지</dt><dd>{handoffDialog.packageId}</dd></div>
             </dl>
             <div class="handoff-modal-actions">
-                <button type="button" class="secondary-modal-button" onclick={recallDepartmentHandoff}>요청 회수</button>
+                <button type="button" class="secondary-modal-button" onclick={recallDepartmentHandoff}>요청 취소</button>
                 <button type="button" onclick={() => handoffDialog = null}>확인</button>
             </div>
         </section>
