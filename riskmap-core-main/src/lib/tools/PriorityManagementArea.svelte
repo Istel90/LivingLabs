@@ -2709,7 +2709,6 @@
                                     <span class="dim-h">H {dimensionSelectedCounts.H}</span>
                                     <span class="dim-e">E {dimensionSelectedCounts.E}</span>
                                     <span class="dim-v">V {dimensionSelectedCounts.V}</span>
-                                    <small>{hazardDatasetMode === 'observed' ? '2021~2025' : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod}`} · {gridUnit}</small>
                                 </div>
                                 <button class="primary run-analysis-button" onclick={runAnalysis} disabled={running}>
                                     <span class="play-icon" aria-hidden="true">▷</span>{running ? '계산 중...' : 'Risk 분석 실행'}

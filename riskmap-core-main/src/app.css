@@ -333,12 +333,6 @@ button { cursor: pointer; }
 .analysis-dimension-counts .dim-h { color: var(--color-hazard); }
 .analysis-dimension-counts .dim-e { color: var(--color-exposure); }
 .analysis-dimension-counts .dim-v { color: var(--color-vulnerability); }
-.analysis-dimension-counts small {
-    flex: 1 1 100%;
-    color: #899891;
-    font-size: 9px;
-    font-weight: 700;
-}
 .run-analysis-button {
     flex: 0 0 auto;
     display: flex;
