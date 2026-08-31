@@ -1975,8 +1975,20 @@
             })
             .catch((error) => console.error(error));
 
+        // Leaflet's built-in trackResize only reacts to window resize events
+        // (debounced), so a container that shrinks purely from a CSS layout
+        // change (e.g. the left panel column staying fixed while this map
+        // column narrows) can otherwise keep rendering at its old, wider
+        // size until the next window resize. Watch the container itself so
+        // the map always matches its actual box immediately.
+        const resizeObserver = new ResizeObserver(() => {
+            map?.invalidateSize?.({ pan: false });
+        });
+        if (mapElement) resizeObserver.observe(mapElement);
+
         return () => {
             disposed = true;
+            resizeObserver.disconnect();
             removeRiskGridLayer();
             parcelCandidateLayer?.remove();
             adaptationSiteLayer?.remove();

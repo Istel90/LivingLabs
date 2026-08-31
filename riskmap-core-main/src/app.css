@@ -479,19 +479,17 @@ button { cursor: pointer; }
 }
 .workspace-split {
     display: grid;
-    grid-template-columns: 420px 1fr;
+    grid-template-columns: 420px minmax(0, 1fr);
     gap: 16px;
     align-items: stretch;
-}
-@media (max-width: 1024px) {
-    .workspace-split {
-        grid-template-columns: 1fr;
-    }
 }
 .left-panel {
     display: flex;
     flex-direction: column;
-    min-width: 0;
+    width: 420px;
+    min-width: 420px;
+    max-width: 420px;
+    overflow-x: hidden;
 }
 .left-panel-tabs {
     display: flex;
@@ -533,6 +531,7 @@ button { cursor: pointer; }
 }
 .right-map-column {
     min-width: 0;
+    overflow: hidden;
 }
 .left-panel .practice-district-groups {
     grid-template-columns: 1fr;
