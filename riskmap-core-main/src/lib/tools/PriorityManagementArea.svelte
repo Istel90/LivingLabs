@@ -2848,8 +2848,16 @@
                         <div class="panel-head">
                             <div><span class="section-number">02</span><h2>분석 지도</h2></div>
                             <div class="panel-head-actions">
-                                <button class="add-button handoff-request-button" onclick={openHandoffReview} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
-                                <small class="handoff-inline-status">{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '실천권역 도출 후 요청 가능'}</small>
+                                <span class="handoff-request-wrap">
+                                    <button
+                                        class="add-button handoff-request-button"
+                                        onclick={openHandoffReview}
+                                        disabled={!handoffCandidateCount}
+                                    >주관부서 지원도구로 검토 요청</button>
+                                    <span class="handoff-request-tooltip" role="tooltip">
+                                        {latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '실천권역 도출 후 요청 가능'}
+                                    </span>
+                                </span>
                             </div>
                         </div>
                         <div class="map-actions-band">
