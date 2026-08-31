@@ -2856,7 +2856,7 @@
                 <div class="right-map-column">
                     <div class="panel analysis-map-panel">
                         <div class="panel-head">
-                            <div><span class="section-number">02</span><h2>분석 지도</h2><p>{region} · 행정구역 코드 {regionCode}</p></div>
+                            <div><span class="section-number">02</span><h2>분석 지도</h2></div>
                             <div class="panel-head-actions">
                                 <button class="add-button handoff-request-button" onclick={openHandoffReview} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
                                 <small class="handoff-inline-status">{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '후보 도출 필요'}</small>
