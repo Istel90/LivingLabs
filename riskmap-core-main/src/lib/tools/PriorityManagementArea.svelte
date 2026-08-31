@@ -302,22 +302,11 @@
         leftPanelTab = '03';
     }
 
-    const baseMapHeight = 760;
-    let viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+    // The workspace's left panel / map columns always fill the viewport
+    // height now (see .workspace-split in app.css), independent of width,
+    // so the map area always takes 100% of its own column's height.
+    const mapAreaHeight = '100%';
 
-    function updateViewportSize() {
-        viewportWidth = window.innerWidth;
-    }
-
-    $: mapAreaHeight = viewportWidth < 1025 ? `${baseMapHeight}px` : '100%';
-
-    onMount(() => {
-        updateViewportSize();
-        window.addEventListener('resize', updateViewportSize);
-        return () => {
-            window.removeEventListener('resize', updateViewportSize);
-        };
-    });
     let selectedCandidate = 0;
     let activeAlternative = 0;
     let pendingDeleteIndex = null;
