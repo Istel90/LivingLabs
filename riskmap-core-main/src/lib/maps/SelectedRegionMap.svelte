@@ -2107,7 +2107,7 @@
                         {riskGrid?.preview
                             ? '분석 전 미리보기 · H·E·V 탭과 눈 아이콘으로 01 지표 데이터를 확인합니다.'
                             : 'H·E·V 탭과 눈 아이콘으로 지도 시각화를 켜고 끌 수 있습니다.'}
-                        <br />눈 아이콘은 지도 표시만 제어하며, 분석 결과(Risk 계산)에는 영향을 주지 않습니다. 분석 포함 여부는 01 분석 지표 구성에서 설정하세요.
+                        <br />눈 아이콘을 끄면 지도 레이어가 숨겨지고 범례 목록도 흐리게 표시되지만(다시 클릭해 언제든 복원 가능), 분석 결과(Risk 계산)에는 영향을 주지 않습니다. 분석 포함 여부는 01 분석 지표 구성에서 설정하세요.
                     </span>
                 {/if}
                 {#if !legendCollapsed}
@@ -2157,7 +2157,7 @@
                             <div class="legend-items">
                                 {#each items as item}
                                     {@const visible = visibleAnalysisLayerIds.includes(String(item.id))}
-                                    <div class="legend-item">
+                                    <div class="legend-item" class:dimmed={!visible}>
                                         <button
                                             type="button"
                                             class="visibility-toggle"
@@ -2852,6 +2852,21 @@
         border-radius: 999px;
         background: var(--legend-color);
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--legend-color) 18%, transparent);
+    }
+
+    .legend-items .legend-item.dimmed i {
+        opacity: .35;
+        box-shadow: none;
+    }
+
+    .legend-items .legend-item.dimmed b {
+        color: #94a3b8;
+        font-weight: 700;
+    }
+
+    .legend-items .legend-item.dimmed small {
+        background: #f1f5f9;
+        color: #94a3b8;
     }
 
     .legend-items b {
