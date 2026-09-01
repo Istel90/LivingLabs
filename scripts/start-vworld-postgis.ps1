@@ -15,7 +15,7 @@ if ($LASTEXITCODE -eq 0) {
   exit 0
 }
 
-& $pgCtl -D $DataDir -l $LogFile -o "`"-p $Port -h 127.0.0.1`"" start
+& $pgCtl -D $DataDir -l $LogFile -o "-p $Port -h 127.0.0.1" start
 if ($LASTEXITCODE -ne 0) {
   throw "Unable to start VWorld PostGIS"
 }
