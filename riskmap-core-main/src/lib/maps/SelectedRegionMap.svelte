@@ -19,6 +19,19 @@
         VWORLD_WMS_URL
     } from '../../../../shared/map/vworld.js';
 
+    const BASE_TILE_STYLES = {
+        default: {
+            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        },
+        grayscale: {
+            url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            maxZoom: 19
+        }
+    };
+
     let {
         regionCode = '41110',
         regionName = '경기도 수원시',
@@ -33,6 +46,7 @@
         onGridLayerChange = () => {},
         onParcelCandidatesChange = () => {},
         onParcelCandidateFocus = () => {},
+        onParcelDerivationComplete = () => {},
         parcelCandidates = [],
         candidateContextKey = '',
         mapResetKey = 0,
@@ -62,6 +76,8 @@
     let mapElement;
     let map;
     let mapLoading = $state(true);
+    let baseLayer;
+    let baseMapStyle = $state('default');
     let selectedBoundaryLayer;
     let regionViewBounds;
     let sidoLayer;
@@ -1671,6 +1687,7 @@
                 : '교차된 필지가 있으나 실천지구 기준을 충족하지 못했습니다.';
             parcelCandidateStatus = message;
             onParcelCandidatesChange(slimCandidates, message, runCandidateContextKey);
+            if (candidates.length) onParcelDerivationComplete(candidates, runCandidateContextKey);
         } catch (error) {
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             console.error(error);
@@ -2090,6 +2107,24 @@
         });
     }
 
+    function createBaseLayer(L, style) {
+        const config = BASE_TILE_STYLES[style] || BASE_TILE_STYLES.default;
+        return L.tileLayer(config.url, {
+            attribution: config.attribution,
+            crossOrigin: true,
+            maxZoom: config.maxZoom
+        });
+    }
+
+    function setBaseMapStyle(style) {
+        if (style === baseMapStyle || !BASE_TILE_STYLES[style]) return;
+        baseMapStyle = style;
+        if (!map || !window.L) return;
+        const nextLayer = createBaseLayer(window.L, style).addTo(map);
+        if (baseLayer) baseLayer.remove();
+        baseLayer = nextLayer;
+    }
+
     function initializeMap(L) {
         mapLoading = true;
         map = L.map(mapElement, {
@@ -2121,11 +2156,7 @@
             map.getPane('selectedBoundaryPane').style.pointerEvents = 'none';
         }
 
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors',
-            crossOrigin: true,
-            maxZoom: 19
-        }).addTo(map);
+        baseLayer = createBaseLayer(L, baseMapStyle).addTo(map);
 
         if (hasVWorldApiKey()) {
             sidoLayer = L.tileLayer
@@ -2169,8 +2200,12 @@
             })
             .catch((error) => console.error(error));
 
+        const resizeObserver = new ResizeObserver(() => map?.invalidateSize?.({ pan: false }));
+        if (mapElement) resizeObserver.observe(mapElement);
+
         return () => {
             disposed = true;
+            resizeObserver.disconnect();
             removeRiskGridLayer();
             parcelCandidateLayer?.remove();
             adaptationSiteLayer?.remove();
@@ -2268,8 +2303,8 @@
     </div>
     {#if showAnalysisLegend}
         <div class="analysis-overlay-stack" data-map-export-ignore>
-            <div class="analysis-legend" aria-label="분석 범례">
-                <strong>분석 범례</strong>
+            <div class="analysis-legend" aria-label="표시 레이어">
+                <strong>표시 레이어</strong>
                 <span class="legend-note">
                     {riskGrid?.preview
                         ? '분석 전 미리보기 · H·E·V 탭과 체크박스로 01 지표 데이터를 확인합니다.'
@@ -2300,6 +2335,7 @@
                         </button>
                     {/each}
                 </div>
+                <span class="legend-analysis-note">표시를 끄면 지도 레이어가 숨겨지고 범례 행도 흐려집니다. Risk 분석 포함 여부는 01 분석 지표 선택에서 설정합니다.</span>
                 {#each analysisGroups.filter((group) => groupsForGridLayer(selectedGridLayer).includes(group)) as group}
                     {@const items = analysisIndicators.filter((item) => item.enabled && item.group === group)}
                     {#if items.length}
@@ -2307,7 +2343,7 @@
                             <h3>{group} ({analysisGroupEnglish[group]})</h3>
                             <div class="legend-items">
                                 {#each items as item}
-                                    <label>
+                                    <label class:dimmed={!visibleAnalysisLayerIds.includes(String(item.id))}>
                                         <input
                                             type="checkbox"
                                             checked={visibleAnalysisLayerIds.includes(String(item.id))}
@@ -2315,7 +2351,7 @@
                                         />
                                         <i style={`--legend-color:${item.color || '#64748b'}`}></i>
                                         <b>{item.label}</b>
-                                        <small>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</small>
+                                        <small title={item.group === '적응역량' ? '값이 높을수록 위험도가 낮아집니다' : '값이 높을수록 위험도가 높아집니다'}>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</small>
                                     </label>
                                 {/each}
                             </div>
@@ -2397,6 +2433,10 @@
         {:else}
             <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
         {/if}
+        <button class="return-region-button" type="button" class:active={baseMapStyle === 'grayscale'} aria-pressed={baseMapStyle === 'grayscale'} onclick={() => setBaseMapStyle(baseMapStyle === 'grayscale' ? 'default' : 'grayscale')}>
+            <span aria-hidden="true">◐</span>
+            {baseMapStyle === 'grayscale' ? '컬러 배경지도' : '흑백 배경지도'}
+        </button>
         {#if !locked}
             <button class="return-region-button" type="button" onclick={returnToSelectedRegion} title={`${regionName || '선택 지역'} 전체 보기`}>
                 <span aria-hidden="true">⌖</span>
@@ -2811,6 +2851,15 @@
         gap: .35rem;
     }
 
+    .legend-analysis-note {
+        display: block;
+        margin-top: .45rem;
+        color: #64748b;
+        font-size: .64rem;
+        font-weight: 700;
+        line-height: 1.35;
+    }
+
     .legend-items label {
         display: grid;
         grid-template-columns: .85rem .75rem minmax(0, 1fr) auto;
@@ -2836,6 +2885,21 @@
         border-radius: 999px;
         background: var(--legend-color);
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--legend-color) 18%, transparent);
+    }
+
+    .legend-items label.dimmed i {
+        opacity: .35;
+        box-shadow: none;
+    }
+
+    .legend-items label.dimmed b {
+        color: #94a3b8;
+        font-weight: 700;
+    }
+
+    .legend-items label.dimmed small {
+        background: #f1f5f9;
+        color: #94a3b8;
     }
 
     .legend-items b {
