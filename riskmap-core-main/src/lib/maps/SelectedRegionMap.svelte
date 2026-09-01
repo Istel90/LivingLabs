@@ -78,6 +78,7 @@
     let mapLoading = $state(true);
     let baseLayer;
     let baseMapStyle = $state('default');
+    let layerPanelOpen = $state(false);
     let selectedBoundaryLayer;
     let regionViewBounds;
     let sidoLayer;
@@ -2408,41 +2409,81 @@
             {/if}
         </div>
     {/if}
-    <div class="layer-panel" data-map-export-ignore>
-        <strong>베이스·행정 레이어</strong>
-        <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
-        <label>
-            <input
-                type="checkbox"
-                checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
-                disabled={forceSelectedBoundary}
-                onchange={(event) => {
-                    if (forceSelectedBoundary) return;
-                    selectedBoundaryVisible = event.currentTarget.checked;
-                    toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
-                }}
-            />
-            선택지역 경계
-        </label>
-        {#if hasVWorldApiKey()}
-            <label><input type="checkbox" checked={sidoBoundaryVisible} onchange={(event) => { sidoBoundaryVisible = event.currentTarget.checked; toggleLayer(sidoLayer, sidoBoundaryVisible); }} /> 시도 경계</label>
-            <label><input type="checkbox" checked={sigunguBoundaryVisible} onchange={(event) => { sigunguBoundaryVisible = event.currentTarget.checked; toggleLayer(sggLayer, sigunguBoundaryVisible); }} /> 시군구 경계</label>
-            {#if showCadastral}
-                <label><input type="checkbox" checked={cadastralVisible} onchange={(event) => { cadastralVisible = event.currentTarget.checked; toggleLayer(cadastralLayer, cadastralVisible); }} /> 연속지적도</label>
-            {/if}
-        {:else}
-            <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
+    <div class="map-control-cluster" data-map-export-ignore>
+        {#if layerPanelOpen}
+            <div id="base-admin-layer-panel" class="layer-panel">
+                <strong>지도 레이어</strong>
+                <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
+                <label>
+                    <input
+                        type="checkbox"
+                        checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
+                        disabled={forceSelectedBoundary}
+                        onchange={(event) => {
+                            if (forceSelectedBoundary) return;
+                            selectedBoundaryVisible = event.currentTarget.checked;
+                            toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
+                        }}
+                    />
+                    선택지역 경계
+                </label>
+                {#if hasVWorldApiKey()}
+                    <label><input type="checkbox" checked={sidoBoundaryVisible} onchange={(event) => { sidoBoundaryVisible = event.currentTarget.checked; toggleLayer(sidoLayer, sidoBoundaryVisible); }} /> 시도 경계</label>
+                    <label><input type="checkbox" checked={sigunguBoundaryVisible} onchange={(event) => { sigunguBoundaryVisible = event.currentTarget.checked; toggleLayer(sggLayer, sigunguBoundaryVisible); }} /> 시군구 경계</label>
+                    {#if showCadastral}
+                        <label><input type="checkbox" checked={cadastralVisible} onchange={(event) => { cadastralVisible = event.currentTarget.checked; toggleLayer(cadastralLayer, cadastralVisible); }} /> 연속지적도</label>
+                    {/if}
+                {:else}
+                    <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
+                {/if}
+            </div>
         {/if}
-        <button class="return-region-button" type="button" class:active={baseMapStyle === 'grayscale'} aria-pressed={baseMapStyle === 'grayscale'} onclick={() => setBaseMapStyle(baseMapStyle === 'grayscale' ? 'default' : 'grayscale')}>
-            <span aria-hidden="true">◐</span>
-            {baseMapStyle === 'grayscale' ? '컬러 배경지도' : '흑백 배경지도'}
-        </button>
-        {#if !locked}
-            <button class="return-region-button" type="button" onclick={returnToSelectedRegion} title={`${regionName || '선택 지역'} 전체 보기`}>
-                <span aria-hidden="true">⌖</span>
-                {regionReturnLabel()}
+        <div class="map-control-toolbar" aria-label="지도 보기 도구">
+            <button
+                class="map-control-button"
+                class:active={layerPanelOpen}
+                type="button"
+                aria-label="지도 레이어"
+                title="지도 레이어"
+                aria-expanded={layerPanelOpen}
+                aria-controls="base-admin-layer-panel"
+                onclick={() => { layerPanelOpen = !layerPanelOpen; }}
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m12 3-8 4.4 8 4.4 8-4.4L12 3Z"></path>
+                    <path d="m4 11.2 8 4.4 8-4.4M4 15l8 4.4 8-4.4"></path>
+                </svg>
             </button>
-        {/if}
+            <button
+                class="map-control-button"
+                class:active={baseMapStyle === 'grayscale'}
+                type="button"
+                aria-label={baseMapStyle === 'grayscale' ? '컬러 배경지도로 변경' : '흑백 배경지도로 변경'}
+                title={baseMapStyle === 'grayscale' ? '컬러 배경지도' : '흑백 배경지도'}
+                aria-pressed={baseMapStyle === 'grayscale'}
+                onclick={() => setBaseMapStyle(baseMapStyle === 'grayscale' ? 'default' : 'grayscale')}
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path class="contrast-fill" d="M12 3a9 9 0 0 0 0 18V3Z"></path>
+                    <circle cx="12" cy="12" r="9"></circle>
+                </svg>
+            </button>
+            {#if !locked}
+                <button
+                    class="map-control-button"
+                    type="button"
+                    aria-label={regionReturnLabel()}
+                    title={`${regionName || '선택 지역'} 전체 보기`}
+                    onclick={() => { layerPanelOpen = false; returnToSelectedRegion(); }}
+                >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="6.25"></circle>
+                        <path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
+                        <circle class="target-dot" cx="12" cy="12" r="1.4"></circle>
+                    </svg>
+                </button>
+            {/if}
+        </div>
     </div>
 </div>
 
@@ -2553,40 +2594,77 @@
         font-size: .65rem;
     }
 
-    .return-region-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: .35rem;
-        width: 100%;
-        margin-top: .3rem;
-        border: 1px solid rgb(15 118 110 / 26%);
-        border-radius: .65rem;
-        background: #ecfdf5;
-        color: #0f766e;
-        padding: .52rem .72rem;
-        font-size: .72rem;
-        font-weight: 900;
-        cursor: pointer;
-    }
-
-    .return-region-button:hover {
-        border-color: #0f766e;
-        background: #ecfdf5;
-    }
-
-    .return-region-button span {
-        font-size: 1rem;
-        line-height: 1;
-    }
-
-    .layer-panel {
+    .map-control-cluster {
         position: absolute;
         right: .85rem;
         top: .85rem;
-        z-index: 500;
+        z-index: 680;
+        display: flex;
+        align-items: flex-start;
+        gap: .55rem;
+        pointer-events: none;
+    }
+
+    .map-control-toolbar {
+        display: grid;
+        gap: .42rem;
+        pointer-events: auto;
+    }
+
+    .map-control-button {
+        display: grid;
+        place-items: center;
+        width: 2.8rem;
+        height: 2.8rem;
+        border: 1px solid rgb(15 23 42 / 12%);
+        border-radius: .82rem;
+        background: rgb(255 255 255 / 96%);
+        color: #0f172a;
+        padding: 0;
+        box-shadow: 0 10px 24px rgb(15 23 42 / 15%);
+        cursor: pointer;
+        backdrop-filter: blur(8px);
+        transition: border-color .16s ease, background .16s ease, color .16s ease, transform .16s ease;
+    }
+
+    .map-control-button:hover {
+        border-color: rgb(15 118 110 / 38%);
+        color: #0f766e;
+        transform: translateY(-1px);
+    }
+
+    .map-control-button:focus-visible {
+        outline: 3px solid rgb(45 212 191 / 38%);
+        outline-offset: 2px;
+    }
+
+    .map-control-button.active {
+        border-color: rgb(15 118 110 / 42%);
+        background: #ecfdf5;
+        color: #0f766e;
+    }
+
+    .map-control-button svg {
+        width: 1.5rem;
+        height: 1.5rem;
+        overflow: visible;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.9;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .map-control-button .contrast-fill,
+    .map-control-button .target-dot {
+        fill: currentColor;
+        stroke: none;
+    }
+
+    .layer-panel {
         display: grid;
         gap: .38rem;
+        width: 14.5rem;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .9rem;
         background: rgb(255 255 255 / 92%);
@@ -2596,6 +2674,7 @@
         font-size: .78rem;
         font-weight: 800;
         backdrop-filter: blur(10px);
+        pointer-events: auto;
     }
 
     .analysis-overlay-stack {
