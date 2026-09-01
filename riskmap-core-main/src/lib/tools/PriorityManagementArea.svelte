@@ -346,8 +346,10 @@
     let analysisDone = false;
     let running = false;
     let leftPanelTab = '01';
+    let candidatesInfoOpen = false;
     let selectedCandidate = 0;
     let activeAlternative = 0;
+    let pendingDeleteIndex = null;
     let gridUnit = '100m';
     let dimensionWeights = { H: 1, E: 1, V: 1 };
     let mapSource = config.mapSource;
@@ -363,6 +365,9 @@
     let handoffDialog = null;
     let latestHandoffPackage = null;
     let sentHandoffPackages = [];
+    let handoffReviewOpen = false;
+    let handoffScope = 'all';
+    let handoffNote = '';
     let requestListOpen = false;
     let draftStorageStatus = '임시 저장 준비 중';
     let draftLoadComplete = false;
@@ -428,7 +433,6 @@
 
     function handleParcelDerivationComplete() {
         leftPanelTab = '03';
-        window.requestAnimationFrame(() => document.getElementById('practice-district-section')?.scrollIntoView({ behavior: 'smooth' }));
     }
     $: previewAnalysisIndicators = indicators.map((item) => {
         const loaded = loadedPreviewIndicators.find((previewItem) => previewItem.id === item.id);
@@ -2254,7 +2258,7 @@
         schedulePriorityDraftSave();
     }
 
-    async function handoffToDepartmentPlatform() {
+    async function handoffToDepartmentPlatform(scope = 'all') {
         const activeSnapshot = {
             ...alternatives[activeAlternative],
             ...currentAlternativeState()
@@ -2263,7 +2267,8 @@
             index === activeAlternative ? activeSnapshot : alternative
         ));
         alternatives = sourceAlternatives;
-        const payload = buildDepartmentHandoffPayload(sourceAlternatives);
+        const scopedAlternatives = scope === 'current' ? [activeSnapshot] : sourceAlternatives;
+        const payload = buildDepartmentHandoffPayload(scopedAlternatives);
         if (!payload.candidates.length) {
             handoffMessage = '전달할 실천권역이 없습니다. Risk 분석 후 실천권역도출하기를 먼저 실행하세요.';
             return;
@@ -2273,7 +2278,8 @@
         const deliveredPayload = {
             ...payload,
             deliveredToLeadAt: deliveredAt,
-            deliveryStatus: 'sent-to-lead'
+            deliveryStatus: 'sent-to-lead',
+            reviewNote: handoffNote.trim()
         };
         const handoffJson = JSON.stringify(deliveredPayload);
         try {
@@ -2314,6 +2320,21 @@
             relayOk: deliveryOk
         };
         schedulePriorityDraftSave();
+    }
+
+    function openHandoffReview() {
+        handoffScope = 'all';
+        handoffReviewOpen = true;
+    }
+
+    function closeHandoffReview() {
+        handoffReviewOpen = false;
+    }
+
+    function confirmHandoffReview() {
+        handoffReviewOpen = false;
+        void handoffToDepartmentPlatform(handoffScope);
+        handoffNote = '';
     }
 
     function openIndicatorDialog() {
@@ -2559,7 +2580,7 @@
         schedulePriorityDraftSave();
     }
 
-    function deleteActiveAlternative() {
+    function deleteAlternativeAt(index) {
         if (alternatives.length <= 1) {
             const replacementAlternative = {
                 ...createDefaultAlternative(0),
@@ -2578,16 +2599,36 @@
             return;
         }
 
-        const deletedAlternative = alternatives[activeAlternative];
-        const nextAlternatives = alternatives.filter((_, index) => index !== activeAlternative);
-        const nextIndex = Math.min(activeAlternative, nextAlternatives.length - 1);
+        const deletedAlternative = alternatives[index];
+        const wasActive = index === activeAlternative;
+        const nextAlternatives = alternatives.filter((_, alternativeIndex) => alternativeIndex !== index);
+        const nextIndex = wasActive
+            ? Math.min(index, nextAlternatives.length - 1)
+            : index < activeAlternative
+                ? activeAlternative - 1
+                : activeAlternative;
         alternatives = nextAlternatives;
         activeAlternative = nextIndex;
-        loadAlternative(nextIndex);
+        if (wasActive) loadAlternative(nextIndex);
         handoffMessage = latestHandoffPackage
             ? `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다. 이미 전달한 요청은 필요하면 별도로 회수하세요.`
             : `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다.`;
         schedulePriorityDraftSave();
+    }
+
+    function requestDeleteAlternative(index) {
+        if (alternatives.length <= 1) return;
+        pendingDeleteIndex = index;
+    }
+
+    function cancelDeleteAlternative() {
+        pendingDeleteIndex = null;
+    }
+
+    function confirmDeleteAlternative() {
+        if (pendingDeleteIndex === null) return;
+        deleteAlternativeAt(pendingDeleteIndex);
+        pendingDeleteIndex = null;
     }
 
     function confirmAlternative() {
@@ -2711,21 +2752,6 @@
                 </div>
             </section>
 
-            <aside class="workflow-guide" aria-label="분석 워크플로우 안내">
-                <div class="workflow-title">
-                    <strong>분석 워크플로우</strong>
-                    <span>{enabledCount}개 선택 · {availableCount}개 사용 가능</span>
-                </div>
-                <ol>
-                    {#each steps as step, index}
-                        <li class:active={activeStep === index} class:complete={activeStep > index}>
-                            <span class="step-num">{activeStep > index ? '✓' : index + 1}</span>
-                            <span>{step}<small>{['범위와 기준 설정', 'H/E/V GeoTIFF 구성', '방향성과 영향 조정', '공간분석 계산', '위험도·핫스팟 확인', '우선관리 후보 검토'][index]}</small></span>
-                        </li>
-                    {/each}
-                </ol>
-            </aside>
-
             {#if nationalLab}
                 <section class="lab-analysis-runner" class:complete={analysisDone} aria-label="기후위험 실험실 분석 실행">
                     <div class="lab-analysis-runner-copy">
@@ -2748,11 +2774,14 @@
 
             <section class="workspace-split">
                 <div class="left-panel">
-                    <div class="left-panel-tabs" role="tablist" aria-label="분석 단계 탐색">
+                    <div class="left-panel-tabs" role="tablist" aria-label="좌측 패널 탭">
                         <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 선택</button>
-                        <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => { leftPanelTab = '03'; document.getElementById('practice-district-section')?.scrollIntoView({ behavior: 'smooth' }); }}>03 실천권역 구성</button>
-                        <button class="add-button left-panel-tabs-action" onclick={openIndicatorDialog}>+ 새 지표</button>
+                        <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => (leftPanelTab = '03')}>03 실천권역 구성</button>
+                        {#if leftPanelTab === '01'}
+                            <button class="add-button left-panel-tabs-action" onclick={openIndicatorDialog}>+ 새 지표</button>
+                        {/if}
                     </div>
+                    {#if leftPanelTab === '01'}
                     <div class="analysis-fixed-bar">
                         <div class="analysis-fixed-selects">
                         <label>기후위험 기준기간
@@ -2795,7 +2824,9 @@
                         </div>
                         <span class="sr-only" aria-live="polite" data-analysis-message>{analysisMessage}</span>
                     </div>
+                    {/if}
                     <div class="left-panel-body">
+                    {#if leftPanelTab === '01'}
                     <div class="panel indicator-panel">
                     {#each ['기후위험', '노출', '민감도', '적응역량'] as group}
                         <div class="indicator-group" class:collapsed={!groupExpanded[group]}>
@@ -2828,6 +2859,84 @@
                         </div>
                     {/each}
                     </div>
+                    {:else}
+                    <section class="panel candidates wide-candidates">
+                        <div class="panel-head">
+                            <div>
+                                <span class="section-number">03</span>
+                                <span class="indicator-name-row">
+                                    <h2>실천권역 구성</h2>
+                                    <button
+                                        type="button"
+                                        class="info-toggle"
+                                        class:active={candidatesInfoOpen}
+                                        aria-expanded={candidatesInfoOpen}
+                                        aria-label={`실천권역 구성 설명 ${candidatesInfoOpen ? '닫기' : '보기'}`}
+                                        onclick={() => candidatesInfoOpen = !candidatesInfoOpen}
+                                    >ⓘ</button>
+                                </span>
+                                <div class="indicator-description-wrap" class:open={candidatesInfoOpen}>
+                                    <span>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</span>
+                                </div>
+                            </div>
+                            <span class="count-badge">실천지구 {candidateList.length}개</span>
+                        </div>
+                        {#if candidateList.length}
+                            <div class="practice-type-note">
+                                <strong>시연용 분류 v1</strong>
+                                <span>공간 규모가 큰 권역은 계획행정수단, Risk 집중 권역은 시설지원사업, 소규모 생활권은 시민실천으로 임시 분류했습니다.</span>
+                            </div>
+                            <div class="practice-district-groups">
+                                {#each practiceDistrictGroups as group}
+                                    <section class="practice-district-group" style={`--practice-color:${group.color};--practice-fill:${group.fillColor}`}>
+                                        <header>
+                                            <i aria-hidden="true"></i>
+                                            <span><strong>{group.label}</strong><small>{group.shortDescription}</small></span>
+                                            <b>{group.candidates.length}개</b>
+                                        </header>
+                                        <div class="candidate-list">
+                                            {#each group.candidates as candidate}
+                                                {@const index = candidateList.findIndex((item) => candidateIdentity(item) === candidateIdentity(candidate))}
+                                                <article class="candidate-card" class:active={selectedCandidate === index}>
+                                                    <button class="candidate-main" type="button" onclick={() => selectCandidate(candidate, index)}>
+                                                        <span class="rank">{String(candidate.districtNumber || candidate.rank).padStart(2, '0')}</span>
+                                                        <span class="candidate-name-row"><strong>{candidate.name}</strong><small>{candidate.area}</small></span>
+                                                        <b>{formatScore(candidate.risk)}</b>
+                                                    </button>
+                                                    <button class="candidate-detail-toggle" type="button" title="분류 사유 보기" aria-label={`${candidate.name} 분류 사유 보기`} onclick={() => showCandidateDetail(candidate, index)}>!</button>
+                                                </article>
+                                            {/each}
+                                        </div>
+                                    </section>
+                                {/each}
+                            </div>
+                            {#if detailCandidateItem}
+                                <aside class="candidate-detail-panel" aria-label="실천지구 분류 상세보기" style={`--practice-color:${detailCandidateItem.practiceTypeColor}`}>
+                                    <div>
+                                        <span>실천지구 분류 사유 · 시연용</span>
+                                        <strong>{detailCandidateItem.name}</strong>
+                                        <em>{detailCandidateItem.practiceTypeLabel}</em>
+                                        <small>{detailCandidateItem.classificationReason}</small>
+                                        <small class="classification-rule">적용 규칙: {detailCandidateItem.classificationRule}</small>
+                                    </div>
+                                    <dl>
+                                        <div><dt>총 필지 면적</dt><dd>{candidateTotalAreaLabel(detailCandidateItem)}</dd></div>
+                                        <div><dt>필지 수</dt><dd>{formatInteger(detailCandidateItem.parcelCount)}필지</dd></div>
+                                        <div><dt>Risk</dt><dd>{formatScore(detailCandidateItem.risk)}</dd></div>
+                                        <div><dt>H</dt><dd>{formatScore(detailCandidateItem.h)}</dd></div>
+                                        <div><dt>E</dt><dd>{formatScore(detailCandidateItem.e)}</dd></div>
+                                        <div><dt>V</dt><dd>{formatScore(detailCandidateItem.v)}</dd></div>
+                                    </dl>
+                                </aside>
+                            {/if}
+                        {:else}
+                            <div class="empty-candidate-state">
+                                <strong>실천권역 도출 대기</strong>
+                                <span>Risk 분석과 실천권역 도출이 끝나면 실천권역을 구성하는 실제 핫스팟-필지 교차 실천지구가 3개 시연 유형으로 표시됩니다.</span>
+                            </div>
+                        {/if}
+                    </section>
+                    {/if}
                     </div>
                 </div>
 
@@ -2837,7 +2946,7 @@
                             <div><span class="section-number">02</span><h2>분석 지도</h2></div>
                             <div class="panel-head-actions">
                                 <span class="handoff-request-wrap">
-                                    <button class="add-button handoff-request-button" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
+                                    <button class="add-button handoff-request-button" onclick={openHandoffReview} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
                                     <span class="handoff-request-tooltip" role="tooltip">{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '실천권역 도출 후 요청 가능'}</span>
                                 </span>
                             </div>
@@ -2864,18 +2973,39 @@
                                 </div>
                         </div>
                         <div class="map-tabs-row">
-                                <div class="alternative-tabs" aria-label="기후적응실천권역 대안">
-                                    <button class="reset-alt" onclick={resetActiveAlternative} title="현재 대안 초기화">초기화</button>
-                                    <button class="delete-alt" onclick={deleteActiveAlternative} title="현재 대안 삭제">삭제</button>
-                                    <button class="add-alt" onclick={addAlternative} title="대안 추가">대안추가</button>
-                                    {#each alternatives as alternative, index}
-                                        <button class:active={activeAlternative === index} onclick={() => switchAlternative(index)}>
-                                            <span>{alternative.name}{#if alternative.description}<small class="alternative-description">{alternative.description}</small>{/if}</span>
+                            <div class="alternative-tabs browser-tabs" aria-label="기후적응실천권역 대안">
+                                {#each alternatives as alternative, index}
+                                    <div class="browser-tab" class:active={activeAlternative === index}>
+                                        <button class="browser-tab-select" onclick={() => switchAlternative(index)}>
+                                            <span class="browser-tab-label">
+                                                <span class="browser-tab-name">{alternative.name}</span>
+                                                {#if alternative.description}<span class="browser-tab-desc">{alternative.description}</span>{/if}
+                                            </span>
                                             <small>{alternativeStatusLabel(alternative)}</small>
                                         </button>
-                                    {/each}
-                                </div>
+                                        <button
+                                            class="browser-tab-close"
+                                            onclick={(event) => { event.stopPropagation(); requestDeleteAlternative(index); }}
+                                            disabled={alternatives.length <= 1}
+                                            title="{alternative.name} 삭제"
+                                            aria-label="{alternative.name} 삭제"
+                                        >×</button>
+                                    </div>
+                                {/each}
+                                <button class="browser-tab-add" onclick={addAlternative} title="대안 추가" aria-label="대안 추가">+</button>
+                            </div>
                         </div>
+                        {#if pendingDeleteIndex !== null}
+                            <div class="alt-delete-confirm-backdrop" onclick={cancelDeleteAlternative}>
+                                <div class="alt-delete-confirm" role="dialog" aria-modal="true" aria-label="대안 삭제 확인" onclick={(event) => event.stopPropagation()}>
+                                    <p>'{alternatives[pendingDeleteIndex]?.name}'을(를) 삭제하시겠습니까?<br />대안 데이터가 사라지며 되돌릴 수 없습니다.</p>
+                                    <div class="alt-delete-confirm-actions">
+                                        <button class="secondary-action" onclick={cancelDeleteAlternative}>취소</button>
+                                        <button class="secondary-action danger" onclick={confirmDeleteAlternative}>삭제</button>
+                                    </div>
+                                </div>
+                            </div>
+                        {/if}
                         <div class="map-result-wrap">
                             <SelectedRegionMap
                                 {regionCode}
@@ -2896,119 +3026,11 @@
                                 onParcelCandidateFocus={handleMapParcelCandidateFocus}
                                 onParcelDerivationComplete={handleParcelDerivationComplete}
                             />
-                            <section class="score-row map-score-overlay" aria-label="리스크 평가 결과">
-                                <div class="score-card risk"><span>{analysisResult?.hazardOnly ? '예비 위험도' : '종합 위험도'}</span><strong>{formatScore(resultRiskScore)}</strong><small>{analysisDone ? `${analysisResult.gridUnit} · ${analysisResult.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk'}` : '분석 실행 대기'}</small></div>
-                                <div class="score-card"><span><b class="dot h"></b>기후위험 H</span><strong>{formatScore(resultScores.H)}</strong><label class="dimension-weight">통합 가중치<input type="number" min="0" step="0.1" value={dimensionWeights.H} oninput={(event) => setDimensionWeight('H', event.currentTarget.value)} /></label><div class="bar"><i style={`width:${(resultScores.H || 0) * 100}%`}></i></div></div>
-                                <div class="score-card"><span><b class="dot e"></b>노출 E</span><strong>{formatScore(resultScores.E)}</strong><label class="dimension-weight">통합 가중치<input type="number" min="0" step="0.1" value={dimensionWeights.E} oninput={(event) => setDimensionWeight('E', event.currentTarget.value)} /></label><div class="bar"><i style={`width:${(resultScores.E || 0) * 100}%`}></i></div></div>
-                                <div class="score-card"><span><b class="dot v"></b>취약성 V</span><strong>{formatScore(resultScores.V)}</strong><label class="dimension-weight">통합 가중치<input type="number" min="0" step="0.1" value={dimensionWeights.V} oninput={(event) => setDimensionWeight('V', event.currentTarget.value)} /></label><div class="bar"><i style={`width:${(resultScores.V || 0) * 100}%`}></i></div></div>
-                            </section>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <section class="panel candidates wide-candidates" id="practice-district-section">
-                <div class="panel-head">
-                    <div><span class="section-number">03</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
-                    <span class="count-badge">실천지구 {candidateList.length}개</span>
-                </div>
-                {#if candidateList.length}
-                    <div class="practice-type-note">
-                        <strong>시연용 분류 v1</strong>
-                        <span>공간 규모가 큰 권역은 계획행정수단, Risk 집중 권역은 시설지원사업, 소규모 생활권은 시민실천으로 임시 분류했습니다.</span>
-                    </div>
-                    <div class="practice-district-groups">
-                        {#each practiceDistrictGroups as group}
-                            <section class="practice-district-group" style={`--practice-color:${group.color};--practice-fill:${group.fillColor}`}>
-                                <header>
-                                    <i aria-hidden="true"></i>
-                                    <span><strong>{group.label}</strong><small>{group.shortDescription}</small></span>
-                                    <b>{group.candidates.length}개</b>
-                                </header>
-                                <div class="candidate-list">
-                                    {#each group.candidates as candidate}
-                                        {@const index = candidateList.findIndex((item) => candidateIdentity(item) === candidateIdentity(candidate))}
-                                        <article class="candidate-card" class:active={selectedCandidate === index}>
-                                            <button class="candidate-main" type="button" onclick={() => selectCandidate(candidate, index)}>
-                                                <span class="rank">{String(candidate.districtNumber || candidate.rank).padStart(2, '0')}</span>
-                                                <span><strong>{candidate.name}</strong><small>{candidate.area}</small></span>
-                                                <b>{formatScore(candidate.risk)}</b>
-                                            </button>
-                                            <button class="candidate-detail-toggle" type="button" title="분류 사유 보기" aria-label={`${candidate.name} 분류 사유 보기`} onclick={() => showCandidateDetail(candidate, index)}>!</button>
-                                        </article>
-                                    {/each}
-                                </div>
-                            </section>
-                        {/each}
-                    </div>
-                    {#if detailCandidateItem}
-                        <aside class="candidate-detail-panel" aria-label="실천지구 분류 상세보기" style={`--practice-color:${detailCandidateItem.practiceTypeColor}`}>
-                            <div>
-                                <span>실천지구 분류 사유 · 시연용</span>
-                                <strong>{detailCandidateItem.name}</strong>
-                                <em>{detailCandidateItem.practiceTypeLabel}</em>
-                                <small>{detailCandidateItem.classificationReason}</small>
-                                <small class="classification-rule">적용 규칙: {detailCandidateItem.classificationRule}</small>
-                            </div>
-                            <dl>
-                                <div><dt>총 필지 면적</dt><dd>{candidateTotalAreaLabel(detailCandidateItem)}</dd></div>
-                                <div><dt>필지 수</dt><dd>{formatInteger(detailCandidateItem.parcelCount)}필지</dd></div>
-                                <div><dt>Risk</dt><dd>{formatScore(detailCandidateItem.risk)}</dd></div>
-                                <div><dt>H</dt><dd>{formatScore(detailCandidateItem.h)}</dd></div>
-                                <div><dt>E</dt><dd>{formatScore(detailCandidateItem.e)}</dd></div>
-                                <div><dt>V</dt><dd>{formatScore(detailCandidateItem.v)}</dd></div>
-                            </dl>
-                        </aside>
-                    {/if}
-                {:else}
-                    <div class="empty-candidate-state">
-                        <strong>실천권역 도출 대기</strong>
-                        <span>Risk 분석과 실천권역 도출이 끝나면 실천권역을 구성하는 실제 핫스팟-필지 교차 실천지구가 3개 시연 유형으로 표시됩니다.</span>
-                    </div>
-                {/if}
-            </section>
-
-            <section class="decision-panel decision-transfer-summary" id="decision-transfer-summary">
-                <div class="decision-title">
-                    <span class="section-number">04</span>
-                    <div>
-                        <h2>검토 요청 전 최종 확인 및 전달 요약</h2>
-                        <p>현재 분석 결과와 저장 이력을 확인한 뒤 주관부서 지원도구로 검토를 요청합니다.</p>
-                    </div>
-                    <span class="summary-ready-badge">{handoffCandidateCount ? '전달 준비' : '분석 대기'}</span>
-                </div>
-                <div class="transfer-summary-grid">
-                    <article>
-                        <span>대상 지역·재해</span>
-                        <strong>{region} · {config.label}</strong>
-                        <small>행정구역 코드 {regionCode}</small>
-                    </article>
-                    <article>
-                        <span>현재 대안</span>
-                        <strong>{alternatives[activeAlternative]?.name}</strong>
-                        <small>{alternatives[activeAlternative]?.status || '검토중'} · 후보 {candidateList.length}개</small>
-                    </article>
-                    <article>
-                        <span>전체 전달 범위</span>
-                        <strong>{handoffAlternativeCount}개 대안 · {handoffCandidateCount}개 후보</strong>
-                        <small>{analysisDone ? `Risk ${formatScore(resultRiskScore)}` : 'Risk 분석 실행 전'}</small>
-                    </article>
-                    <article>
-                        <span>검토 요청 상태</span>
-                        <strong>{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '후보 도출 필요'}</strong>
-                        <small>{handoffStatusText}</small>
-                    </article>
-                </div>
-                <div class="transfer-final-action">
-                    <div>
-                        <strong>최종 확인</strong>
-                        <span>선정 대안, 필지 후보와 분석 조건이 검토 요청 패키지에 함께 기록됩니다.</span>
-                    </div>
-                    <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>
-                        주관부서 지원도구로 검토 요청
-                    </button>
-                </div>
-            </section>
         </main>
     </div>
 </div>
@@ -3183,6 +3205,49 @@
                 </button>
             </footer>
         </div>
+    </div>
+{/if}
+
+{#if handoffReviewOpen}
+    <div class="handoff-review-modal-backdrop" onclick={(event) => event.target === event.currentTarget && closeHandoffReview()}>
+        <section class="handoff-review-modal" role="dialog" aria-modal="true" aria-labelledby="handoff-review-title">
+            <header>
+                <h2 id="handoff-review-title">주관부서 지원도구로 검토 요청</h2>
+                <button type="button" class="handoff-review-close" onclick={closeHandoffReview} aria-label="닫기">×</button>
+            </header>
+            <div class="handoff-review-body">
+                <div class="handoff-review-row">
+                    <span>대상 지역·재해</span>
+                    <strong>{region} · {config.label}</strong>
+                    <small>행정구역 코드 {regionCode}</small>
+                </div>
+                <div class="handoff-review-row">
+                    <span>분석 조건</span>
+                    <strong>{hazardDatasetMode === 'observed' ? '최근 5년 · 2021~2025' : `${hazardScenario.toUpperCase()} · ${hazardFuturePeriod}`}</strong>
+                    <small>{gridUnit} 격자 · 지표 {enabledCount}개 사용</small>
+                </div>
+                <fieldset class="handoff-review-scope">
+                    <legend>전달 범위</legend>
+                    <label>
+                        <input type="radio" name="handoff-scope" value="current" checked={handoffScope === 'current'} onchange={() => (handoffScope = 'current')} />
+                        현재 대안만 <small>({alternatives[activeAlternative]?.name} · 후보 {candidateList.length}개)</small>
+                    </label>
+                    <label>
+                        <input type="radio" name="handoff-scope" value="all" checked={handoffScope === 'all'} onchange={() => (handoffScope = 'all')} />
+                        전체 대안 <small>({handoffAlternativeCount}개 대안 · {handoffCandidateCount}개 후보)</small>
+                    </label>
+                </fieldset>
+                <label class="handoff-review-note">
+                    전달 메모 <span class="handoff-review-optional">(선택 사항)</span>
+                    <textarea rows="2" placeholder="검토 담당자에게 전달할 메모를 입력하세요" value={handoffNote} oninput={(event) => (handoffNote = event.currentTarget.value)}></textarea>
+                </label>
+                <p class="handoff-review-note-text">선정 대안, 필지 후보와 분석 조건이 함께 기록됩니다.</p>
+            </div>
+            <footer>
+                <button type="button" class="secondary-action" onclick={closeHandoffReview}>취소</button>
+                <button type="button" class="decision-action" onclick={confirmHandoffReview} disabled={handoffScope === 'current' ? !candidateList.length : !handoffCandidateCount}>검토 요청</button>
+            </footer>
+        </section>
     </div>
 {/if}
 

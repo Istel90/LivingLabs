@@ -688,71 +688,106 @@ button { cursor: pointer; }
 .alternative-tabs {
     display: flex;
     justify-content: flex-start;
-    align-items: stretch;
-    gap: 4px;
+    align-items: flex-end;
+    gap: 2px;
     width: 100%;
     max-width: 100%;
-    padding: 4px;
-    border: 2px solid #073b52;
-    border-radius: 4px;
-    background: #061923;
+    border-bottom: 1px solid #d7ded8;
     overflow-x: auto;
+    overflow-y: hidden;
     overscroll-behavior-x: contain;
 }
-.alternative-tabs button { flex: 0 0 auto; }
-.alternative-tabs button {
-    display: grid;
-    gap: 2px;
-    justify-items: center;
-    align-content: center;
-    min-width: 76px;
+.browser-tab {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: stretch;
+    gap: 0;
+    margin-bottom: -1px;
+    border: 1px solid #d7ded8;
+    border-bottom: 1px solid transparent;
+    border-radius: 7px 7px 0 0;
+    background: #eef1ee;
+    overflow: hidden;
+}
+.browser-tab-select {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 60px;
+    max-width: 220px;
     border: 0;
-    border-radius: 2px;
-    background: #0b2533;
-    color: #6dd6ee;
-    padding: 7px 12px;
-    font-size: 13px;
+    background: transparent;
+    color: #55665f;
+    padding: 3px 9px;
+    font-size: 12px;
     font-weight: 900;
     cursor: pointer;
 }
-.alternative-tabs button small {
-    color: rgb(226 252 255 / 72%);
+.browser-tab-label {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+    overflow: hidden;
+}
+.browser-tab-name { flex: 0 0 auto; white-space: nowrap; }
+.browser-tab-desc {
+    min-width: 0;
+    overflow: hidden;
+    color: #7c8d86;
+    font-size: 11px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.browser-tab-select small {
+    flex: 0 0 auto;
+    color: #8a978f;
     font-size: 9px;
     font-weight: 800;
+    white-space: nowrap;
 }
-.alternative-tabs button.active {
-    background: #0f4f68;
-    color: #ffffff;
-    box-shadow: inset 0 -3px 0 #2dd4bf;
+.browser-tab.active {
+    border-color: #d7ded8;
+    border-bottom-color: #fff;
+    background: #fff;
 }
-.alternative-tabs button.active small {
-    color: #bbf7d0;
+.browser-tab.active .browser-tab-select { color: #173a37; }
+.browser-tab.active .browser-tab-select small { color: #6f8a83; }
+.browser-tab-close {
+    align-self: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    margin-right: 5px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: #8a978f;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
 }
-.alternative-tabs .add-alt {
-    min-width: 70px;
-    color: #2dd4bf;
-    font-size: 11px;
+.browser-tab-close:hover:not(:disabled) { background: #fee2e2; color: #991b1b; }
+.browser-tab-close:disabled { opacity: .3; cursor: not-allowed; }
+.browser-tab-add {
+    align-self: center;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 auto;
+    margin-bottom: 2px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: #0f766e;
+    padding: 0;
+    font-size: 15px;
+    font-weight: 900;
+    line-height: 1;
+    cursor: pointer;
 }
-.alternative-tabs .reset-alt {
-    min-width: 58px;
-    border-left: 1px solid rgb(255 255 255 / 8%);
-    color: #cbd5e1;
-    font-size: 11px;
-}
-.alternative-tabs .reset-alt:hover {
-    background: #334155;
-    color: #ffffff;
-}
-.alternative-tabs .delete-alt {
-    min-width: 52px;
-    border-left: 1px solid rgb(255 255 255 / 8%);
-    color: #fecaca;
-    font-size: 11px;
-}
-.alternative-tabs .delete-alt:hover {
-    background: #7f1d1d;
-    color: #ffffff;
-}
+.browser-tab-add:hover { background: #eef1ee; }
 .decision-action {
     justify-self: end;
     border: 0;
@@ -1313,6 +1348,73 @@ button { cursor: pointer; }
 .weight-stepper-btn:hover:not(:disabled) { border-color: #315d54; color: #315d54; }
 .weight-stepper-btn:disabled { opacity: .35; cursor: not-allowed; }
 .weight-stepper-value { min-width: 18px; color: #244a45; font-size: 10px; font-weight: 800; text-align: center; }
+.left-panel-body .wide-candidates { margin-top: 0; }
+.left-panel .practice-district-groups { grid-template-columns: 1fr; }
+.left-panel .candidate-detail-panel { grid-template-columns: 1fr; }
+.left-panel .candidate-detail-panel dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.alt-delete-confirm-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2400;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgb(15 23 42 / 52%);
+    backdrop-filter: blur(3px);
+}
+.alt-delete-confirm {
+    width: min(360px, calc(100vw - 32px));
+    border: 1px solid #dbe7e3;
+    border-radius: 12px;
+    background: #fff;
+    padding: 20px;
+    box-shadow: 0 28px 90px rgb(15 23 42 / 35%);
+}
+.alt-delete-confirm p { margin: 0 0 16px; color: #173d38; font-size: 12px; line-height: 1.5; }
+.alt-delete-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.handoff-review-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgb(15 23 42 / 55%);
+    backdrop-filter: blur(3px);
+}
+.handoff-review-modal {
+    width: min(480px, 100%);
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    border: 1px solid #dbe7e3;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 28px 90px rgb(15 23 42 / 35%);
+}
+.handoff-review-modal > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 18px 20px;
+}
+.handoff-review-modal > header h2 { margin: 0; color: #173d38; font: 700 16px Georgia, "Noto Serif KR", serif; }
+.handoff-review-close { border: 0; background: transparent; color: #64748b; font-size: 20px; line-height: 1; cursor: pointer; }
+.handoff-review-body { display: grid; gap: 14px; padding: 18px 20px; }
+.handoff-review-row { display: grid; gap: 3px; }
+.handoff-review-row span { color: #64748b; font-size: 9px; font-weight: 900; letter-spacing: .04em; }
+.handoff-review-row strong { color: #173d38; font-size: 13px; }
+.handoff-review-row small { color: #718078; font-size: 10px; }
+.handoff-review-scope { display: grid; gap: 8px; margin: 0; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; }
+.handoff-review-scope legend { padding: 0 4px; color: #64748b; font-size: 9px; font-weight: 900; letter-spacing: .04em; }
+.handoff-review-scope label { display: flex; align-items: baseline; gap: 6px; color: #173d38; font-size: 12px; font-weight: 800; }
+.handoff-review-scope label small { color: #718078; font-size: 10px; font-weight: 700; }
+.handoff-review-note { display: grid; gap: 6px; color: #64748b; font-size: 10px; font-weight: 800; }
+.handoff-review-optional { color: #94a3b8; font-weight: 700; }
+.handoff-review-note textarea { width: 100%; box-sizing: border-box; resize: vertical; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; color: #173d38; font: inherit; font-size: 11px; }
+.handoff-review-note-text { margin: 0; color: #718078; font-size: 10px; line-height: 1.5; }
+.handoff-review-modal > footer { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid #e2e8f0; padding: 14px 20px 18px; }
 @media(max-width:1400px) {
     .workspace-split { grid-template-columns: 420px minmax(0, 1fr); }
     .lab-analysis-runner { grid-template-columns: minmax(240px, 1fr) auto; }
