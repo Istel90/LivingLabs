@@ -345,6 +345,7 @@
     $: projectName = `${region} ${config.projectSuffix}`;
     let analysisDone = false;
     let running = false;
+    let leftPanelTab = '01';
     let selectedCandidate = 0;
     let activeAlternative = 0;
     let gridUnit = '100m';
@@ -403,6 +404,32 @@
         '민감도': { english: 'Sensitivity', dimension: 'V', direction: 'positive', color: '#a855a8', icon: '◇' },
         '적응역량': { english: 'Adaptive Capacity', dimension: 'V', direction: 'negative', color: '#2f9b73', icon: '✚' }
     };
+    const dimensionColorVars = { H: '--color-hazard', E: '--color-exposure', V: '--color-vulnerability' };
+    let groupExpanded = Object.fromEntries(Object.keys(indicatorGroupMeta).map((group) => [group, true]));
+    let expandedDescriptions = {};
+    function groupDimensionColorVar(group) {
+        return `var(${dimensionColorVars[indicatorGroupMeta[group].dimension]})`;
+    }
+
+    function toggleGroupExpanded(group) {
+        groupExpanded = { ...groupExpanded, [group]: !groupExpanded[group] };
+    }
+
+    function collapsedGroupSummary(group) {
+        const selected = selectedIndicatorsFor(group);
+        if (!selected.length) return '';
+        const shown = selected.slice(0, 2).map((item) => item.label).join(', ');
+        return selected.length > 2 ? `${shown} 외 ${selected.length - 2}개` : shown;
+    }
+
+    function toggleIndicatorDescription(id) {
+        expandedDescriptions = { ...expandedDescriptions, [id]: !expandedDescriptions[id] };
+    }
+
+    function handleParcelDerivationComplete() {
+        leftPanelTab = '03';
+        window.requestAnimationFrame(() => document.getElementById('practice-district-section')?.scrollIntoView({ behavior: 'smooth' }));
+    }
     $: previewAnalysisIndicators = indicators.map((item) => {
         const loaded = loadedPreviewIndicators.find((previewItem) => previewItem.id === item.id);
         return loaded
@@ -443,6 +470,11 @@
     });
 
     $: enabledCount = indicators.filter((item) => item.enabled).length;
+    $: dimensionSelectedCounts = {
+        H: indicators.filter((item) => item.enabled && item.dimension === 'H').length,
+        E: indicators.filter((item) => item.enabled && item.dimension === 'E').length,
+        V: indicators.filter((item) => item.enabled && item.dimension === 'V').length
+    };
     $: availableCount = indicators.filter(isIndicatorAvailable).length;
     $: resultScores = analysisResult?.dimensionScores || { H: null, E: null, V: null };
     $: resultRiskScore = analysisResult?.riskScore ?? null;
@@ -1597,6 +1629,13 @@
         markAnalysisDirty();
     }
 
+    function adjustIndicatorWeight(id, delta) {
+        const item = indicators.find((entry) => entry.id === id);
+        if (!item) return;
+        const next = Math.min(3, Math.max(0, Math.round((Number(item.weight) + delta) * 10) / 10));
+        setIndicatorWeight(id, next);
+    }
+
     function colorFor(value) {
         const adjusted = activeLayer === 'Hotspot' ? value * 1.12 : activeLayer === 'H' ? value * 0.9 : activeLayer === 'E' ? value * 1.04 : activeLayer === 'V' ? value * 0.96 : value;
         if (adjusted > 0.78) return '#d83b3e';
@@ -2621,13 +2660,28 @@
             <div class="brand-mark">CR</div>
             <div>
                 <strong>Climate Risk Lab</strong>
-                <span>기후위험 평가·의사결정 지원</span>
+                <span>기후위험(H)·노출(E)·취약성(V) 기반 우선 대응지 선정</span>
             </div>
         </div>
         <div class="project-meta">
             <div><span>프로젝트</span><strong>{projectName}</strong></div>
             <a class="ghost-link" href={portalToolsUrl}>지원도구 페이지로 돌아가기</a>
             <button class="ghost-button" onclick={downloadConfig}>설정 내보내기</button>
+            <div class="request-manager">
+                <button type="button" class="request-manager-toggle ghost-button" onclick={() => requestListOpen = !requestListOpen}>보낸 요청 <span class="request-manager-count">{sentRequestCount}</span></button>
+                {#if requestListOpen}
+                    <div class="request-manager-panel">
+                        <div><strong>보낸 검토 요청</strong><small>초기화 후에도 이 목록에서 요청을 취소할 수 있습니다.</small></div>
+                        {#if sentHandoffPackages.length}
+                            <ul>{#each sentHandoffPackages as request}<li><div><b>{request.hazardLabel || config.label} · {request.region || region}</b><span>{request.alternativeCount || 0}개 대안 · {request.candidateCount || 0}개 후보 · {formatHandoffTime(request.deliveredAt)}</span><small>{request.packageId}</small></div><button type="button" onclick={() => recallDepartmentHandoff(request)}>취소</button></li>{/each}</ul>
+                            <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>전체 요청 취소</button>
+                        {:else}
+                            <p>현재 도구에 기록된 요청은 없습니다.</p>
+                            <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>주관부서 요청 비우기</button>
+                        {/if}
+                    </div>
+                {/if}
+            </div>
             <div class="avatar">관리</div>
         </div>
     </header>
@@ -2635,11 +2689,6 @@
     <div class="workspace">
         <main class="main">
             <section class="hero">
-                <div>
-                    <span class="eyebrow">LOCAL CLIMATE RISK ASSESSMENT</span>
-                    <h1>지역의 위험을 읽고,<br /><em>{config.heroEmphasis}</em></h1>
-                    <p>{config.heroDescription}</p>
-                </div>
                 <div class="hero-actions">
                     {#if nationalLab}
                         <label>시·도
@@ -2657,43 +2706,8 @@
                             </select>
                         </label>
                         <label>선택 행정구역<input value={`${region} · ${regionCode}`} readonly /></label>
-                    {:else}
-                        <label>분석 대상 지역<input value={region} readonly /></label>
-                        <label>행정구역 코드<input value={regionCode} readonly /></label>
+                        <small>{config.sampleNotice}</small>
                     {/if}
-                    <small>{config.sampleNotice}</small>
-                    <div class="request-manager">
-                        <button type="button" class="request-manager-toggle" onclick={() => requestListOpen = !requestListOpen}>
-                            보낸 요청 관리
-                            <span>{sentRequestCount}</span>
-                        </button>
-                        {#if requestListOpen}
-                            <div class="request-manager-panel">
-                                <div>
-                                    <strong>보낸 검토 요청</strong>
-                                    <small>초기화 후에도 이 목록에서 요청을 회수할 수 있습니다.</small>
-                                </div>
-                                {#if sentHandoffPackages.length}
-                                    <ul>
-                                        {#each sentHandoffPackages as request}
-                                            <li>
-                                                <div>
-                                                    <b>{request.hazardLabel || config.label} · {request.region || region}</b>
-                                                    <span>{request.alternativeCount || 0}개 대안 · {request.candidateCount || 0}개 후보 · {formatHandoffTime(request.deliveredAt)}</span>
-                                                    <small>{request.packageId}</small>
-                                                </div>
-                                                <button type="button" onclick={() => recallDepartmentHandoff(request)}>회수</button>
-                                            </li>
-                                        {/each}
-                                    </ul>
-                                    <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>전체 요청 회수</button>
-                                {:else}
-                                    <p>현재 도구에 기록된 요청은 없습니다. 주관부서 화면에 이전 요청이 남아 있으면 아래 버튼으로 비울 수 있습니다.</p>
-                                    <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>주관부서 요청 비우기</button>
-                                {/if}
-                            </div>
-                        {/if}
-                    </div>
                 </div>
             </section>
 
@@ -2732,19 +2746,16 @@
                 </section>
             {/if}
 
-            <section class="content-grid">
-                <div class="panel indicator-panel">
-                    <div class="panel-head">
-                        <div><span class="section-number">01</span><h2>분석 지표 구성</h2><p>사용 가능 지표만 Risk 분석에 반영됩니다.</p></div>
-                        <button class="add-button" onclick={openIndicatorDialog}>+ 지표 추가</button>
+            <section class="workspace-split">
+                <div class="left-panel">
+                    <div class="left-panel-tabs" role="tablist" aria-label="분석 단계 탐색">
+                        <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 선택</button>
+                        <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => { leftPanelTab = '03'; document.getElementById('practice-district-section')?.scrollIntoView({ behavior: 'smooth' }); }}>03 실천권역 구성</button>
+                        <button class="add-button left-panel-tabs-action" onclick={openIndicatorDialog}>+ 새 지표</button>
                     </div>
-                    <div class="analysis-control-card">
-                        <div class="analysis-control-copy">
-                            <span>ANALYSIS SETUP</span>
-                            <strong>단위격자 기준으로 지표를 요약해 Risk를 계산합니다.</strong>
-                            <p>{analysisMessage}</p>
-                        </div>
-                        <label>Hazard 기준기간
+                    <div class="analysis-fixed-bar">
+                        <div class="analysis-fixed-selects">
+                        <label>기후위험 기준기간
                             <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
                                 <option value="observed">최근 5년 · 2021~2025</option>
                                 <option value="future" disabled={hazard !== 'heatwave'}>미래 시나리오 · 2026~2100</option>
@@ -2766,23 +2777,34 @@
                                 </select>
                             </label>
                         {/if}
-                        <label>분석 단위 격자
+                        <label>격자 크기
                             <select value={gridUnit} onchange={(event) => setGridUnit(event.currentTarget.value)}>
                                 {#each gridOptions as option}
                                     <option value={option}>{option}</option>
                                 {/each}
                             </select>
                         </label>
-                        <div class="control-stats">
-                            <span>{enabledCount}개 선택</span>
-                            <span>{availableCount}개 사용 가능</span>
-                            <span>{draftStorageStatus}</span>
                         </div>
-                        <button class="primary" onclick={runAnalysis} disabled={running}>{running ? '계산 중...' : 'Risk 분석 실행'}</button>
+                        <div class="analysis-fixed-summary">
+                            <div class="analysis-dimension-counts" aria-label="H E V 선택 지표 수">
+                                <span class="dim-h">H {dimensionSelectedCounts.H}</span><span class="dim-separator">·</span>
+                                <span class="dim-e">E {dimensionSelectedCounts.E}</span><span class="dim-separator">·</span>
+                                <span class="dim-v">V {dimensionSelectedCounts.V}</span>
+                            </div>
+                            <button class="primary run-analysis-button" onclick={runAnalysis} disabled={running}><span aria-hidden="true">▷</span>{running ? '계산 중...' : 'Risk 분석 실행'}</button>
+                        </div>
+                        <span class="sr-only" aria-live="polite" data-analysis-message>{analysisMessage}</span>
                     </div>
+                    <div class="left-panel-body">
+                    <div class="panel indicator-panel">
                     {#each ['기후위험', '노출', '민감도', '적응역량'] as group}
-                        <div class="indicator-group">
-                            <div class="group-label">{group} ({indicatorGroupMeta[group].english})<span>{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span></div>
+                        <div class="indicator-group" class:collapsed={!groupExpanded[group]}>
+                            <button type="button" class="group-label" style={`--group-dim-color:${groupDimensionColorVar(group)}`} aria-expanded={groupExpanded[group]} onclick={() => toggleGroupExpanded(group)}>
+                                <span class="group-chevron" aria-hidden="true">▾</span><span class="group-name">{group} ({indicatorGroupMeta[group].english})</span>
+                                {#if !groupExpanded[group] && collapsedGroupSummary(group)}<span class="group-collapsed-summary">{collapsedGroupSummary(group)}</span>{/if}
+                                <span class="group-count">{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span>
+                            </button>
+                            {#if groupExpanded[group]}
                             {#each indicators.filter((item) => item.group === group) as item}
                                 <div class="indicator-item" class:disabled={!item.enabled} class:unavailable={!isIndicatorAvailable(item)}>
                                     <input
@@ -2794,20 +2816,33 @@
                                     <div class="indicator-icon" style={`--icon-color:${item.color}`}>
                                         {#if item.iconPath}<img src={item.iconPath} alt="" />{:else}{item.icon}{/if}
                                     </div>
-                                    <div class="indicator-copy"><strong>{item.label}</strong><span>{indicatorStatusText(item)} · {item.description}</span></div>
-                                    <div class="dimension-tag">{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
-                                    <label class="weight">가중치<input type="number" min="0" max="3" step="0.1" value={item.weight} oninput={(event) => setIndicatorWeight(item.id, event.currentTarget.value)} /></label>
+                                    <div class="indicator-copy">
+                                        <span class="indicator-name-row"><strong>{item.label}</strong><button type="button" class="info-toggle" class:active={expandedDescriptions[item.id]} aria-expanded={!!expandedDescriptions[item.id]} aria-label={`${item.label} 설명 ${expandedDescriptions[item.id] ? '닫기' : '보기'}`} onclick={() => toggleIndicatorDescription(item.id)}>ⓘ</button></span>
+                                        <span class="indicator-description-wrap" class:open={expandedDescriptions[item.id]}><span>{indicatorStatusText(item)} · {item.description}</span></span>
+                                    </div>
+                                    <div class="dimension-tag" title={item.group === '적응역량' ? '값이 높을수록 위험도가 낮아집니다' : '값이 높을수록 위험도가 높아집니다'}>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
+                                    <div class="weight">가중치<div class="weight-stepper"><button type="button" class="weight-stepper-btn" aria-label={`${item.label} 가중치 감소`} disabled={item.weight <= 0} onclick={() => adjustIndicatorWeight(item.id, -0.1)}>−</button><span class="weight-stepper-value">{Number(item.weight).toFixed(1)}</span><button type="button" class="weight-stepper-btn" aria-label={`${item.label} 가중치 증가`} disabled={item.weight >= 3} onclick={() => adjustIndicatorWeight(item.id, 0.1)}>+</button></div></div>
                                 </div>
                             {/each}
+                            {/if}
                         </div>
                     {/each}
+                    </div>
+                    </div>
                 </div>
 
-                <div class="right-column">
+                <div class="right-map-column">
                     <div class="panel analysis-map-panel">
                         <div class="panel-head map-head">
-                            <div><h2>{alternatives[activeAlternative]?.name} 분석 지도</h2><p>{alternatives[activeAlternative]?.description} · {region} · 행정구역 코드 {regionCode}</p></div>
-                            <div class="map-toolbar">
+                            <div><span class="section-number">02</span><h2>분석 지도</h2></div>
+                            <div class="panel-head-actions">
+                                <span class="handoff-request-wrap">
+                                    <button class="add-button handoff-request-button" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
+                                    <span class="handoff-request-tooltip" role="tooltip">{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '실천권역 도출 후 요청 가능'}</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="map-actions-band">
                                 <div class="database-actions">
                                     <label>
                                         <span>작업자</span>
@@ -2823,31 +2858,30 @@
                                 </div>
                                 <div class="handoff-actions">
                                     <div class="handoff-button-row">
-                                        <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
-                                        <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 회수</button>
-                                        <button class="secondary-action muted" onclick={resetAllAlternatives}>전체 대안 초기화</button>
+                                        <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 취소</button>
+                                        <button class="secondary-action muted" onclick={resetAllAlternatives}>모든 대안 삭제</button>
                                     </div>
-                                    <span class="handoff-note">{handoffStatusText}</span>
                                 </div>
+                        </div>
+                        <div class="map-tabs-row">
                                 <div class="alternative-tabs" aria-label="기후적응실천권역 대안">
                                     <button class="reset-alt" onclick={resetActiveAlternative} title="현재 대안 초기화">초기화</button>
                                     <button class="delete-alt" onclick={deleteActiveAlternative} title="현재 대안 삭제">삭제</button>
                                     <button class="add-alt" onclick={addAlternative} title="대안 추가">대안추가</button>
                                     {#each alternatives as alternative, index}
                                         <button class:active={activeAlternative === index} onclick={() => switchAlternative(index)}>
-                                            <span>{alternative.name}</span>
+                                            <span>{alternative.name}{#if alternative.description}<small class="alternative-description">{alternative.description}</small>{/if}</span>
                                             <small>{alternativeStatusLabel(alternative)}</small>
                                         </button>
                                     {/each}
                                 </div>
-                            </div>
                         </div>
                         <div class="map-result-wrap">
                             <SelectedRegionMap
                                 {regionCode}
                                 regionName={region}
                                 {hazard}
-                                height="760px"
+                                height="100%"
                                 showCadastral={false}
                                 analysisIndicators={analysisDone ? appliedIndicators : previewAnalysisIndicators}
                                 riskGrid={analysisResult?.gridResult || indicatorPreviewGrid}
@@ -2860,6 +2894,7 @@
                                 {focusedCandidate}
                                 onParcelCandidatesChange={handleParcelCandidates}
                                 onParcelCandidateFocus={handleMapParcelCandidateFocus}
+                                onParcelDerivationComplete={handleParcelDerivationComplete}
                             />
                             <section class="score-row map-score-overlay" aria-label="리스크 평가 결과">
                                 <div class="score-card risk"><span>{analysisResult?.hazardOnly ? '예비 위험도' : '종합 위험도'}</span><strong>{formatScore(resultRiskScore)}</strong><small>{analysisDone ? `${analysisResult.gridUnit} · ${analysisResult.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk'}` : '분석 실행 대기'}</small></div>
@@ -2872,9 +2907,9 @@
                 </div>
             </section>
 
-            <section class="panel candidates wide-candidates">
+            <section class="panel candidates wide-candidates" id="practice-district-section">
                 <div class="panel-head">
-                    <div><span class="section-number">02</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
+                    <div><span class="section-number">03</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
                     <span class="count-badge">실천지구 {candidateList.length}개</span>
                 </div>
                 {#if candidateList.length}
