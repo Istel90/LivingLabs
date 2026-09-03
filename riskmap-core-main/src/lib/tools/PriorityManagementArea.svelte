@@ -2574,7 +2574,7 @@
             </div>
         </div>
         <div class="project-meta">
-            <div><span>프로젝트</span><strong>{projectName}</strong></div>
+            <div class="project-chip"><span>프로젝트</span><strong>{projectName}</strong></div>
             <a class="ghost-link" href={portalToolsUrl}>지원도구 페이지로 돌아가기</a>
             <button class="ghost-button" onclick={downloadConfig}>설정 내보내기</button>
             <div class="request-manager">
@@ -2663,9 +2663,6 @@
                     <div class="left-panel-tabs" role="tablist" aria-label="좌측 패널 탭">
                         <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 선택</button>
                         <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => (leftPanelTab = '03')}>03 실천권역 구성</button>
-                        {#if leftPanelTab === '01'}
-                            <button class="add-button left-panel-tabs-action" onclick={openIndicatorDialog}>+ 새 지표</button>
-                        {/if}
                     </div>
                     {#if leftPanelTab === '01'}
                         <div class="analysis-fixed-bar">
@@ -2700,8 +2697,13 @@
                                     </select>
                                 </label>
                             </div>
-                            <div class="analysis-fixed-summary">
+                            <div class="analysis-fixed-row analysis-fixed-list-heading">
+                                <span class="analysis-fixed-row-label">지표 목록</span>
+                                <button class="add-button left-panel-tabs-action" onclick={openIndicatorDialog}>+ 새 지표</button>
+                            </div>
+                            <div class="analysis-fixed-row analysis-fixed-summary">
                                 <div class="analysis-dimension-counts">
+                                    <span class="analysis-fixed-row-label">선택됨</span>
                                     <span class="dim-h">H {dimensionSelectedCounts.H}</span>
                                     <span class="dim-separator" aria-hidden="true">·</span>
                                     <span class="dim-e">E {dimensionSelectedCounts.E}</span>

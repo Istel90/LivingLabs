@@ -1918,8 +1918,9 @@
         });
 
         if (!locked) {
-            L.control.zoom({ position: 'bottomright' }).addTo(map);
+            L.control.zoom({ position: 'bottomleft' }).addTo(map);
         }
+        L.control.scale({ position: 'bottomleft', metric: true, imperial: false }).addTo(map);
 
         if (!map.getPane('parcelCandidatePane')) {
             map.createPane('parcelCandidatePane');
@@ -2240,7 +2241,7 @@
             {/if}
         </div>
     {/if}
-    <div class="map-icon-controls">
+    <div class="map-icon-controls-bl">
         <div class="icon-control-wrap">
             <button
                 type="button"
@@ -2255,10 +2256,10 @@
                     <polyline points="3 12 12 17 21 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
                     <polyline points="3 16 12 21 21 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
                 </svg>
-                <span class="icon-tooltip">선택지역 경계</span>
+                <span class="icon-tooltip tooltip-right">선택지역 경계</span>
             </button>
             {#if layerPanelOpen}
-                <div class="layer-panel">
+                <div class="layer-panel layer-panel-up">
                     <strong>베이스·행정 레이어</strong>
                     <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
                     <label>
@@ -2298,9 +2299,11 @@
                 <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
                 <path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" />
             </svg>
-            <span class="icon-tooltip">{baseMapStyle === 'grayscale' ? '컬러 지도로 전환' : '무채색 지도로 전환'}</span>
+            <span class="icon-tooltip tooltip-right">{baseMapStyle === 'grayscale' ? '컬러 지도로 전환' : '무채색 지도로 전환'}</span>
         </button>
-        {#if !locked}
+    </div>
+    {#if !locked}
+        <div class="map-icon-controls-br">
             <button type="button" class="icon-control-button" onclick={returnToSelectedRegion}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                     <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
@@ -2311,8 +2314,8 @@
                 </svg>
                 <span class="icon-tooltip">{regionReturnLabel()}</span>
             </button>
-        {/if}
-    </div>
+        </div>
+    {/if}
 </div>
 
 <style>
@@ -2364,14 +2367,21 @@
         font-size: .65rem;
     }
 
-    .map-icon-controls {
+    .map-icon-controls-bl {
         position: absolute;
-        right: .85rem;
-        top: .85rem;
+        left: .85rem;
+        bottom: 6.8rem;
         z-index: 900;
         display: grid;
         gap: .5rem;
-        justify-items: end;
+        justify-items: start;
+    }
+
+    .map-icon-controls-br {
+        position: absolute;
+        right: .85rem;
+        bottom: 2.5rem;
+        z-index: 900;
     }
 
     .icon-control-wrap {
@@ -2393,10 +2403,15 @@
         cursor: pointer;
     }
 
-    .icon-control-button:hover,
-    .icon-control-button.active {
+    .icon-control-button:hover {
         border-color: #0f766e;
         color: #0f766e;
+    }
+
+    .icon-control-button.active {
+        background: #0f766e;
+        border-color: #0f766e;
+        color: #fff;
     }
 
     .icon-control-button svg {
@@ -2428,6 +2443,11 @@
         opacity: 1;
     }
 
+    .icon-tooltip.tooltip-right {
+        right: auto;
+        left: calc(100% + .5rem);
+    }
+
     .layer-panel {
         position: absolute;
         right: 0;
@@ -2446,6 +2466,13 @@
         font-size: .78rem;
         font-weight: 800;
         backdrop-filter: blur(10px);
+    }
+
+    .layer-panel.layer-panel-up {
+        top: auto;
+        right: auto;
+        bottom: calc(100% + .5rem);
+        left: 0;
     }
 
     .analysis-overlay-stack {
@@ -2489,8 +2516,8 @@
     .legend-head > strong {
         display: block;
         color: #073b52;
-        font-size: .88rem;
-        font-weight: 900;
+        font-size: 14px;
+        font-weight: 600;
     }
 
     .legend-head-actions {
