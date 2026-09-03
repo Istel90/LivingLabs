@@ -2144,8 +2144,9 @@
         });
 
         if (!locked) {
-            L.control.zoom({ position: 'bottomright' }).addTo(map);
+            L.control.zoom({ position: 'bottomleft' }).addTo(map);
         }
+        L.control.scale({ position: 'bottomleft', metric: true, imperial: false }).addTo(map);
 
         if (!map.getPane('parcelCandidatePane')) {
             map.createPane('parcelCandidatePane');
@@ -2470,7 +2471,7 @@
             </button>
             {#if !locked}
                 <button
-                    class="map-control-button"
+                    class="map-control-button map-locate-button"
                     type="button"
                     aria-label={regionReturnLabel()}
                     title={`${regionName || '선택 지역'} 전체 보기`}
@@ -3024,5 +3025,43 @@
 
     .local-boundary {
         color: #047857 !important;
+    }
+
+    /* Latest UI refinement from ff0b6f3, adapted to the integrated map toolbar. */
+    .map-control-cluster {
+        left: .85rem;
+        right: .85rem;
+        top: auto;
+        bottom: 6.8rem;
+        display: block;
+    }
+
+    .map-control-toolbar {
+        position: relative;
+        width: 100%;
+        justify-items: start;
+    }
+
+    .map-control-toolbar .map-locate-button {
+        position: absolute;
+        right: 0;
+        bottom: -5.95rem;
+    }
+
+    .map-control-button.active {
+        border-color: #0f766e;
+        background: #0f766e;
+        color: #fff;
+    }
+
+    .layer-panel {
+        position: absolute;
+        left: 0;
+        bottom: calc(100% + .5rem);
+    }
+
+    .analysis-legend > strong {
+        font-size: 14px;
+        font-weight: 600;
     }
 </style>

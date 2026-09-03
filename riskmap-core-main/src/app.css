@@ -11,7 +11,10 @@ button { cursor: pointer; }
 .brand { gap: 12px; }.brand-mark { width: 38px; height: 38px; border: 1px solid #97b6a9; color: #c8e2ce; display: grid; place-items: center; border-radius: 5px; font-weight: 800; letter-spacing: -1px; }
 .brand > div, .project-meta > div { flex-direction: column; align-items: flex-start; }.brand strong { font-size: 15px; letter-spacing: .04em; }.brand span, .project-meta span { font-size: 10px; color: #9fb6b2; margin-top: 3px; }
 .project-meta { gap: 18px; }.project-meta strong { font-size: 12px; }.avatar { width: 35px; height: 35px; border-radius: 50%; background: #dce9dc; color: #173a35; display: grid!important; place-items: center; font-size: 11px; font-weight: 700; }
-.ghost-button, .ghost-link { border: 1px solid #55716d; background: transparent; color: white; padding: 9px 12px; border-radius: 5px; font-size: 11px; font-weight: 700; text-decoration: none; }
+.project-chip { background: #5d655c; border-radius: 5px; padding: 2px 14px; height: 41px; justify-content: center; }
+.project-meta .project-chip span { color: #c3c9c5; margin-top: 0; line-height: 1.1; }
+.project-meta .project-chip strong { color: #ffffff; line-height: 1.2; }
+.ghost-button, .ghost-link { border: 1px solid #55716d; background: transparent; color: white; padding: 9px 12px; border-radius: 5px; font-size: 14px; font-weight: 400; text-decoration: none; }
 .ghost-link { display: inline-flex; align-items: center; min-height: 34px; }
 .ghost-button:hover, .ghost-link:hover { background: rgb(255 255 255 / 10%); }
 .workspace { display: grid; grid-template-columns: 230px 1fr; }
@@ -1419,4 +1422,136 @@ button { cursor: pointer; }
     .workspace-split { grid-template-columns: 420px minmax(0, 1fr); }
     .lab-analysis-runner { grid-template-columns: minmax(240px, 1fr) auto; }
     .lab-analysis-flow { display: none; }
+}
+
+/* Latest UI hierarchy from ff0b6f3, adapted to the integrated flood workspace. */
+.panel-head h2,
+.decision-title h2 {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.add-button,
+button.left-panel-tabs-action,
+.primary,
+.secondary-action,
+.database-actions button {
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.handoff-request-button:not(:disabled) {
+    font-weight: 400;
+}
+
+.left-panel-tabs button {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+button.left-panel-tabs-action {
+    flex: 0 0 auto;
+    align-self: center;
+    margin-left: 0;
+}
+
+.analysis-fixed-selects label {
+    color: #71837c;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.analysis-fixed-selects select,
+.database-actions input {
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.analysis-fixed-row {
+    border-top: 1px solid #e4e9e4;
+    padding-top: 8px;
+}
+
+.analysis-fixed-row-label {
+    flex: 0 0 auto;
+    color: #213b38 !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    white-space: nowrap;
+}
+
+.analysis-fixed-list-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.group-label {
+    color: #213b38;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.group-collapsed-summary,
+.group-count {
+    color: #71837c;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.indicator-copy strong {
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.indicator-copy span,
+.weight {
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.weight-stepper-value {
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.database-actions label span,
+.database-actions > span {
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.browser-tab-name {
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.browser-tab-desc {
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.browser-tab-select small {
+    font-size: 11px;
+    font-weight: 400;
+}
+
+.project-chip {
+    height: 41px;
+    justify-content: center;
+    border-radius: 5px !important;
+    background: #5d655c !important;
+    padding: 2px 14px !important;
+}
+
+.project-meta .project-chip span {
+    margin-top: 0;
+    color: #c3c9c5;
+    line-height: 1.1;
+}
+
+.project-meta .project-chip strong {
+    color: #fff;
+    line-height: 1.2;
 }
