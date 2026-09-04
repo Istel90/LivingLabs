@@ -85,6 +85,7 @@
     let baseMapStyle = $state('default');
     let legendInfoOpen = $state(false);
     let locateButtonOffset = $state(72);
+    let scaleBottomOffset = $state(28);
     let scaleControlEl;
     let selectedBoundaryLayer;
     let regionViewBounds;
@@ -2159,17 +2160,24 @@
                     const mapRect = mapElement.getBoundingClientRect();
                     const zoomRect = zoomEl.getBoundingClientRect();
                     locateButtonOffset = Math.round(mapRect.bottom - zoomRect.top + gap);
+                    scaleBottomOffset = Math.round(mapRect.bottom - zoomRect.bottom);
                 }
             });
         }
 
         const scaleControl = L.control.scale({ metric: true, imperial: false, position: 'bottomright' }).addTo(map);
-        requestAnimationFrame(() => {
+        const attachScaleControl = () => {
             const scaleEl = scaleControl.getContainer();
-            if (scaleEl && scaleControlEl) {
-                scaleControlEl.appendChild(scaleEl);
-            }
-        });
+            const target = scaleControlEl || mapElement?.parentElement?.querySelector('.map-scale-control');
+            if (!scaleEl || !target) return false;
+            if (scaleEl.parentElement !== target) target.appendChild(scaleEl);
+            return true;
+        };
+        if (!attachScaleControl()) {
+            requestAnimationFrame(() => {
+                if (!attachScaleControl()) window.setTimeout(attachScaleControl, 200);
+            });
+        }
 
         if (!map.getPane('parcelCandidatePane')) {
             map.createPane('parcelCandidatePane');
@@ -2320,7 +2328,6 @@
         </div>
     {/if}
     <div class="map-export-toolbar" data-map-export-ignore aria-live="polite">
-        <div class="map-scale-control" bind:this={scaleControlEl}></div>
         <div class="map-export-actions">
             <button type="button" onclick={exportMapImage} disabled={mapLoading || exportBusy}>
                 <span aria-hidden="true">↓</span>
@@ -2329,6 +2336,7 @@
             {#if exportStatus}<small>{exportStatus}</small>{/if}
         </div>
     </div>
+    <div class="map-scale-control" data-map-export-ignore style={`bottom:${scaleBottomOffset}px`} bind:this={scaleControlEl}></div>
     {#if showAnalysisLegend}
         <div class="analysis-overlay-stack" data-map-export-ignore>
             <div class="analysis-legend" aria-label="표시 레이어">
@@ -2543,6 +2551,9 @@
     }
 
     .map-scale-control {
+        position: absolute;
+        right: 3.4rem;
+        z-index: 700;
         pointer-events: none;
     }
 
@@ -2551,14 +2562,18 @@
     }
 
     .map-scale-control :global(.leaflet-control-scale-line) {
-        border-color: #0f766e;
-        background: rgb(255 255 255 / 92%);
-        color: #0f172a;
-        padding: .1rem .4rem;
-        font-size: .68rem;
+        border: 2px solid #1f2937;
+        border-top: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        color: #1f2937;
+        padding: 0 .2rem;
+        font-size: .66rem;
         font-weight: 800;
-        border-radius: .35rem;
-        box-shadow: 0 6px 14px rgb(15 23 42 / 12%);
+        line-height: 1.25;
+        text-align: right;
+        text-shadow: 0 0 3px #fff, 0 0 3px #fff;
     }
 
     .map-export-toolbar button {
