@@ -62,6 +62,8 @@ jobs:
         run: npm run build:cloudflare
         env:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
+          POSTGIS_TUNNEL_ORIGIN: ${{ vars.POSTGIS_TUNNEL_ORIGIN }}
+          POSTGIS_TUNNEL_TOKEN: ${{ secrets.POSTGIS_TUNNEL_TOKEN }}
 
       - name: Ensure Pages project exists
         if: steps.cloudflare-config.outputs.ready == 'true'
