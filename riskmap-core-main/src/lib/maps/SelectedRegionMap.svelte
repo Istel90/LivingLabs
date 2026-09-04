@@ -2153,16 +2153,23 @@
 
         if (!locked) {
             const zoomControl = L.control.zoom({ position: 'bottomright' }).addTo(map);
-            requestAnimationFrame(() => {
+            const measureZoomOffsets = () => {
                 const zoomEl = zoomControl.getContainer();
-                if (zoomEl && mapElement) {
-                    const gap = 8;
-                    const mapRect = mapElement.getBoundingClientRect();
-                    const zoomRect = zoomEl.getBoundingClientRect();
-                    locateButtonOffset = Math.round(mapRect.bottom - zoomRect.top + gap);
-                    scaleBottomOffset = Math.round(mapRect.bottom - zoomRect.bottom);
-                }
-            });
+                if (!zoomEl || !mapElement) return false;
+                const mapRect = mapElement.getBoundingClientRect();
+                const zoomRect = zoomEl.getBoundingClientRect();
+                if (!zoomRect.height || !mapRect.height) return false;
+                locateButtonOffset = Math.round(mapRect.bottom - zoomRect.top + 8);
+                scaleBottomOffset = Math.round(mapRect.bottom - zoomRect.bottom);
+                return true;
+            };
+            let measureAttempts = 0;
+            const retryMeasure = () => {
+                if (measureZoomOffsets() || measureAttempts > 10) return;
+                measureAttempts += 1;
+                window.setTimeout(retryMeasure, 120);
+            };
+            retryMeasure();
         }
 
         const scaleControl = L.control.scale({ metric: true, imperial: false, position: 'bottomright' }).addTo(map);
@@ -2174,9 +2181,9 @@
             return true;
         };
         if (!attachScaleControl()) {
-            requestAnimationFrame(() => {
+            window.setTimeout(() => {
                 if (!attachScaleControl()) window.setTimeout(attachScaleControl, 200);
-            });
+            }, 0);
         }
 
         if (!map.getPane('parcelCandidatePane')) {
@@ -2327,15 +2334,9 @@
             <small>선택 지역의 배경지도와 분석 레이어를 준비하고 있습니다.</small>
         </div>
     {/if}
-    <div class="map-export-toolbar" data-map-export-ignore aria-live="polite">
-        <div class="map-export-actions">
-            <button type="button" onclick={exportMapImage} disabled={mapLoading || exportBusy}>
-                <span aria-hidden="true">↓</span>
-                {exportBusy ? 'PNG 생성 중...' : '지도 PNG 저장'}
-            </button>
-            {#if exportStatus}<small>{exportStatus}</small>{/if}
-        </div>
-    </div>
+    {#if exportStatus}
+        <div class="map-export-status" data-map-export-ignore role="status" aria-live="polite">{exportStatus}</div>
+    {/if}
     <div class="map-scale-control" data-map-export-ignore style={`bottom:${scaleBottomOffset}px`} bind:this={scaleControlEl}></div>
     {#if showAnalysisLegend}
         <div class="analysis-overlay-stack" data-map-export-ignore>
@@ -2493,23 +2494,37 @@
             </span>
         </label>
     </div>
-    {#if !locked}
+    <div class="map-control-column" data-map-export-ignore style={`bottom:${locateButtonOffset}px`}>
         <button
-            class="map-locate-button"
+            class="map-icon-button"
             type="button"
-            data-map-export-ignore
-            aria-label={regionReturnLabel()}
-            title={`${regionName || '선택 지역'} 전체 보기`}
-            style={`bottom:${locateButtonOffset}px`}
-            onclick={() => returnToSelectedRegion()}
+            aria-label="지도 PNG 다운로드"
+            title={exportBusy ? 'PNG 생성 중' : '지도 PNG 다운로드'}
+            disabled={mapLoading || exportBusy}
+            onclick={exportMapImage}
         >
             <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="6.25"></circle>
-                <path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
-                <circle class="target-dot" cx="12" cy="12" r="1.4"></circle>
+                <path d="M12 3.5v10"></path>
+                <path d="M7.75 9.75 12 14l4.25-4.25"></path>
+                <path d="M4.5 19.5h15"></path>
             </svg>
         </button>
-    {/if}
+        {#if !locked}
+            <button
+                class="map-icon-button"
+                type="button"
+                aria-label={regionReturnLabel()}
+                title={`${regionName || '선택 지역'} 전체 보기`}
+                onclick={() => returnToSelectedRegion()}
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="6.25"></circle>
+                    <path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
+                    <circle class="target-dot" cx="12" cy="12" r="1.4"></circle>
+                </svg>
+            </button>
+        {/if}
+    </div>
 </div>
 
 <style>
@@ -2533,21 +2548,21 @@
         image-rendering: auto;
     }
 
-    .map-export-toolbar {
+    .map-export-status {
         position: absolute;
         right: .85rem;
         bottom: 4.15rem;
         z-index: 900;
-        display: flex;
-        align-items: center;
-        gap: .6rem;
-        pointer-events: auto;
-    }
-
-    .map-export-actions {
-        display: grid;
-        justify-items: end;
-        gap: .35rem;
+        max-width: 18rem;
+        border-radius: .55rem;
+        background: rgb(15 23 42 / 88%);
+        color: #fff;
+        padding: .42rem .58rem;
+        font-size: .66rem;
+        font-weight: 800;
+        line-height: 1.35;
+        text-align: right;
+        pointer-events: none;
     }
 
     .map-scale-control {
@@ -2574,38 +2589,6 @@
         line-height: 1.25;
         text-align: right;
         text-shadow: 0 0 3px #fff, 0 0 3px #fff;
-    }
-
-    .map-export-toolbar button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: .4rem;
-        border: 1px solid rgb(255 255 255 / 46%);
-        border-radius: .72rem;
-        background: #0f766e;
-        color: #fff;
-        padding: .68rem .9rem;
-        box-shadow: 0 14px 28px rgb(15 118 110 / 28%);
-        font-size: .76rem;
-        font-weight: 900;
-        cursor: pointer;
-    }
-
-    .map-export-toolbar button:hover { background: #0b5f59; }
-    .map-export-toolbar button:disabled { opacity: .65; cursor: wait; }
-    .map-export-toolbar button span { font-size: 1rem; line-height: 1; }
-
-    .map-export-toolbar small {
-        max-width: 18rem;
-        border-radius: .55rem;
-        background: rgb(15 23 42 / 88%);
-        color: #fff;
-        padding: .42rem .58rem;
-        font-size: .66rem;
-        font-weight: 800;
-        line-height: 1.35;
-        text-align: right;
     }
 
     .map-exporting .analysis-legend,
@@ -2738,10 +2721,17 @@
         outline-offset: 2px;
     }
 
-    .map-locate-button {
+    .map-control-column {
         position: absolute;
         right: .625rem;
         z-index: 680;
+        display: flex;
+        flex-direction: column;
+        gap: .5rem;
+        pointer-events: auto;
+    }
+
+    .map-icon-button {
         display: grid;
         place-items: center;
         width: 2.125rem;
@@ -2754,19 +2744,23 @@
         box-shadow: none;
         cursor: pointer;
         transition: background .16s ease, color .16s ease;
-        pointer-events: auto;
     }
 
-    .map-locate-button:hover {
+    .map-icon-button:hover:not(:disabled) {
         background: #f4f4f4;
     }
 
-    .map-locate-button:focus-visible {
+    .map-icon-button:disabled {
+        color: #9ca3af;
+        cursor: wait;
+    }
+
+    .map-icon-button:focus-visible {
         outline: 3px solid rgb(45 212 191 / 38%);
         outline-offset: 2px;
     }
 
-    .map-locate-button svg {
+    .map-icon-button svg {
         width: 1.05rem;
         height: 1.05rem;
         overflow: visible;
@@ -2777,7 +2771,7 @@
         stroke-linejoin: round;
     }
 
-    .map-locate-button .target-dot {
+    .map-icon-button .target-dot {
         fill: currentColor;
         stroke: none;
     }
