@@ -65,6 +65,11 @@
         '적응역량': 'Adaptive Capacity'
     };
     const gridLayers = ['H', 'E', 'V', 'Risk', 'Hotspot'];
+    const dimensionTabColors = {
+        H: 'var(--color-hazard)',
+        E: 'var(--color-exposure)',
+        V: 'var(--color-vulnerability)'
+    };
     const gridLayerLabels = {
         Risk: '종합 Risk',
         H: '기후위험 H',
@@ -78,6 +83,7 @@
     let mapLoading = $state(true);
     let baseLayer;
     let baseMapStyle = $state('default');
+    let legendInfoOpen = $state(false);
     let locateButtonOffset = $state(72);
     let scaleControlEl;
     let selectedBoundaryLayer;
@@ -2326,12 +2332,31 @@
     {#if showAnalysisLegend}
         <div class="analysis-overlay-stack" data-map-export-ignore>
             <div class="analysis-legend" aria-label="표시 레이어">
-                <strong>표시 레이어</strong>
-                <span class="legend-note">
-                    {riskGrid?.preview
-                        ? '분석 전 미리보기 · H·E·V 탭과 체크박스로 01 지표 데이터를 확인합니다.'
-                        : 'H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.'}
-                </span>
+                <div class="legend-head">
+                    <strong>표시 레이어</strong>
+                    <button
+                        type="button"
+                        class="legend-info-toggle"
+                        class:active={legendInfoOpen}
+                        aria-expanded={legendInfoOpen}
+                        aria-label={`표시 레이어 안내 ${legendInfoOpen ? '닫기' : '보기'}`}
+                        onclick={() => (legendInfoOpen = !legendInfoOpen)}
+                    >ⓘ</button>
+                </div>
+                {#if legendInfoOpen}
+                    <div class="legend-info-popover" role="dialog" aria-label="표시 레이어 안내">
+                        <div class="legend-info-popover-head">
+                            <span class="legend-info-chip">안내</span>
+                            <button type="button" class="legend-info-close" aria-label="안내 닫기" onclick={() => (legendInfoOpen = false)}>×</button>
+                        </div>
+                        <p>
+                            {riskGrid?.preview
+                                ? '분석 전 미리보기 · H·E·V 탭과 체크박스로 01 지표 데이터를 확인합니다.'
+                                : 'H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.'}
+                        </p>
+                        <p>표시를 끄면 지도 레이어가 숨겨지고 범례 행도 흐려집니다. Risk 분석 포함 여부는 01 분석 지표 선택에서 설정합니다.</p>
+                    </div>
+                {/if}
                 {#if riskGrid?.stats}
                     <label class="risk-surface-summary">
                         <input
@@ -2350,6 +2375,8 @@
                         <button
                             type="button"
                             class:active={selectedGridLayer === layer}
+                            class:dim-tab={dimensionTabColors[layer]}
+                            style={dimensionTabColors[layer] ? `--dim-tab-color:${dimensionTabColors[layer]}` : undefined}
                             disabled={riskGrid?.preview && ['Risk', 'Hotspot'].includes(layer)}
                             onclick={() => { selectedGridLayer = layer; onGridLayerChange(layer); renderRiskGridLayer(); }}
                         >
@@ -2357,7 +2384,6 @@
                         </button>
                     {/each}
                 </div>
-                <span class="legend-analysis-note">표시를 끄면 지도 레이어가 숨겨지고 범례 행도 흐려집니다. Risk 분석 포함 여부는 01 분석 지표 선택에서 설정합니다.</span>
                 {#each analysisGroups.filter((group) => groupsForGridLayer(selectedGridLayer).includes(group)) as group}
                     {@const items = analysisIndicators.filter((item) => item.enabled && item.group === group)}
                     {#if items.length}
@@ -2748,7 +2774,7 @@
         z-index: 640;
         display: grid;
         gap: .6rem;
-        width: min(19rem, calc(100% - 2rem));
+        width: min(16.5rem, calc(100% - 2rem));
         max-height: calc(100% - 1.7rem);
         pointer-events: none;
     }
@@ -2767,20 +2793,77 @@
         pointer-events: auto;
     }
 
-    .analysis-legend > strong {
-        display: block;
+    .legend-head {
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+    }
+
+    .legend-head strong {
         color: #073b52;
         font-size: .88rem;
         font-weight: 900;
     }
 
-    .legend-note {
-        display: block;
-        margin-top: .2rem;
-        color: #64748b;
-        font-size: .68rem;
+    .legend-info-toggle {
+        flex: 0 0 auto;
+        border: 0;
+        background: transparent;
+        color: #9aa8a2;
+        padding: 0;
+        font-size: .78rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .legend-info-toggle:hover,
+    .legend-info-toggle.active { color: #0f766e; }
+
+    .legend-info-popover {
+        margin-top: .45rem;
+        border-radius: .6rem;
+        background: #102f2d;
+        color: #fff;
+        padding: .5rem .6rem .6rem;
+    }
+
+    .legend-info-popover-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+        margin-bottom: .35rem;
+    }
+
+    .legend-info-chip {
+        border-radius: 999px;
+        background: rgb(255 255 255 / 18%);
+        padding: .12rem .45rem;
+        font-size: .58rem;
         font-weight: 800;
     }
+
+    .legend-info-popover .legend-info-close {
+        flex: 0 0 auto;
+        border: 0;
+        background: transparent;
+        color: rgb(255 255 255 / 78%);
+        padding: 0 .1rem;
+        font-size: .85rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .legend-info-popover .legend-info-close:hover { color: #fff; }
+
+    .legend-info-popover p {
+        margin: 0 0 .3rem;
+        font-size: .62rem;
+        font-weight: 700;
+        line-height: 1.45;
+    }
+
+    .legend-info-popover p:last-child { margin-bottom: 0; }
 
     .risk-surface-summary {
         display: grid;
@@ -2826,13 +2909,14 @@
     }
 
     .analysis-grid-tabs {
-        display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        display: flex;
+        align-items: center;
         gap: .28rem;
         margin-top: .5rem;
     }
 
     .analysis-grid-tabs button {
+        flex: 1 1 auto;
         min-width: 0;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .45rem;
@@ -2842,6 +2926,26 @@
         font-size: .62rem;
         font-weight: 900;
         cursor: pointer;
+    }
+
+    .analysis-grid-tabs button.dim-tab {
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+        width: 1.7rem;
+        height: 1.7rem;
+        border: 2px solid var(--dim-tab-color);
+        border-radius: 999px;
+        background: transparent;
+        color: var(--dim-tab-color);
+        padding: 0;
+        font-size: .7rem;
+    }
+
+    .analysis-grid-tabs button.dim-tab.active {
+        background: var(--dim-tab-color);
+        color: #fff;
+        box-shadow: 0 6px 14px rgb(15 23 42 / 18%);
     }
 
     .analysis-grid-tabs button.active {
@@ -2994,14 +3098,6 @@
         gap: .35rem;
     }
 
-    .legend-analysis-note {
-        display: block;
-        margin-top: .45rem;
-        color: #64748b;
-        font-size: .64rem;
-        font-weight: 700;
-        line-height: 1.35;
-    }
 
     .legend-items label {
         display: grid;

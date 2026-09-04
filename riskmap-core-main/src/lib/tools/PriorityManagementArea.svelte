@@ -2726,12 +2726,12 @@
             <a class="ghost-link" href={portalToolsUrl}>지원도구 페이지로 돌아가기</a>
             <button class="ghost-button" onclick={downloadConfig}>설정 내보내기</button>
             <div class="request-manager">
-                <button type="button" class="request-manager-toggle ghost-button" onclick={() => requestListOpen = !requestListOpen}>보낸 요청 <span class="request-manager-count">{sentRequestCount}</span></button>
+                <button type="button" class="request-manager-toggle ghost-button" class:open={requestListOpen} aria-expanded={requestListOpen} onclick={() => requestListOpen = !requestListOpen}>보낸 요청 <span class="request-manager-count">{sentRequestCount}</span><span class="request-manager-caret" aria-hidden="true">{requestListOpen ? '▴' : '▾'}</span></button>
                 {#if requestListOpen}
                     <div class="request-manager-panel">
                         <div><strong>보낸 검토 요청</strong><small>초기화 후에도 이 목록에서 요청을 취소할 수 있습니다.</small></div>
                         {#if sentHandoffPackages.length}
-                            <ul>{#each sentHandoffPackages as request}<li><div><b>{request.hazardLabel || config.label} · {request.region || region}</b><span>{request.alternativeCount || 0}개 대안 · {request.candidateCount || 0}개 후보 · {formatHandoffTime(request.deliveredAt)}</span><small>{request.packageId}</small></div><button type="button" onclick={() => recallDepartmentHandoff(request)}>취소</button></li>{/each}</ul>
+                            <ul>{#each sentHandoffPackages as request}<li><button type="button" class="request-recall-button" onclick={() => recallDepartmentHandoff(request)}>요청 취소</button><div><b>{request.hazardLabel || config.label} · {request.region || region}</b><span>{request.alternativeCount || 0}개 대안 · {request.candidateCount || 0}개 후보 · {formatHandoffTime(request.deliveredAt)}</span><small>{request.packageId}</small></div></li>{/each}</ul>
                             <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>전체 요청 취소</button>
                         {:else}
                             <p>현재 도구에 기록된 요청은 없습니다.</p>
