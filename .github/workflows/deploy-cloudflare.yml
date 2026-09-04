@@ -1,0 +1,82 @@
+name: Deploy LivingLabs to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-pages-production
+  cancel-in-progress: true
+
+env:
+  CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'livinglabs-platform' }}
+  CLOUDFLARE_SITE_ORIGIN: ${{ vars.CLOUDFLARE_SITE_ORIGIN || 'https://livinglabs-platform.pages.dev' }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Cloudflare configuration
+        id: cloudflare-config
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Cloudflare deployment skipped: add the CLOUDFLARE_API_TOKEN secret and CLOUDFLARE_ACCOUNT_ID variable."
+          fi
+
+      - name: Checkout
+        if: steps.cloudflare-config.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: steps.cloudflare-config.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            Survey platform for collaboration/package-lock.json
+            riskmap-core-main/package-lock.json
+
+      - name: Install dependencies
+        if: steps.cloudflare-config.outputs.ready == 'true'
+        run: |
+          npm ci
+          npm ci --prefix "Survey platform for collaboration"
+          npm ci --prefix riskmap-core-main
+
+      - name: Build unified platform
+        if: steps.cloudflare-config.outputs.ready == 'true'
+        run: npm run build:cloudflare
+        env:
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
+
+      - name: Ensure Pages project exists
+        if: steps.cloudflare-config.outputs.ready == 'true'
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if ! npx wrangler pages project list --json | jq -e --arg name "$CLOUDFLARE_PAGES_PROJECT" '.[] | select(.name == $name)' >/dev/null; then
+            npx wrangler pages project create "$CLOUDFLARE_PAGES_PROJECT" --production-branch master
+          fi
+
+      - name: Deploy
+        if: steps.cloudflare-config.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy pages-dist --project-name=${{ env.CLOUDFLARE_PAGES_PROJECT }} --branch=master
