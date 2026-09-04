@@ -78,7 +78,8 @@
     let mapLoading = $state(true);
     let baseLayer;
     let baseMapStyle = $state('default');
-    let layerPanelOpen = $state(false);
+    let locateButtonOffset = $state(72);
+    let scaleControlEl;
     let selectedBoundaryLayer;
     let regionViewBounds;
     let sidoLayer;
@@ -2144,8 +2145,25 @@
         });
 
         if (!locked) {
-            L.control.zoom({ position: 'bottomright' }).addTo(map);
+            const zoomControl = L.control.zoom({ position: 'bottomright' }).addTo(map);
+            requestAnimationFrame(() => {
+                const zoomEl = zoomControl.getContainer();
+                if (zoomEl && mapElement) {
+                    const gap = 8;
+                    const mapRect = mapElement.getBoundingClientRect();
+                    const zoomRect = zoomEl.getBoundingClientRect();
+                    locateButtonOffset = Math.round(mapRect.bottom - zoomRect.top + gap);
+                }
+            });
         }
+
+        const scaleControl = L.control.scale({ metric: true, imperial: false, position: 'bottomright' }).addTo(map);
+        requestAnimationFrame(() => {
+            const scaleEl = scaleControl.getContainer();
+            if (scaleEl && scaleControlEl) {
+                scaleControlEl.appendChild(scaleEl);
+            }
+        });
 
         if (!map.getPane('parcelCandidatePane')) {
             map.createPane('parcelCandidatePane');
@@ -2296,11 +2314,14 @@
         </div>
     {/if}
     <div class="map-export-toolbar" data-map-export-ignore aria-live="polite">
-        <button type="button" onclick={exportMapImage} disabled={mapLoading || exportBusy}>
-            <span aria-hidden="true">↓</span>
-            {exportBusy ? 'PNG 생성 중...' : '지도 PNG 저장'}
-        </button>
-        {#if exportStatus}<small>{exportStatus}</small>{/if}
+        <div class="map-scale-control" bind:this={scaleControlEl}></div>
+        <div class="map-export-actions">
+            <button type="button" onclick={exportMapImage} disabled={mapLoading || exportBusy}>
+                <span aria-hidden="true">↓</span>
+                {exportBusy ? 'PNG 생성 중...' : '지도 PNG 저장'}
+            </button>
+            {#if exportStatus}<small>{exportStatus}</small>{/if}
+        </div>
     </div>
     {#if showAnalysisLegend}
         <div class="analysis-overlay-stack" data-map-export-ignore>
@@ -2409,82 +2430,52 @@
             {/if}
         </div>
     {/if}
-    <div class="map-control-cluster" data-map-export-ignore>
-        {#if layerPanelOpen}
-            <div id="base-admin-layer-panel" class="layer-panel">
-                <strong>지도 레이어</strong>
-                <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
-                <label>
-                    <input
-                        type="checkbox"
-                        checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
-                        disabled={forceSelectedBoundary}
-                        onchange={(event) => {
-                            if (forceSelectedBoundary) return;
-                            selectedBoundaryVisible = event.currentTarget.checked;
-                            toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
-                        }}
-                    />
-                    선택지역 경계
-                </label>
-                {#if hasVWorldApiKey()}
-                    <label><input type="checkbox" checked={sidoBoundaryVisible} onchange={(event) => { sidoBoundaryVisible = event.currentTarget.checked; toggleLayer(sidoLayer, sidoBoundaryVisible); }} /> 시도 경계</label>
-                    <label><input type="checkbox" checked={sigunguBoundaryVisible} onchange={(event) => { sigunguBoundaryVisible = event.currentTarget.checked; toggleLayer(sggLayer, sigunguBoundaryVisible); }} /> 시군구 경계</label>
-                    {#if showCadastral}
-                        <label><input type="checkbox" checked={cadastralVisible} onchange={(event) => { cadastralVisible = event.currentTarget.checked; toggleLayer(cadastralLayer, cadastralVisible); }} /> 연속지적도</label>
-                    {/if}
-                {:else}
-                    <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
-                {/if}
-            </div>
-        {/if}
-        <div class="map-control-toolbar" aria-label="지도 보기 도구">
-            <button
-                class="map-control-button"
-                class:active={layerPanelOpen}
-                type="button"
-                aria-label="지도 레이어"
-                title="지도 레이어"
-                aria-expanded={layerPanelOpen}
-                aria-controls="base-admin-layer-panel"
-                onclick={() => { layerPanelOpen = !layerPanelOpen; }}
-            >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="m12 3-8 4.4 8 4.4 8-4.4L12 3Z"></path>
-                    <path d="m4 11.2 8 4.4 8-4.4M4 15l8 4.4 8-4.4"></path>
-                </svg>
-            </button>
-            <button
-                class="map-control-button"
-                class:active={baseMapStyle === 'grayscale'}
-                type="button"
-                aria-label={baseMapStyle === 'grayscale' ? '컬러 배경지도로 변경' : '흑백 배경지도로 변경'}
-                title={baseMapStyle === 'grayscale' ? '컬러 배경지도' : '흑백 배경지도'}
-                aria-pressed={baseMapStyle === 'grayscale'}
-                onclick={() => setBaseMapStyle(baseMapStyle === 'grayscale' ? 'default' : 'grayscale')}
-            >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path class="contrast-fill" d="M12 3a9 9 0 0 0 0 18V3Z"></path>
-                    <circle cx="12" cy="12" r="9"></circle>
-                </svg>
-            </button>
-            {#if !locked}
-                <button
-                    class="map-control-button"
-                    type="button"
-                    aria-label={regionReturnLabel()}
-                    title={`${regionName || '선택 지역'} 전체 보기`}
-                    onclick={() => { layerPanelOpen = false; returnToSelectedRegion(); }}
-                >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <circle cx="12" cy="12" r="6.25"></circle>
-                        <path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
-                        <circle class="target-dot" cx="12" cy="12" r="1.4"></circle>
-                    </svg>
-                </button>
-            {/if}
-        </div>
+    <div class="display-settings-panel" data-map-export-ignore aria-label="표시 설정">
+        <label class="display-toggle-row">
+            <span class="display-toggle-label">흑백 지도</span>
+            <span class="switch">
+                <input
+                    type="checkbox"
+                    checked={baseMapStyle === 'grayscale'}
+                    onchange={(event) => setBaseMapStyle(event.currentTarget.checked ? 'grayscale' : 'default')}
+                />
+                <span class="switch-track" aria-hidden="true"></span>
+            </span>
+        </label>
+        <label class="display-toggle-row">
+            <span class="display-toggle-label">분석지역 경계</span>
+            <span class="switch">
+                <input
+                    type="checkbox"
+                    checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
+                    disabled={forceSelectedBoundary}
+                    onchange={(event) => {
+                        if (forceSelectedBoundary) return;
+                        selectedBoundaryVisible = event.currentTarget.checked;
+                        toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
+                    }}
+                />
+                <span class="switch-track" aria-hidden="true"></span>
+            </span>
+        </label>
     </div>
+    {#if !locked}
+        <button
+            class="map-locate-button"
+            type="button"
+            data-map-export-ignore
+            aria-label={regionReturnLabel()}
+            title={`${regionName || '선택 지역'} 전체 보기`}
+            style={`bottom:${locateButtonOffset}px`}
+            onclick={() => returnToSelectedRegion()}
+        >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="6.25"></circle>
+                <path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
+                <circle class="target-dot" cx="12" cy="12" r="1.4"></circle>
+            </svg>
+        </button>
+    {/if}
 </div>
 
 <style>
@@ -2513,10 +2504,35 @@
         right: .85rem;
         bottom: 4.15rem;
         z-index: 900;
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        pointer-events: auto;
+    }
+
+    .map-export-actions {
         display: grid;
         justify-items: end;
         gap: .35rem;
-        pointer-events: auto;
+    }
+
+    .map-scale-control {
+        pointer-events: none;
+    }
+
+    .map-scale-control :global(.leaflet-control-scale) {
+        margin: 0;
+    }
+
+    .map-scale-control :global(.leaflet-control-scale-line) {
+        border-color: #0f766e;
+        background: rgb(255 255 255 / 92%);
+        color: #0f172a;
+        padding: .1rem .4rem;
+        font-size: .68rem;
+        font-weight: 800;
+        border-radius: .35rem;
+        box-shadow: 0 6px 14px rgb(15 23 42 / 12%);
     }
 
     .map-export-toolbar button {
@@ -2553,7 +2569,7 @@
 
     .map-exporting .analysis-legend,
     .map-exporting .parcel-candidate-panel,
-    .map-exporting .layer-panel {
+    .map-exporting .display-settings-panel {
         background: #fff;
         backdrop-filter: none;
     }
@@ -2594,59 +2610,124 @@
         font-size: .65rem;
     }
 
-    .map-control-cluster {
+    .display-settings-panel {
         position: absolute;
-        right: .85rem;
-        top: .85rem;
-        z-index: 680;
-        display: flex;
-        align-items: flex-start;
-        gap: .55rem;
-        pointer-events: none;
-    }
-
-    .map-control-toolbar {
+        left: .85rem;
+        bottom: .85rem;
+        z-index: 640;
         display: grid;
-        gap: .42rem;
+        gap: .625rem;
+        width: max-content;
+        border: 1px solid rgb(15 23 42 / 10%);
+        border-radius: .9rem;
+        background: rgb(255 255 255 / 96%);
+        padding: .75rem;
+        box-shadow: 0 22px 46px rgb(15 23 42 / 18%);
+        backdrop-filter: blur(10px);
         pointer-events: auto;
     }
 
-    .map-control-button {
+    .display-toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.2rem;
+        cursor: pointer;
+    }
+
+    .display-toggle-label {
+        color: #64748b;
+        font-size: .75rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .switch {
+        position: relative;
+        display: inline-flex;
+        flex: 0 0 auto;
+        width: 2.1rem;
+        height: 1.15rem;
+    }
+
+    .switch input {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+    }
+
+    .switch-track {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        background: #cbd5e1;
+        transition: background .16s ease;
+    }
+
+    .switch-track::before {
+        content: '';
+        position: absolute;
+        top: .13rem;
+        left: .13rem;
+        width: .9rem;
+        height: .9rem;
+        border-radius: 999px;
+        background: #fff;
+        box-shadow: 0 1px 3px rgb(15 23 42 / 30%);
+        transition: transform .16s ease;
+    }
+
+    .switch input:checked + .switch-track {
+        background: #0f766e;
+    }
+
+    .switch input:checked + .switch-track::before {
+        transform: translateX(.95rem);
+    }
+
+    .switch input:disabled + .switch-track {
+        opacity: .5;
+        cursor: not-allowed;
+    }
+
+    .switch input:focus-visible + .switch-track {
+        outline: 2px solid rgb(45 212 191 / 55%);
+        outline-offset: 2px;
+    }
+
+    .map-locate-button {
+        position: absolute;
+        right: .625rem;
+        z-index: 680;
         display: grid;
         place-items: center;
-        width: 2.8rem;
-        height: 2.8rem;
-        border: 1px solid rgb(15 23 42 / 12%);
-        border-radius: .82rem;
-        background: rgb(255 255 255 / 96%);
-        color: #0f172a;
+        width: 2.125rem;
+        height: 2.125rem;
+        border: 2px solid rgb(0 0 0 / 20%);
+        border-radius: 4px;
+        background: #fff;
+        color: #000;
         padding: 0;
-        box-shadow: 0 10px 24px rgb(15 23 42 / 15%);
+        box-shadow: none;
         cursor: pointer;
-        backdrop-filter: blur(8px);
-        transition: border-color .16s ease, background .16s ease, color .16s ease, transform .16s ease;
+        transition: background .16s ease, color .16s ease;
+        pointer-events: auto;
     }
 
-    .map-control-button:hover {
-        border-color: rgb(15 118 110 / 38%);
-        color: #0f766e;
-        transform: translateY(-1px);
+    .map-locate-button:hover {
+        background: #f4f4f4;
     }
 
-    .map-control-button:focus-visible {
+    .map-locate-button:focus-visible {
         outline: 3px solid rgb(45 212 191 / 38%);
         outline-offset: 2px;
     }
 
-    .map-control-button.active {
-        border-color: rgb(15 118 110 / 42%);
-        background: #ecfdf5;
-        color: #0f766e;
-    }
-
-    .map-control-button svg {
-        width: 1.5rem;
-        height: 1.5rem;
+    .map-locate-button svg {
+        width: 1.05rem;
+        height: 1.05rem;
         overflow: visible;
         fill: none;
         stroke: currentColor;
@@ -2655,26 +2736,9 @@
         stroke-linejoin: round;
     }
 
-    .map-control-button .contrast-fill,
-    .map-control-button .target-dot {
+    .map-locate-button .target-dot {
         fill: currentColor;
         stroke: none;
-    }
-
-    .layer-panel {
-        display: grid;
-        gap: .38rem;
-        width: 14.5rem;
-        border: 1px solid rgb(15 23 42 / 10%);
-        border-radius: .9rem;
-        background: rgb(255 255 255 / 92%);
-        padding: .75rem .85rem;
-        box-shadow: 0 18px 36px rgb(15 23 42 / 14%);
-        color: #0f172a;
-        font-size: .78rem;
-        font-weight: 800;
-        backdrop-filter: blur(10px);
-        pointer-events: auto;
     }
 
     .analysis-overlay-stack {
@@ -3004,25 +3068,4 @@
         font-weight: 700;
     }
 
-    .layer-panel strong {
-        color: #073b52;
-        font-size: .85rem;
-    }
-
-    .layer-panel label {
-        display: flex;
-        align-items: center;
-        gap: .35rem;
-        white-space: nowrap;
-    }
-
-    .layer-panel span {
-        max-width: 14rem;
-        color: #64748b;
-        line-height: 1.45;
-    }
-
-    .local-boundary {
-        color: #047857 !important;
-    }
 </style>

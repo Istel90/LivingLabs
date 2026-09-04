@@ -76,9 +76,9 @@
                 { label: '관련 현황 데이터', source: '인구·녹지·무더위쉼터·표준격자' }
             ],
             alternatives: [
-                { name: '대안1', status: '검토중', description: '취약계층 밀집지역 중심 그늘·쉼터 보강안' },
-                { name: '대안2', status: '검토중', description: '보행축과 대중교통 결절점 중심 대응안' },
-                { name: '대안3', status: '검토중', description: '공공시설·녹지 연계 복합 대응안' }
+                { name: '대안 1', status: '검토중', description: '취약계층 밀집지역 중심 그늘·쉼터 보강안' },
+                { name: '대안 2', status: '검토중', description: '보행축과 대중교통 결절점 중심 대응안' },
+                { name: '대안 3', status: '검토중', description: '공공시설·녹지 연계 복합 대응안' }
             ],
             indicators: [
                 { id: 101, indicatorCode: 'H01', icon: '🌡', label: 'H01 · 평균기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#f59e0b' },
@@ -141,9 +141,9 @@
                 { label: '관련 현황 데이터', source: '인구·도로·대피시설·표준격자' }
             ],
             alternatives: [
-                { name: '대안1', status: '검토중', description: '상습 침수구역과 저지대 중심 우선 관리안' },
-                { name: '대안2', status: '검토중', description: '하천·우수관로 연결축 중심 배수 개선안' },
-                { name: '대안3', status: '검토중', description: '반지하·취약시설 보호 중심 대응안' }
+                { name: '대안 1', status: '검토중', description: '상습 침수구역과 저지대 중심 우선 관리안' },
+                { name: '대안 2', status: '검토중', description: '하천·우수관로 연결축 중심 배수 개선안' },
+                { name: '대안 3', status: '검토중', description: '반지하·취약시설 보호 중심 대응안' }
             ],
             indicators: [
                 { id: 201, floodIndicator: 'FH01', icon: '≈', label: 'H01 · 도시침수 30년', description: '도시침수 30년 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#2563eb' },
@@ -206,9 +206,9 @@
                 { label: '관련 현황 데이터', source: '개발압력·인구·공원녹지·표준격자' }
             ],
             alternatives: [
-                { name: '대안1', status: '검토중', description: '생태축 단절구간 중심 복원안' },
-                { name: '대안2', status: '검토중', description: '도시녹지와 하천변 연결성 강화안' },
-                { name: '대안3', status: '검토중', description: '서식지 민감지역 보호 중심 대응안' }
+                { name: '대안 1', status: '검토중', description: '생태축 단절구간 중심 복원안' },
+                { name: '대안 2', status: '검토중', description: '도시녹지와 하천변 연결성 강화안' },
+                { name: '대안 3', status: '검토중', description: '서식지 민감지역 보호 중심 대응안' }
             ],
             indicators: [
                 { id: 1, icon: '◇', label: '생태축 단절도', description: '생태축 단절·훼손 구간 데이터 연결 필요', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'ecosystem-grid', value: 0.5, color: '#2f9e44' },
@@ -777,7 +777,7 @@
         supabaseDrafts = [];
         supabaseHistoryOpen = false;
         supabaseStatus = '개발 초기화 완료 · Supabase 저장 이력 삭제됨';
-        draftStorageStatus = '개발 초기화 완료 · 새 대안1';
+        draftStorageStatus = '개발 초기화 완료 · 새 대안 1';
         draftLoadComplete = true;
     }
 
@@ -1845,7 +1845,7 @@
 
     function createDefaultAlternative(index = 0) {
         const configured = config.alternatives[index] || {
-            name: `대안${index + 1}`,
+            name: `대안 ${index + 1}`,
             status: '검토중',
             description: '새 기후적응실천권역 대안'
         };
@@ -2570,7 +2570,7 @@
             return Math.max(largestNumber, optionNumber);
         }, 0) + 1;
         const nextAlternative = {
-            name: `대안${nextOptionNumber}`,
+            name: `대안 ${nextOptionNumber}`,
             status: '검토중',
             description: '새 기후적응실천권역 대안',
             id: `alternative-${Date.now()}`,
@@ -2606,12 +2606,12 @@
                     dimensionWeights: { ...dimensionWeights },
                     indicators: cloneIndicatorsForAlternative(indicators)
                 },
-                analysisMessage: '마지막 대안을 삭제하고 새로운 대안1을 만들었습니다.'
+                analysisMessage: '마지막 대안을 삭제하고 새로운 대안 1을 만들었습니다.'
             };
             alternatives = [replacementAlternative];
             activeAlternative = 0;
             loadAlternative(0);
-            handoffMessage = '마지막 대안을 삭제하고 새로운 대안1을 만들었습니다.';
+            handoffMessage = '마지막 대안을 삭제하고 새로운 대안 1을 만들었습니다.';
             schedulePriorityDraftSave();
             return;
         }
@@ -2792,13 +2792,47 @@
             <section class="workspace-split">
                 <div class="left-panel">
                     <div class="left-panel-tabs" role="tablist" aria-label="좌측 패널 탭">
-                        <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 선택</button>
-                        <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => (leftPanelTab = '03')}>03 실천권역 구성</button>
+                        <span class="left-panel-tab-item">
+                            <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 선택</button>
+                        </span>
+                        <span class="left-panel-tab-item">
+                            <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => (leftPanelTab = '03')}>
+                                03 실천권역 구성
+                                {#if candidateList.length}<span class="tab-count">{candidateList.length}</span>{/if}
+                            </button>
+                            <button
+                                type="button"
+                                class="tab-info-toggle"
+                                class:active={candidatesInfoOpen}
+                                aria-expanded={candidatesInfoOpen}
+                                aria-label={`실천권역 구성 설명 ${candidatesInfoOpen ? '닫기' : '보기'}`}
+                                onclick={() => candidatesInfoOpen = !candidatesInfoOpen}
+                            >ⓘ</button>
+                            {#if candidatesInfoOpen}
+                                <div class="tab-info-popover" role="dialog" aria-label="실천권역 구성 설명">
+                                    <div class="tab-info-popover-head">
+                                        <span class="tab-info-chip">안내</span>
+                                        <button type="button" class="tab-info-close" aria-label="설명 닫기" onclick={() => candidatesInfoOpen = false}>×</button>
+                                    </div>
+                                    <p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p>
+                                </div>
+                            {/if}
+                        </span>
                     </div>
                     {#if leftPanelTab === '01'}
                     <div class="analysis-fixed-bar">
                         <div class="fixed-block fixed-block-options">
-                            <span class="fixed-block-title">분석 옵션</span>
+                            <span class="fixed-block-title">
+                                <svg class="fixed-block-title-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <circle cx="2.75" cy="5.5" r="2.75" />
+                                    <rect x="8" y="2.75" width="16" height="5.5" rx="2.75" />
+                                    <circle cx="2.75" cy="12" r="2.75" />
+                                    <rect x="8" y="9.25" width="16" height="5.5" rx="2.75" />
+                                    <circle cx="2.75" cy="18.5" r="2.75" />
+                                    <rect x="8" y="15.75" width="16" height="5.5" rx="2.75" />
+                                </svg>
+                                분석 옵션
+                            </span>
                             <div class="analysis-fixed-selects">
                             <label>기후위험 기준기간
                                 <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
@@ -2849,15 +2883,19 @@
                                         <span class="fixed-row-label">현재 선택된 지표</span>
                                         <button type="button" class="clear-all-link" onclick={clearAllIndicators} disabled={!enabledCount}>모두 지우기</button>
                                     </div>
-                                    <div class="hev-pills" aria-label="H E V 선택 지표 수">
-                                        <span class="hev-pill hev-pill-h"><span class="hev-pill-label">H</span><span class="hev-pill-count">{dimensionSelectedCounts.H}</span></span>
-                                        <span class="hev-pill hev-pill-e"><span class="hev-pill-label">E</span><span class="hev-pill-count">{dimensionSelectedCounts.E}</span></span>
-                                        <span class="hev-pill hev-pill-v"><span class="hev-pill-label">V</span><span class="hev-pill-count">{dimensionSelectedCounts.V}</span></span>
+                                    <div class="hev-summary" aria-label="H E V 선택 지표 수">
+                                        <span class="hev-cell hev-cell--h"><span class="hev-label">H</span><span class="hev-badge">{dimensionSelectedCounts.H}</span></span>
+                                        <span class="hev-slash" aria-hidden="true">/</span>
+                                        <span class="hev-cell hev-cell--e"><span class="hev-label">E</span><span class="hev-badge">{dimensionSelectedCounts.E}</span></span>
+                                        <span class="hev-slash" aria-hidden="true">/</span>
+                                        <span class="hev-cell hev-cell--v"><span class="hev-label">V</span><span class="hev-badge">{dimensionSelectedCounts.V}</span></span>
                                     </div>
                                 </div>
-                                <button class="primary run-analysis-button" onclick={runAnalysis} disabled={running}>
-                                    <svg class="run-analysis-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5v15l13-7.5Z" fill="#fff" /></svg>
-                                    {running ? '계산 중...' : 'Risk 분석 실행'}
+                                <button class="cta run-analysis-button" onclick={runAnalysis} disabled={running}>
+                                    <span class="run-analysis-label">{running ? '계산 중...' : 'Risk 분석 실행'}</span>
+                                    <svg class="run-analysis-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M7 17 17 7M17 7H9M17 7v8" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                                    </svg>
                                 </button>
                             </div>
                         </div>
@@ -2900,26 +2938,6 @@
                     </div>
                     {:else}
                     <section class="panel candidates wide-candidates">
-                        <div class="panel-head">
-                            <div>
-                                <span class="section-number">03</span>
-                                <span class="indicator-name-row">
-                                    <h2>실천권역 구성</h2>
-                                    <button
-                                        type="button"
-                                        class="info-toggle"
-                                        class:active={candidatesInfoOpen}
-                                        aria-expanded={candidatesInfoOpen}
-                                        aria-label={`실천권역 구성 설명 ${candidatesInfoOpen ? '닫기' : '보기'}`}
-                                        onclick={() => candidatesInfoOpen = !candidatesInfoOpen}
-                                    >ⓘ</button>
-                                </span>
-                                <div class="indicator-description-wrap" class:open={candidatesInfoOpen}>
-                                    <span>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</span>
-                                </div>
-                            </div>
-                            <span class="count-badge">실천지구 {candidateList.length}개</span>
-                        </div>
                         {#if candidateList.length}
                             <div class="practice-type-note">
                                 <strong>시연용 분류 v1</strong>
@@ -2981,15 +2999,6 @@
 
                 <div class="right-map-column">
                     <div class="panel analysis-map-panel">
-                        <div class="panel-head map-head">
-                            <div><span class="section-number">02</span><h2>분석 지도</h2></div>
-                            <div class="panel-head-actions">
-                                <span class="handoff-request-wrap">
-                                    <button class="add-button handoff-request-button" onclick={openHandoffReview} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
-                                    <span class="handoff-request-tooltip" role="tooltip">{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '실천권역 도출 후 요청 가능'}</span>
-                                </span>
-                            </div>
-                        </div>
                         <div class="map-actions-band">
                                 <div class="database-actions">
                                     <label>
@@ -3004,12 +3013,15 @@
                                     </button>
                                     <span>{supabaseStatus}</span>
                                 </div>
-                                <div class="handoff-actions">
-                                    <div class="handoff-button-row">
-                                        <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 취소</button>
-                                        <button class="secondary-action muted" onclick={resetAllAlternatives}>모든 대안 삭제</button>
-                                    </div>
-                                </div>
+                                <span class="handoff-request-wrap map-actions-handoff">
+                                    <button class="add-button handoff-request-button" onclick={openHandoffReview} disabled={!handoffCandidateCount}>
+                                        <span class="handoff-request-label">주관부서 지원도구로 검토 요청</span>
+                                        <svg class="handoff-request-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="M7 17 17 7M17 7H9M17 7v8" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                                        </svg>
+                                    </button>
+                                    <span class="handoff-request-tooltip" role="tooltip">{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '실천권역 도출 후 요청 가능'}</span>
+                                </span>
                         </div>
                         <div class="map-tabs-row">
                             <div class="alternative-tabs browser-tabs" aria-label="기후적응실천권역 대안">
@@ -3017,6 +3029,9 @@
                                     <div class="browser-tab" class:active={activeAlternative === index}>
                                         <button class="browser-tab-select" onclick={() => switchAlternative(index)}>
                                             <span class="browser-tab-label">
+                                                <svg class="browser-tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.443a1.125 1.125 0 0 0-1.006 0L3.622 5.88C3.24 6.07 3 6.462 3 6.887V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                                                </svg>
                                                 <span class="browser-tab-name">{alternative.name}</span>
                                                 {#if alternative.description}<span class="browser-tab-desc">{alternative.description}</span>{/if}
                                             </span>
