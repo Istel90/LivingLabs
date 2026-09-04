@@ -483,6 +483,23 @@
     $: resultScores = analysisResult?.dimensionScores || { H: null, E: null, V: null };
     $: resultRiskScore = analysisResult?.riskScore ?? null;
 
+    function clearAllIndicators() {
+        if (!enabledCount) return;
+        indicators = indicators.map((item) => ({ ...item, enabled: false }));
+        loadedPreviewIndicators = loadedPreviewIndicators.map((item) => ({ ...item, enabled: false }));
+        markAnalysisDirty();
+    }
+
+    let previousActiveAlternativeIndex = activeAlternative;
+    let alternativeFlash = false;
+    let alternativeFlashTimer;
+    $: if (activeAlternative !== previousActiveAlternativeIndex) {
+        previousActiveAlternativeIndex = activeAlternative;
+        alternativeFlash = true;
+        clearTimeout(alternativeFlashTimer);
+        alternativeFlashTimer = setTimeout(() => { alternativeFlash = false; }, 700);
+    }
+
     function priorityDraftKey(code = regionCode) {
         return `${PRIORITY_DRAFT_SCHEMA_VERSION}:${hazard}:${code || 'unknown'}`;
     }
@@ -2777,50 +2794,72 @@
                     <div class="left-panel-tabs" role="tablist" aria-label="좌측 패널 탭">
                         <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 선택</button>
                         <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => (leftPanelTab = '03')}>03 실천권역 구성</button>
-                        {#if leftPanelTab === '01'}
-                            <button class="add-button left-panel-tabs-action" onclick={openIndicatorDialog}>+ 새 지표</button>
-                        {/if}
                     </div>
                     {#if leftPanelTab === '01'}
                     <div class="analysis-fixed-bar">
-                        <div class="analysis-fixed-selects">
-                        <label>기후위험 기준기간
-                            <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
-                                <option value="observed">최근 5년 · 2021~2025</option>
-                                <option value="future" disabled={hazard !== 'heatwave'}>미래 시나리오 · 2026~2100</option>
-                            </select>
-                        </label>
-                        {#if hazardDatasetMode === 'future'}
-                            <label>SSP 시나리오
-                                <select value={hazardScenario} onchange={(event) => setHazardScenario(event.currentTarget.value)}>
-                                    {#each hazardScenarios as scenario}
-                                        <option value={scenario}>{scenario.toUpperCase()}</option>
+                        <div class="fixed-block fixed-block-options">
+                            <span class="fixed-block-title">분석 옵션</span>
+                            <div class="analysis-fixed-selects">
+                            <label>기후위험 기준기간
+                                <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
+                                    <option value="observed">최근 5년 · 2021~2025</option>
+                                    <option value="future" disabled={hazard !== 'heatwave'}>미래 시나리오 · 2026~2100</option>
+                                </select>
+                            </label>
+                            {#if hazardDatasetMode === 'future'}
+                                <label>SSP 시나리오
+                                    <select value={hazardScenario} onchange={(event) => setHazardScenario(event.currentTarget.value)}>
+                                        {#each hazardScenarios as scenario}
+                                            <option value={scenario}>{scenario.toUpperCase()}</option>
+                                        {/each}
+                                    </select>
+                                </label>
+                                <label>미래 기간
+                                    <select value={hazardFuturePeriod} onchange={(event) => setHazardFuturePeriod(event.currentTarget.value)}>
+                                        {#each hazardFuturePeriods as period}
+                                            <option value={period}>{period}</option>
+                                        {/each}
+                                    </select>
+                                </label>
+                            {/if}
+                            <label>격자 크기
+                                <select value={gridUnit} onchange={(event) => setGridUnit(event.currentTarget.value)}>
+                                    {#each gridOptions as option}
+                                        <option value={option}>{option}</option>
                                     {/each}
                                 </select>
                             </label>
-                            <label>미래 기간
-                                <select value={hazardFuturePeriod} onchange={(event) => setHazardFuturePeriod(event.currentTarget.value)}>
-                                    {#each hazardFuturePeriods as period}
-                                        <option value={period}>{period}</option>
-                                    {/each}
-                                </select>
-                            </label>
-                        {/if}
-                        <label>격자 크기
-                            <select value={gridUnit} onchange={(event) => setGridUnit(event.currentTarget.value)}>
-                                {#each gridOptions as option}
-                                    <option value={option}>{option}</option>
-                                {/each}
-                            </select>
-                        </label>
-                        </div>
-                        <div class="analysis-fixed-summary">
-                            <div class="analysis-dimension-counts" aria-label="H E V 선택 지표 수">
-                                <span class="dim-h">H {dimensionSelectedCounts.H}</span><span class="dim-separator">·</span>
-                                <span class="dim-e">E {dimensionSelectedCounts.E}</span><span class="dim-separator">·</span>
-                                <span class="dim-v">V {dimensionSelectedCounts.V}</span>
                             </div>
-                            <button class="primary run-analysis-button" onclick={runAnalysis} disabled={running}><span aria-hidden="true">▷</span>{running ? '계산 중...' : 'Risk 분석 실행'}</button>
+                        </div>
+
+                        <div class="fixed-block fixed-block-alternative">
+                            <div class="fixed-row-alt">
+                                <span class="fixed-row-alt-name" class:flash={alternativeFlash}>
+                                    <svg class="fixed-row-alt-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.443a1.125 1.125 0 0 0-1.006 0L3.622 5.88C3.24 6.07 3 6.462 3 6.887V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                                    </svg>
+                                    {alternatives[activeAlternative]?.name || '대안'}
+                                </span>
+                                <button class="outline-button" onclick={openIndicatorDialog}>+ 사용자 지표</button>
+                            </div>
+                            <div class="fixed-row-divider"></div>
+                            <div class="analysis-fixed-summary">
+                                <div class="fixed-summary-left">
+                                    <div class="fixed-row-clear">
+                                        <span class="fixed-row-label">현재 선택된 지표</span>
+                                        <button type="button" class="clear-all-link" onclick={clearAllIndicators} disabled={!enabledCount}>모두 지우기</button>
+                                    </div>
+                                    <div class="hev-pills" aria-label="H E V 선택 지표 수">
+                                        <span class="hev-pill hev-pill-h"><span class="hev-pill-label">H</span><span class="hev-pill-count">{dimensionSelectedCounts.H}</span></span>
+                                        <span class="hev-pill hev-pill-e"><span class="hev-pill-label">E</span><span class="hev-pill-count">{dimensionSelectedCounts.E}</span></span>
+                                        <span class="hev-pill hev-pill-v"><span class="hev-pill-label">V</span><span class="hev-pill-count">{dimensionSelectedCounts.V}</span></span>
+                                    </div>
+                                </div>
+                                <button class="primary run-analysis-button" onclick={runAnalysis} disabled={running}>
+                                    <svg class="run-analysis-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5v15l13-7.5Z" fill="#fff" /></svg>
+                                    {running ? '계산 중...' : 'Risk 분석 실행'}
+                                </button>
+                            </div>
                         </div>
                         <span class="sr-only" aria-live="polite" data-analysis-message>{analysisMessage}</span>
                     </div>
