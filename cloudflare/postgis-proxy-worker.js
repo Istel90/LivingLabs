@@ -37,7 +37,7 @@ export default {
       const upstream = await fetch(upstreamUrl, {
         method: request.method,
         headers,
-        redirect: 'error',
+        redirect: 'manual',
         signal: AbortSignal.timeout(55000),
       });
       const responseHeaders = new Headers(upstream.headers);
@@ -52,7 +52,6 @@ export default {
       return Response.json({
         ok: false,
         error: 'PostGIS demo computer is currently unavailable',
-        detail: error instanceof Error ? error.message : String(error),
       }, { status: 503 });
     }
   },
