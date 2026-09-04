@@ -13,8 +13,10 @@
         PRACTICE_DISTRICT_FILL_COLOR
     } from '$lib/data/practiceDistricts.js';
     import {
+        createVWorldDataUrl,
         createVWorldWmsOptions,
         hasVWorldApiKey,
+        VWORLD_DATASETS,
         VWORLD_WMS_LAYERS,
         VWORLD_WMS_URL
     } from '../../../../shared/map/vworld.js';
@@ -986,6 +988,13 @@
         return Array.isArray(payload?.features) ? payload.features : [];
     }
 
+    function extractVWorldGeoJsonFeatures(payload) {
+        return payload?.response?.result?.featureCollection?.features ||
+            payload?.response?.result?.features ||
+            payload?.features ||
+            [];
+    }
+
     function featureId(feature) {
         const properties = feature?.properties || {};
         return properties.pnu || properties.PNU || properties.gid || properties.GID || properties.id || JSON.stringify(featureBounds(feature));
@@ -1104,6 +1113,91 @@
                 } finally {
                     completed += 1;
                     onProgress({ completed, total: boxes.length, failed: failures.length, features: featuresById.size });
+                    await yieldToBrowser();
+                }
+            }
+        }
+
+        await Promise.all(
+            Array.from({ length: Math.min(concurrency, Math.max(1, boxes.length)) }, () => worker())
+        );
+
+        if (!featuresById.size && failures.length) {
+            const timeoutFailure = failures.find((error) => error?.message === 'request-timeout');
+            throw timeoutFailure || failures[0];
+        }
+
+        return {
+            features: [...featuresById.values()],
+            failureCount: failures.length,
+            completedCount: completed,
+            requestedCount: boxes.length
+        };
+    }
+
+    async function fetchVWorldCadastralFeatures(
+        boxes,
+        { timeoutMs = 45000, concurrency = 4, onProgress = () => {} } = {}
+    ) {
+        const featuresById = new Map();
+        const maxFeatures = 5000;
+        const deadline = Date.now() + timeoutMs;
+        const queue = [...boxes];
+        const failures = [];
+        let completed = 0;
+
+        async function fetchBox(box) {
+            if (Date.now() > deadline) throw new Error('request-timeout');
+            const geomFilter = `BOX(${box.minLng},${box.minLat},${box.maxLng},${box.maxLat})`;
+            const url = createVWorldDataUrl(VWORLD_DATASETS.cadastral, {
+                geomFilter,
+                size: 650,
+                page: 1
+            });
+            const controller = new AbortController();
+            const remainingTime = Math.max(3000, Math.min(12000, deadline - Date.now()));
+            const timer = window.setTimeout(() => controller.abort(), remainingTime);
+
+            try {
+                const response = await fetch(url, {
+                    signal: controller.signal,
+                    headers: { Accept: 'application/json' }
+                });
+                if (!response.ok) throw new Error(`VWorld ${response.status}`);
+                const payload = await response.json();
+                if (payload?.response?.status === 'ERROR') {
+                    const code = payload.response.error?.code || 'API_ERROR';
+                    const message = payload.response.error?.text || 'VWorld 데이터 API 오류';
+                    throw new Error(`VWorld ${code}: ${message}`);
+                }
+                return extractVWorldGeoJsonFeatures(payload);
+            } catch (error) {
+                if (error?.name === 'AbortError') throw new Error('request-timeout');
+                throw error;
+            } finally {
+                window.clearTimeout(timer);
+            }
+        }
+
+        async function worker() {
+            while (queue.length && featuresById.size < maxFeatures) {
+                const box = queue.shift();
+                try {
+                    const features = await fetchBox(box);
+                    features.forEach((feature) => {
+                        const id = featureId(feature);
+                        if (id) featuresById.set(id, feature);
+                    });
+                } catch (error) {
+                    failures.push(error);
+                } finally {
+                    completed += 1;
+                    onProgress({
+                        completed,
+                        total: boxes.length,
+                        failed: failures.length,
+                        features: featuresById.size
+                    });
                     await yieldToBrowser();
                 }
             }
@@ -1669,11 +1763,23 @@
 
             const requestBoxes = hotspotRequestBoxes(hotspots);
             parcelCandidateStatus = `PostGIS 연속지적도 요청 중 · ${requestBoxes.length}개 구역`;
-            const fetchResult = await fetchPostgisCadastralFeatures(requestBoxes, {
-                onProgress: ({ completed, total, failed, features }) => {
-                    parcelCandidateStatus = `PostGIS 필지 조회 · ${completed}/${total} 구역 · ${features.toLocaleString()}필지${failed ? ` · ${failed}개 구역 부분 조회` : ''}`;
-                }
-            });
+            let candidateSource = 'postgis';
+            let fetchResult;
+            try {
+                fetchResult = await fetchPostgisCadastralFeatures(requestBoxes, {
+                    onProgress: ({ completed, total, failed, features }) => {
+                        parcelCandidateStatus = `PostGIS 필지 조회 · ${completed}/${total} 구역 · ${features.toLocaleString()}필지${failed ? ` · ${failed}개 구역 부분 조회` : ''}`;
+                    }
+                });
+            } catch (postgisError) {
+                candidateSource = 'vworld';
+                parcelCandidateStatus = `PostGIS 연결 없음 · VWorld 연속지적도 대체 조회 중 · ${requestBoxes.length}개 구역`;
+                fetchResult = await fetchVWorldCadastralFeatures(requestBoxes, {
+                    onProgress: ({ completed, total, failed, features }) => {
+                        parcelCandidateStatus = `VWorld 필지 조회 · ${completed}/${total} 구역 · ${features.toLocaleString()}필지${failed ? ` · ${failed}개 구역 부분 조회` : ''}`;
+                    }
+                });
+            }
             const cadastralFeatures = fetchResult.features;
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             if (!cadastralFeatures.length) throw new Error('parcel-empty');
@@ -1686,7 +1792,14 @@
 
             await yieldToBrowser();
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
-            const candidates = enrichPracticeDistricts(clusterParcelRecords(parcelRecords), hazard);
+            const sourceCandidates = clusterParcelRecords(parcelRecords).map((candidate) => candidateSource === 'vworld'
+                ? {
+                    ...candidate,
+                    basis: 'VWorld LP_PA_CBND_BUBUN + 100m hotspot cell-parcel intersection'
+                }
+                : candidate
+            );
+            const candidates = enrichPracticeDistricts(sourceCandidates, hazard);
             renderParcelCandidateLayer(candidates);
             const slimCandidates = candidates.map(({ features, ...candidate }) => ({
                 ...candidate,
@@ -1706,8 +1819,9 @@
             const partialLabel = fetchResult.failureCount
                 ? ` · ${fetchResult.failureCount}개 구역은 응답 누락으로 부분 분석`
                 : '';
+            const sourceLabel = candidateSource === 'vworld' ? 'VWorld 연속지적도' : 'PostGIS 연속지적도';
             const message = candidates.length
-                ? `실천권역 내 ${candidates.length}개 실천지구 도출 · ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류${partialLabel}`
+                ? `실천권역 내 ${candidates.length}개 실천지구 도출 · ${sourceLabel} ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류${partialLabel}`
                 : '교차된 필지가 있으나 실천지구 기준을 충족하지 못했습니다.';
             parcelCandidateStatus = message;
             onParcelCandidatesChange(slimCandidates, message, runCandidateContextKey);
@@ -1716,16 +1830,16 @@
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             console.error(error);
             const message = error?.message === 'parcel-empty'
-                ? 'PostGIS 연속지적도에서 필지 geometry를 찾지 못했습니다.'
+                ? '연속지적도에서 필지 geometry를 찾지 못했습니다.'
                 : error?.message === 'intersection-empty'
                     ? 'Hotspot과 겹치는 필지를 찾지 못했습니다.'
                     : error?.message === 'hotspot-empty'
                         ? 'Hotspot 격자가 없습니다.'
                         : error?.message === 'request-timeout'
-                            ? 'PostGIS 필지 조회 시간이 초과되었습니다. 범위를 줄이거나 잠시 후 다시 실행하세요.'
-                        : error?.message?.startsWith('PostGIS ')
+                            ? '연속지적도 필지 조회 시간이 초과되었습니다. 범위를 줄이거나 잠시 후 다시 실행하세요.'
+                        : (error?.message?.startsWith('PostGIS ') || error?.message?.startsWith('VWorld '))
                             ? error.message
-                            : '실천권역 도출 실패 · PostGIS 필지 서비스 상태를 확인하세요.';
+                            : '실천권역 도출 실패 · 연속지적도 서비스 상태를 확인하세요.';
             parcelCandidateStatus = message;
             // A transient API failure must not erase a previously completed
             // analysis. Keep the last valid candidates visible and only report
