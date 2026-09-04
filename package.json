@@ -7,6 +7,7 @@
     "build": "vite build",
     "build:all": "npm run build && npm --prefix \"Survey platform for collaboration\" run build && npm --prefix riskmap-core-main run build",
     "build:unified": "node scripts/build-unified-platform.mjs",
+    "build:demo": "node scripts/build-demo-platform.mjs",
     "dev": "vite",
     "dev:portal": "vite",
     "dev:survey": "npm --prefix \"Survey platform for collaboration\" run dev",
@@ -22,6 +23,9 @@
     "postgis:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/status-livinglabs-postgis.ps1",
     "platform:refresh": "npm run build:unified && npm run platform:stop && npm run platform:start",
     "weather:build-lst-catalog": "node scripts/build-gyeonggi-lst-catalog.mjs",
+    "weather:collect-national-heatwave": "node scripts/collect-kma-national-heatwave.mjs",
+    "weather:test-national-heatwave": "node scripts/collect-kma-national-heatwave.mjs --self-test",
+    "weather:export-yearly-lst": ".\\.venv-gee\\Scripts\\python.exe riskmap-core-main\\scripts\\gee\\national-lst-yearly-queue.py",
     "install:all": "npm install && npm --prefix \"Survey platform for collaboration\" install && npm --prefix riskmap-core-main install"
   },
   "engines": {

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import * as h5wasm from 'h5wasm/node';
 import proj4 from 'proj4';
 import pg from 'pg';
+import { buildNationalHazardGrid } from './hazard-grid-service.mjs';
 
 const { Pool } = pg;
 
@@ -1459,7 +1460,14 @@ const server = createServer(async (request, response) => {
 
   if (routePath === '/hazard-grid') {
     try {
-      const payload = await fetchHazardGrid(url.searchParams);
+      let payload;
+      try {
+        payload = await fetchHazardGrid(url.searchParams);
+      } catch (databaseError) {
+        payload = await buildNationalHazardGrid(url.searchParams).catch(() => {
+          throw databaseError;
+        });
+      }
       send(response, 200, JSON.stringify(payload), 'application/json; charset=utf-8', 'public, max-age=300');
     } catch (error) {
       const isInputError = /must be|not available|not loaded/.test(error?.message || '');

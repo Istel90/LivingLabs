@@ -24,7 +24,6 @@ import {
   climateDataLabUrl,
   leadDepartmentToolUrl,
   priorityManagementAreaToolUrl,
-  planningOptimizationLabUrl,
   nationalIndicatorStatusUrl,
   responsibleDepartmentToolUrl,
   surveyPlatformUrl,
@@ -80,14 +79,6 @@ const labs = [
     href: climateDataLabUrl,
     icon: CloudSun,
     accent: 'from-sky-600 to-cyan-500',
-  },
-  {
-    eyebrow: 'PLANNING LAB',
-    title: '계획·최적화 실험실',
-    description: '기후적응 사업 후보지와 예산 조건을 조정하고 공간 배치 및 우선순위 결과를 비교합니다.',
-    href: planningOptimizationLabUrl,
-    icon: BarChart3,
-    accent: 'from-amber-600 to-orange-500',
   },
   {
     eyebrow: 'NATIONAL DATA BUILD',

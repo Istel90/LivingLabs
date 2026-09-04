@@ -114,7 +114,13 @@ const workflowStepNumbers: Record<string, number> = {
 };
 
 function isExternalUrl(href: string) {
-  return /^https?:\/\//.test(href);
+  if (!/^https?:\/\//.test(href)) return false;
+  try {
+    const url = new URL(href);
+    return !['127.0.0.1', 'localhost'].includes(url.hostname);
+  } catch {
+    return true;
+  }
 }
 
 function LinkBadge({ href, children }: { href: string; children: ReactNode }) {
