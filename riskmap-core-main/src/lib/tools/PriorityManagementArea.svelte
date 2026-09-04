@@ -1061,7 +1061,13 @@
                     }
                 };
             } catch (error) {
-                if (nationalLab && item.indicatorCode) {
+                const serverBackedInput = Boolean(
+                    item.indicatorCode ||
+                    item.floodIndicator ||
+                    item.analysisIndicator ||
+                    item.populationIndicator
+                );
+                if ((nationalLab || base) && serverBackedInput) {
                     return {
                         ...item,
                         publicFallbackPending: true,
