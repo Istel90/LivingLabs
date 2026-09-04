@@ -359,6 +359,7 @@
     let analysisResult = null;
     let parcelCandidateMessage = 'Risk 분석 후 지도에서 실천권역도출하기를 실행하세요.';
     let focusedCandidate = null;
+    let selectedRegionMap;
     let mapResetKey = 0;
     let detailCandidateKey = null;
     let handoffMessage = '실천권역을 도출하면 주관부서 지원도구로 전달할 수 있습니다.';
@@ -1782,6 +1783,7 @@
             pnuList: candidate.pnuList || [],
             requestedAt: Date.now()
         };
+        selectedRegionMap?.focusCandidate?.(focusedCandidate);
     }
 
     function compactCandidateForSupabase(candidate) {
@@ -3010,6 +3012,7 @@
                         {/if}
                         <div class="map-result-wrap">
                             <SelectedRegionMap
+                                bind:this={selectedRegionMap}
                                 {regionCode}
                                 regionName={region}
                                 {hazard}

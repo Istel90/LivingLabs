@@ -1310,6 +1310,7 @@
                     candidateRank: candidate.rank,
                     practiceType: candidate.practiceType,
                     practiceTypeLabel: candidate.practiceTypeLabel,
+                    practiceTypeDescription: candidate.practiceTypeDescription,
                     practiceTypeColor: candidate.practiceTypeColor,
                     practiceTypeFillColor: candidate.practiceTypeFillColor,
                     classificationReason: candidate.classificationReason
@@ -1330,12 +1331,25 @@
                     fillOpacity: parcelFeatureStyle(feature).fillOpacity
                 }),
                 onEachFeature: (feature, layer) => {
+                    const properties = feature.properties || {};
+                    const candidateName = escapeTooltipHtml(properties.candidateName || '실천지구');
+                    const practiceTypeLabel = escapeTooltipHtml(properties.practiceTypeLabel || '유형 검토 중');
+                    const practiceTypeDescription = escapeTooltipHtml(properties.practiceTypeDescription || '');
+                    const candidateRisk = Number(properties.candidateRisk);
                     layer.bindTooltip(
-                        `<strong>${feature.properties?.candidateName || '실천권역'}</strong><br>` +
-                        `${feature.properties?.practiceTypeLabel || '유형 검토 중'} · Risk ${feature.properties?.candidateRisk || '--'}<br>` +
-                        `<span>${feature.properties?.classificationReason || ''}</span>`,
-                        { sticky: true }
+                        `<strong>${candidateName}</strong>` +
+                        `<span>${practiceTypeLabel} · Risk ${Number.isFinite(candidateRisk) ? candidateRisk.toFixed(2) : '--'}</span>` +
+                        (practiceTypeDescription ? `<small>${practiceTypeDescription}</small>` : ''),
+                        {
+                            className: 'practice-district-map-tooltip',
+                            direction: 'top',
+                            offset: [0, -8],
+                            opacity: 0.96,
+                            sticky: false,
+                            interactive: false
+                        }
                     );
+                    layer.on('mouseout', () => layer.closeTooltip?.());
                     layer.on('click', () => {
                         const key = feature.properties?.candidateId || feature.properties?.candidateName || '';
                         const candidate = legendCandidates.find((item) =>
@@ -1557,6 +1571,7 @@
 
     function moveMapToCandidateBounds(bounds) {
         if (!map || !bounds?.isValid?.()) return false;
+        map.stop?.();
         map.invalidateSize?.({ pan: false });
         const center = bounds.getCenter?.();
         if (!center) return false;
@@ -1595,13 +1610,13 @@
     }
 
     function focusParcelCandidate(candidate, notify = false) {
-        if (!map || !window.L || !candidate) return;
+        if (!map || !window.L || !candidate) return false;
+        map.closeTooltip?.();
         focusedParcelCandidateKey = parcelCandidateKey(candidate);
         if (notify) onParcelCandidateFocus(candidate);
 
         if (!parcelCandidateLayer) {
-            fitCandidateBounds(candidate);
-            return;
+            return fitCandidateBounds(candidate);
         }
 
         const layers = [];
@@ -1614,20 +1629,28 @@
             layer.setStyle?.(parcelFeatureStyle(layer.feature));
         });
         if (!layers.length) {
-            fitCandidateBounds(candidate);
-            return;
+            return fitCandidateBounds(candidate);
         }
 
         const group = window.L.featureGroup(layers);
         const bounds = group.getBounds();
         if (!bounds.isValid()) {
-            fitCandidateBounds(candidate);
-            return;
+            return fitCandidateBounds(candidate);
         }
 
-        moveMapToCandidateBounds(bounds);
+        const moved = moveMapToCandidateBounds(bounds);
         layers.forEach((layer) => layer.bringToFront?.());
-        layers[0]?.openTooltip?.();
+        return moved;
+    }
+
+    export function focusCandidate(candidate) {
+        if (!candidate) return false;
+        const moved = focusParcelCandidate(candidate);
+        window.requestAnimationFrame(() => {
+            map?.invalidateSize?.({ pan: false });
+            focusParcelCandidate(candidate);
+        });
+        return moved;
     }
 
     async function deriveParcelCandidates() {
@@ -2593,6 +2616,46 @@
 
     .locked-map :global(.leaflet-control-attribution) {
         font-size: .65rem;
+    }
+
+    .region-map :global(.practice-district-map-tooltip) {
+        width: max-content;
+        max-width: min(220px, calc(100vw - 32px));
+        border: 1px solid #d8e2dc;
+        border-radius: .65rem;
+        background: rgb(255 255 255 / 97%);
+        padding: .62rem .72rem;
+        box-shadow: 0 8px 22px rgb(15 23 42 / 18%);
+        color: #253b37;
+        line-height: 1.35;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        pointer-events: none;
+    }
+
+    .region-map :global(.practice-district-map-tooltip strong),
+    .region-map :global(.practice-district-map-tooltip span),
+    .region-map :global(.practice-district-map-tooltip small) {
+        display: block;
+    }
+
+    .region-map :global(.practice-district-map-tooltip strong) {
+        font-size: .76rem;
+        font-weight: 800;
+    }
+
+    .region-map :global(.practice-district-map-tooltip span) {
+        margin-top: .18rem;
+        color: #6d4bc0;
+        font-size: .68rem;
+        font-weight: 800;
+    }
+
+    .region-map :global(.practice-district-map-tooltip small) {
+        margin-top: .28rem;
+        color: #64748b;
+        font-size: .64rem;
+        line-height: 1.4;
     }
 
     .map-control-cluster {
