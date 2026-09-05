@@ -1381,7 +1381,7 @@ button { cursor: pointer; }
 .left-panel-tabs .tab-info-toggle.active { color: #0f766e; }
 .tab-info-popover {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + 5px);
     right: 0;
     z-index: 90;
     width: 250px;
@@ -1395,10 +1395,10 @@ button { cursor: pointer; }
 .tab-info-popover::before {
     content: '';
     position: absolute;
-    top: -5px;
-    right: 12px;
-    width: 10px;
-    height: 10px;
+    top: -4px;
+    right: 10px;
+    width: 11px;
+    height: 11px;
     transform: rotate(45deg);
     border-radius: 2px;
     background: var(--color-brand-dark);
