@@ -343,6 +343,7 @@
     let hazardFuturePeriod = '2050';
     let regionChangeRunId = 0;
     $: projectName = `${region} ${config.projectSuffix}`;
+    $: projectBreadcrumb = [region, config.label, config.projectSuffix.replace(config.label, '').trim()].filter(Boolean);
     let analysisDone = false;
     let running = false;
     let leftPanelTab = '01';
@@ -2722,9 +2723,17 @@
             </div>
         </div>
         <div class="project-meta">
-            <div><span>프로젝트</span><strong>{projectName}</strong></div>
-            <a class="ghost-link" href={portalToolsUrl}>지원도구 페이지로 돌아가기</a>
-            <button class="ghost-button" onclick={downloadConfig}>설정 내보내기</button>
+            <div class="project-breadcrumb" aria-label={`프로젝트 ${projectName}`}>
+                <span class="project-breadcrumb-eyebrow">프로젝트</span>
+                <span class="project-breadcrumb-path">
+                    {#each projectBreadcrumb as part, index}
+                        {#if index > 0}<span class="project-breadcrumb-sep" aria-hidden="true">/</span>{/if}
+                        <span class="project-breadcrumb-part">{part}</span>
+                    {/each}
+                </span>
+            </div>
+            <a class="ghost-link" href={portalToolsUrl}>지원도구 페이지로 돌아가기<svg class="ghost-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5 4 8.5l4 4" /><path d="M4 8.5h9a5.5 5.5 0 0 1 0 11H6" /></svg></a>
+            <button class="ghost-button" onclick={downloadConfig}>설정 내보내기<svg class="ghost-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V7.5L14.5 3Z" /><path d="M14.5 3v3.5a1 1 0 0 0 1 1H19" /><path d="M12 17.5v-7M9.25 13.25 12 10.5l2.75 2.75" /></svg></button>
             <div class="request-manager">
                 <button type="button" class="request-manager-toggle ghost-button" class:open={requestListOpen} aria-expanded={requestListOpen} onclick={() => requestListOpen = !requestListOpen}>보낸 요청 <span class="request-manager-count">{sentRequestCount}</span><span class="request-manager-caret" aria-hidden="true">{requestListOpen ? '▴' : '▾'}</span></button>
                 {#if requestListOpen}
@@ -2740,7 +2749,12 @@
                     </div>
                 {/if}
             </div>
-            <div class="avatar">관리</div>
+            <div class="avatar" role="img" aria-label="관리">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.7 7.7 0 0 1 0 .255c-.008.379.137.75.43.991l1.004.828c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.5 6.5 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.5 6.5 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.241.437-.613.43-.992a6.9 6.9 0 0 1 0-.255c.007-.379-.138-.75-.43-.991l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281Z"></path>
+                    <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"></path>
+                </svg>
+            </div>
         </div>
     </header>
 
@@ -2792,10 +2806,10 @@
             <section class="workspace-split">
                 <div class="left-panel">
                     <div class="left-panel-tabs" role="tablist" aria-label="좌측 패널 탭">
-                        <span class="left-panel-tab-item">
+                        <span class="left-panel-tab-item" class:active={leftPanelTab === '01'}>
                             <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 선택</button>
                         </span>
-                        <span class="left-panel-tab-item">
+                        <span class="left-panel-tab-item" class:active={leftPanelTab === '03'}>
                             <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => (leftPanelTab = '03')}>
                                 03 실천권역 구성
                                 {#if candidateList.length}<span class="tab-count">{candidateList.length}</span>{/if}

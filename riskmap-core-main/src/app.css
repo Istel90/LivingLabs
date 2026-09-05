@@ -11,7 +11,9 @@ button { cursor: pointer; }
 .brand { gap: 12px; }.brand-mark { width: 38px; height: 38px; border: 1px solid #97b6a9; color: #c8e2ce; display: grid; place-items: center; border-radius: 5px; font-weight: 800; letter-spacing: -1px; }
 .brand > div, .project-meta > div { flex-direction: column; align-items: flex-start; }.brand strong { font-size: 15px; letter-spacing: .04em; }.brand span, .project-meta span { font-size: 10px; color: #9fb6b2; margin-top: 3px; }
 .project-meta { gap: 18px; }.project-meta strong { font-size: 12px; }.avatar { width: 35px; height: 35px; border-radius: 50%; background: #dce9dc; color: #173a35; display: grid!important; place-items: center; font-size: 11px; font-weight: 700; }
-.ghost-button, .ghost-link { border: 1px solid #55716d; background: transparent; color: white; padding: 9px 12px; border-radius: 5px; font-size: 11px; font-weight: 700; text-decoration: none; }
+.avatar svg { width: 18px; height: 18px; align-self: center; justify-self: center; display: block; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ghost-button, .ghost-link { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #55716d; background: transparent; color: white; padding: 9px 12px; border-radius: 5px; font-size: 11px; font-weight: 700; text-decoration: none; }
+.ghost-icon { flex: 0 0 auto; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .ghost-link { display: inline-flex; align-items: center; min-height: 34px; }
 .ghost-button:hover, .ghost-link:hover { background: rgb(255 255 255 / 10%); }
 .workspace { display: grid; grid-template-columns: 230px 1fr; }
@@ -1238,10 +1240,49 @@ button { cursor: pointer; }
 }
 .project-meta > div:first-child span { margin: 0; font-size: 8px; letter-spacing: .08em; }
 .project-meta > div:first-child strong { margin-top: 2px; font-size: 11px; }
+.project-meta > .project-breadcrumb {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    max-width: 26rem;
+    padding: 10px 16px;
+    overflow: hidden;
+}
+.project-meta .project-breadcrumb .project-breadcrumb-eyebrow {
+    margin: 0;
+    color: rgb(159 182 178 / 72%);
+    font-size: 8px;
+    font-weight: 500;
+    letter-spacing: .08em;
+    white-space: nowrap;
+}
+.project-meta .project-breadcrumb .project-breadcrumb-path {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0;
+    min-width: 0;
+}
+.project-meta .project-breadcrumb .project-breadcrumb-part {
+    margin: 0;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: normal;
+    white-space: nowrap;
+}
+.project-meta .project-breadcrumb .project-breadcrumb-sep {
+    margin: 0;
+    color: rgb(255 255 255 / 30%);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: normal;
+}
 .workspace-split {
-    /* height of .left-panel-tabs (41px) + its margin-bottom (12px);
-       offsets the right column so both panels' first row starts on the same line */
-    --left-tabs-offset: 53px;
+    /* height of .left-panel-tabs; offsets the right column so both panels'
+       first row starts on the same line */
+    --left-tabs-offset: 39px;
     display: grid;
     grid-template-columns: 420px minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
@@ -1263,9 +1304,8 @@ button { cursor: pointer; }
 .left-panel-tabs {
     display: flex;
     flex: 0 0 auto;
-    gap: 4px;
-    border-bottom: 1px solid #d7ded8;
-    margin-bottom: 12px;
+    align-items: flex-end;
+    gap: 3px;
 }
 .left-panel-tab-item {
     position: relative;
@@ -1274,19 +1314,32 @@ button { cursor: pointer; }
     align-items: center;
     justify-content: center;
     gap: 2px;
+    border: 1px solid #d7ded8;
+    border-bottom: 0;
+    border-radius: 10px 10px 0 0;
+    background: #eaeeea;
+    padding: 0 8px 0 4px;
+    transition: background .16s ease;
+}
+.left-panel-tab-item.active {
+    z-index: 2;
+    margin-bottom: -1px;
+    border-color: #dce3dc;
+    background: #f7fbf7;
+    padding-bottom: 1px;
 }
 .left-panel-tabs button {
     flex: 1 1 auto;
     border: 0;
-    border-bottom: 2px solid transparent;
     background: transparent;
     color: #6b7d77;
     padding: 10px 6px;
     font-size: 12px;
     font-weight: 800;
     white-space: nowrap;
+    cursor: pointer;
 }
-.left-panel-tabs button.active { border-bottom-color: #0f766e; color: #173a37; }
+.left-panel-tabs button.active { color: #173a37; }
 .left-panel-tabs .tab-count {
     display: inline-grid;
     place-items: center;
