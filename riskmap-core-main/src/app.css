@@ -51,12 +51,18 @@ button { cursor: pointer; }
     padding: 0 5px;
     font-size: 9px;
 }
+.request-manager .request-manager-toggle:hover {
+    background: #d7f5e9;
+    color: #0f4f46;
+}
 .request-manager-toggle .request-manager-caret {
     display: inline-block;
+    width: 10px;
     margin: 0;
     color: inherit;
     font-size: 9px;
     line-height: 1;
+    text-align: center;
 }
 .request-manager-panel {
     position: absolute;
