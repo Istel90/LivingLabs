@@ -2420,9 +2420,6 @@
                 {:else if !enabledAnalysisIndicators().length}
                     <p>선택된 분석 지표가 없습니다.</p>
                 {/if}
-                {#if enabledAnalysisIndicators().length && !enabledAnalysisIndicators().some((item) => item.geojson) && !riskGrid?.values?.length}
-                    <p>선택한 지표는 아직 지도에 표시할 공간 데이터가 없습니다.</p>
-                {/if}
             </div>
             {#if riskGrid?.stats}
                 <div class="parcel-candidate-panel" aria-label="실천권역 도출 패널">
@@ -2789,7 +2786,7 @@
         z-index: 640;
         display: grid;
         gap: .6rem;
-        width: min(16.5rem, calc(100% - 2rem));
+        width: min(14.5rem, calc(100% - 2rem));
         max-height: calc(100% - 1.7rem);
         pointer-events: none;
     }
@@ -2835,26 +2832,40 @@
     .legend-info-toggle.active { color: #0f766e; }
 
     .legend-info-popover {
-        margin-top: .45rem;
-        border-radius: .6rem;
-        background: #102f2d;
+        position: relative;
+        margin-top: 8px;
+        border-radius: 10px;
+        background: var(--color-brand-dark);
         color: #fff;
-        padding: .5rem .6rem .6rem;
+        padding: 10px 12px 12px;
+        box-shadow: 0 18px 36px rgb(15 23 42 / 22%);
+    }
+
+    .legend-info-popover::before {
+        content: '';
+        position: absolute;
+        top: -4px;
+        left: 70px;
+        width: 11px;
+        height: 11px;
+        transform: rotate(45deg);
+        border-radius: 2px;
+        background: var(--color-brand-dark);
     }
 
     .legend-info-popover-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: .5rem;
-        margin-bottom: .35rem;
+        gap: 8px;
+        margin-bottom: 8px;
     }
 
     .legend-info-chip {
         border-radius: 999px;
         background: rgb(255 255 255 / 18%);
-        padding: .12rem .45rem;
-        font-size: .58rem;
+        padding: 3px 9px;
+        font-size: 10px;
         font-weight: 800;
     }
 
@@ -2863,22 +2874,25 @@
         border: 0;
         background: transparent;
         color: rgb(255 255 255 / 78%);
-        padding: 0 .1rem;
-        font-size: .85rem;
+        padding: 0 2px;
+        font-size: 15px;
+        font-weight: 600;
         line-height: 1;
         cursor: pointer;
     }
 
     .legend-info-popover .legend-info-close:hover { color: #fff; }
 
-    .legend-info-popover p {
-        margin: 0 0 .3rem;
-        font-size: .62rem;
-        font-weight: 700;
-        line-height: 1.45;
+    /* .analysis-legend p 가 색·크기를 덮어써서 특이도를 올려 둔다 */
+    .analysis-legend .legend-info-popover p {
+        margin: 0 0 6px;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.5;
     }
 
-    .legend-info-popover p:last-child { margin-bottom: 0; }
+    .analysis-legend .legend-info-popover p:last-child { margin-bottom: 0; }
 
     .risk-surface-summary {
         display: grid;
@@ -2926,18 +2940,19 @@
     .analysis-grid-tabs {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: .28rem;
         margin-top: .5rem;
     }
 
     .analysis-grid-tabs button {
-        flex: 1 1 auto;
+        flex: 0 1 auto;
         min-width: 0;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .45rem;
         background: #f8fafc;
         color: #475569;
-        padding: .34rem .18rem;
+        padding: .34rem .5rem;
         font-size: .62rem;
         font-weight: 900;
         cursor: pointer;

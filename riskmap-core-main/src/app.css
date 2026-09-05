@@ -1250,9 +1250,9 @@ button { cursor: pointer; }
 
 /* Selective UI integration from 78d2058: preserve the current analysis/data implementation. */
 :root {
-    --color-hazard: #c0553b;
-    --color-exposure: #d99a2b;
-    --color-vulnerability: #7b5ea7;
+    --color-hazard: #d17aa8;
+    --color-exposure: #3aa88a;
+    --color-vulnerability: #e07b3c;
     --color-brand-dark: #102f2d;
 }
 .workspace { display: block; }
@@ -1378,23 +1378,17 @@ button { cursor: pointer; }
     border: 0;
     background: transparent;
     color: #6b7d77;
-    padding: 13px 6px 15px;
+    padding: 14px 6px;
     font-size: 12px;
     font-weight: 800;
     white-space: nowrap;
     cursor: pointer;
 }
 .left-panel-tabs button.active { color: #173a37; }
-.left-panel-tabs button[role="tab"].active::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    bottom: 6px;
-    width: 28px;
-    height: 3px;
-    transform: translateX(-50%);
-    border-radius: 999px;
-    background: #173a37;
+.left-panel-tabs button[role="tab"].active {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 5px;
 }
 .left-panel-tabs .tab-count {
     display: inline-grid;
@@ -1621,7 +1615,7 @@ button { cursor: pointer; }
     border-radius: 10px;
 }
 .hev-cell { display: flex; align-items: center; justify-content: center; gap: 6px; }
-.hev-label { font-size: 15px; font-weight: 500; white-space: nowrap; }
+.hev-label { font-size: 15px; font-weight: 700; white-space: nowrap; }
 .hev-slash { color: #C9C6C0; font-size: 13px; font-weight: 300; padding: 0 2px; }
 .hev-cell--h .hev-label { color: var(--color-hazard); }
 .hev-cell--e .hev-label { color: var(--color-exposure); }
