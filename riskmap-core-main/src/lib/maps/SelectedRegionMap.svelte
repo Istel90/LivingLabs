@@ -2943,18 +2943,18 @@
         flex: 0 0 auto;
         width: 1.7rem;
         height: 1.7rem;
-        border: 2px solid var(--dim-tab-color);
+        border: 1px solid var(--dim-tab-color);
         border-radius: 999px;
-        background: transparent;
-        color: var(--dim-tab-color);
+        background: #f8fafc;
+        color: #475569;
         padding: 0;
-        font-size: .7rem;
     }
 
     .analysis-grid-tabs button.dim-tab.active {
+        border-color: var(--dim-tab-color);
         background: var(--dim-tab-color);
         color: #fff;
-        box-shadow: 0 6px 14px rgb(15 23 42 / 18%);
+        box-shadow: 0 8px 18px rgb(15 23 42 / 18%);
     }
 
     .analysis-grid-tabs button.active {
@@ -3114,9 +3114,9 @@
         gap: .45rem;
         align-items: center;
         min-width: 0;
-        color: #334155;
-        font-size: .72rem;
-        font-weight: 800;
+        color: #475569;
+        font-size: .66rem;
+        font-weight: 700;
         cursor: pointer;
     }
 
@@ -3142,7 +3142,7 @@
 
     .legend-items label.dimmed b {
         color: #94a3b8;
-        font-weight: 700;
+        font-weight: 600;
     }
 
     .legend-items label.dimmed small {
