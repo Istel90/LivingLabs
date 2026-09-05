@@ -2421,7 +2421,7 @@
                     <p>선택된 분석 지표가 없습니다.</p>
                 {/if}
                 {#if enabledAnalysisIndicators().length && !enabledAnalysisIndicators().some((item) => item.geojson) && !riskGrid?.values?.length}
-                    <p>실제 공간 결과 레이어는 아직 연결 전입니다.</p>
+                    <p>선택한 지표는 아직 지도에 표시할 공간 데이터가 없습니다.</p>
                 {/if}
             </div>
             {#if riskGrid?.stats}
