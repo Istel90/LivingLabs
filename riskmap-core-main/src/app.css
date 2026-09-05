@@ -1280,9 +1280,6 @@ button { cursor: pointer; }
     letter-spacing: normal;
 }
 .workspace-split {
-    /* height of .left-panel-tabs; offsets the right column so both panels'
-       first row starts on the same line */
-    --left-tabs-offset: 39px;
     display: grid;
     grid-template-columns: 420px minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
@@ -1305,7 +1302,7 @@ button { cursor: pointer; }
     display: flex;
     flex: 0 0 auto;
     align-items: flex-end;
-    gap: 3px;
+    gap: 4px;
 }
 .left-panel-tab-item {
     position: relative;
@@ -1314,32 +1311,46 @@ button { cursor: pointer; }
     align-items: center;
     justify-content: center;
     gap: 2px;
+    margin-top: 6px;
     border: 1px solid #d7ded8;
     border-bottom: 0;
-    border-radius: 10px 10px 0 0;
+    border-radius: 14px 14px 0 0;
     background: #eaeeea;
     padding: 0 8px 0 4px;
-    transition: background .16s ease;
+    transition: background .16s ease, margin-top .16s ease;
 }
 .left-panel-tab-item.active {
     z-index: 2;
+    margin-top: 0;
     margin-bottom: -1px;
     border-color: #dce3dc;
     background: #f7fbf7;
     padding-bottom: 1px;
 }
 .left-panel-tabs button {
+    position: relative;
     flex: 1 1 auto;
     border: 0;
     background: transparent;
     color: #6b7d77;
-    padding: 10px 6px;
+    padding: 13px 6px 15px;
     font-size: 12px;
     font-weight: 800;
     white-space: nowrap;
     cursor: pointer;
 }
 .left-panel-tabs button.active { color: #173a37; }
+.left-panel-tabs button[role="tab"].active::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 6px;
+    width: 28px;
+    height: 3px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: #173a37;
+}
 .left-panel-tabs .tab-count {
     display: inline-grid;
     place-items: center;
@@ -1430,11 +1441,11 @@ button { cursor: pointer; }
     display: flex;
     flex: 0 0 auto;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     border: 1px solid #dce3dc;
     border-bottom: 0;
     background: #f7fbf7;
-    padding: 6px 12px;
+    padding: 4px 12px 6px;
 }
 .fixed-block-options {
     padding: 0;
@@ -1443,7 +1454,7 @@ button { cursor: pointer; }
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
     color: #71837c;
     font-size: 12px;
     font-weight: 600;
@@ -1458,7 +1469,7 @@ button { cursor: pointer; }
 }
 .analysis-fixed-selects { display: flex; flex-wrap: wrap; gap: 8px; }
 .analysis-fixed-selects label { flex: 1 1 120px; min-width: 0; color: #71837c; font-size: 8px; font-weight: 800; }
-.analysis-fixed-selects select { display: block; width: 100%; margin-top: 3px; border: 1px solid #cad4cc; border-radius: 4px; background: #fff; color: #244a45; padding: 6px 8px; font-size: 10px; font-weight: 900; }
+.analysis-fixed-selects select { display: block; width: 100%; margin-top: 1px; border: 1px solid #cad4cc; border-radius: 4px; background: #fff; color: #244a45; padding: 4px 8px; font-size: 10px; font-weight: 900; }
 .fixed-block-alternative {
     display: flex;
     flex-direction: column;
@@ -1610,7 +1621,7 @@ button { cursor: pointer; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 .left-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .left-panel-body .indicator-panel { height: auto; max-height: none; overflow: visible; }
-.right-map-column { min-width: 0; min-height: 0; height: 100%; padding-top: var(--left-tabs-offset, 0); overflow: hidden; }
+.right-map-column { min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
 .analysis-map-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .analysis-map-panel .panel-head { flex: 0 0 auto; min-height: 56px; padding: 10px 16px; }
 .analysis-map-panel .panel-head > div:first-child { padding-left: 35px; }
