@@ -2326,7 +2326,7 @@
 </svelte:head>
 
 <div class={`region-map-wrap${exportBusy ? ' map-exporting' : ''}`}>
-    <div class:locked-map={locked} class="region-map" bind:this={mapElement} style={`height:${height}`}></div>
+    <div class:locked-map={locked} class:tabbed-map={showAnalysisLegend} class="region-map" bind:this={mapElement} style={`height:${height}`}></div>
     {#if mapLoading}
         <div class="map-refresh-loading" role="status" aria-live="polite" data-map-export-ignore>
             <span></span>
@@ -2539,6 +2539,12 @@
         border-radius: 1rem;
         background: #e8f3f5;
     }
+
+    /* 대안 탭이 위에 얹히는 배치에서는 탭의 오목 곡선과 같은 반경으로 맞춘다 */
+    .region-map.tabbed-map {
+        border-radius: 9px;
+    }
+
 
     .map-export-canvas-snapshot {
         position: absolute;

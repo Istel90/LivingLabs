@@ -2814,23 +2814,25 @@
                                 03 실천권역 구성
                                 {#if candidateList.length}<span class="tab-count">{candidateList.length}</span>{/if}
                             </button>
-                            <button
-                                type="button"
-                                class="tab-info-toggle"
-                                class:active={candidatesInfoOpen}
-                                aria-expanded={candidatesInfoOpen}
-                                aria-label={`실천권역 구성 설명 ${candidatesInfoOpen ? '닫기' : '보기'}`}
-                                onclick={() => candidatesInfoOpen = !candidatesInfoOpen}
-                            >ⓘ</button>
-                            {#if candidatesInfoOpen}
-                                <div class="tab-info-popover" role="dialog" aria-label="실천권역 구성 설명">
-                                    <div class="tab-info-popover-head">
-                                        <span class="tab-info-chip">안내</span>
-                                        <button type="button" class="tab-info-close" aria-label="설명 닫기" onclick={() => candidatesInfoOpen = false}>×</button>
+                            <span class="tab-info">
+                                <button
+                                    type="button"
+                                    class="tab-info-toggle"
+                                    class:active={candidatesInfoOpen}
+                                    aria-expanded={candidatesInfoOpen}
+                                    aria-label={`실천권역 구성 설명 ${candidatesInfoOpen ? '닫기' : '보기'}`}
+                                    onclick={() => candidatesInfoOpen = !candidatesInfoOpen}
+                                >ⓘ</button>
+                                {#if candidatesInfoOpen}
+                                    <div class="tab-info-popover" role="dialog" aria-label="실천권역 구성 설명">
+                                        <div class="tab-info-popover-head">
+                                            <span class="tab-info-chip">안내</span>
+                                            <button type="button" class="tab-info-close" aria-label="설명 닫기" onclick={() => candidatesInfoOpen = false}>×</button>
+                                        </div>
+                                        <p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p>
                                     </div>
-                                    <p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p>
-                                </div>
-                            {/if}
+                                {/if}
+                            </span>
                         </span>
                     </div>
                     {#if leftPanelTab === '01'}
@@ -2838,12 +2840,8 @@
                         <div class="fixed-block fixed-block-options">
                             <span class="fixed-block-title">
                                 <svg class="fixed-block-title-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <circle cx="2.75" cy="5.5" r="2.75" />
-                                    <rect x="8" y="2.75" width="16" height="5.5" rx="2.75" />
-                                    <circle cx="2.75" cy="12" r="2.75" />
-                                    <rect x="8" y="9.25" width="16" height="5.5" rx="2.75" />
-                                    <circle cx="2.75" cy="18.5" r="2.75" />
-                                    <rect x="8" y="15.75" width="16" height="5.5" rx="2.75" />
+                                    <path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6.5" />
+                                    <path d="m8.4 11.8 3.3 3.4L19.6 6.6" />
                                 </svg>
                                 분석 옵션
                             </span>

@@ -712,12 +712,17 @@ button { cursor: pointer; }
     gap: 2px;
     width: 100%;
     max-width: 100%;
+    /* 첫/마지막 탭의 오목 곡선이 스크롤 컨테이너에 잘리지 않도록 좌우 여유를 둔다 */
+    padding: 0 9px;
     border-bottom: 1px solid #d7ded8;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
+    scrollbar-width: none;
 }
+.alternative-tabs::-webkit-scrollbar { display: none; }
 .browser-tab {
+    position: relative;
     display: flex;
     flex: 0 0 auto;
     align-items: stretch;
@@ -725,9 +730,8 @@ button { cursor: pointer; }
     margin-bottom: -1px;
     border: 1px solid #d7ded8;
     border-bottom: 1px solid transparent;
-    border-radius: 7px 7px 0 0;
+    border-radius: 9px 9px 0 0;
     background: #eef1ee;
-    overflow: hidden;
 }
 .browser-tab-select {
     display: flex;
@@ -770,9 +774,27 @@ button { cursor: pointer; }
     white-space: nowrap;
 }
 .browser-tab.active {
+    z-index: 2;
     border-color: #d7ded8;
     border-bottom-color: #fff;
     background: #fff;
+}
+.browser-tab.active::before,
+.browser-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    width: 9px;
+    height: 9px;
+    pointer-events: none;
+}
+.browser-tab.active::before {
+    left: -9px;
+    background: radial-gradient(circle at 0 0, transparent 8px, #d7ded8 8px, #d7ded8 9px, #fff 9px);
+}
+.browser-tab.active::after {
+    right: -9px;
+    background: radial-gradient(circle at 100% 0, transparent 8px, #d7ded8 8px, #d7ded8 9px, #fff 9px);
 }
 .browser-tab.active .browser-tab-select { color: #173a37; }
 .browser-tab.active .browser-tab-select small { color: #6f8a83; }
@@ -1322,7 +1344,7 @@ button { cursor: pointer; }
     border-bottom: 0;
     border-radius: 14px 14px 0 0;
     background: #eaeeea;
-    padding: 0 8px 0 4px;
+    padding: 0 6px;
     transition: background .16s ease, margin-top .16s ease;
 }
 .left-panel-tab-item.active {
@@ -1333,9 +1355,26 @@ button { cursor: pointer; }
     background: #f7fbf7;
     padding-bottom: 1px;
 }
+.left-panel-tab-item.active::before,
+.left-panel-tab-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    width: 9px;
+    height: 9px;
+    pointer-events: none;
+}
+.left-panel-tab-item.active::before {
+    left: -9px;
+    background: radial-gradient(circle at 0 0, transparent 8px, #dce3dc 8px, #dce3dc 9px, #f7fbf7 9px);
+}
+.left-panel-tab-item.active::after {
+    right: -9px;
+    background: radial-gradient(circle at 100% 0, transparent 8px, #dce3dc 8px, #dce3dc 9px, #f7fbf7 9px);
+}
 .left-panel-tabs button {
     position: relative;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     border: 0;
     background: transparent;
     color: #6b7d77;
@@ -1385,10 +1424,15 @@ button { cursor: pointer; }
 }
 .left-panel-tabs .tab-info-toggle:hover,
 .left-panel-tabs .tab-info-toggle.active { color: #0f766e; }
+.tab-info {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+}
 .tab-info-popover {
     position: absolute;
     top: calc(100% + 5px);
-    right: 0;
+    right: -12px;
     z-index: 90;
     width: 250px;
     border-radius: 10px;
@@ -1402,7 +1446,7 @@ button { cursor: pointer; }
     content: '';
     position: absolute;
     top: -4px;
-    right: 10px;
+    right: 14px;
     width: 11px;
     height: 11px;
     transform: rotate(45deg);
@@ -1470,8 +1514,11 @@ button { cursor: pointer; }
     width: 16px;
     height: 16px;
     color: #0f766e;
-    fill: currentColor;
-    stroke: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 .analysis-fixed-selects { display: flex; flex-wrap: wrap; gap: 8px; }
 .analysis-fixed-selects label { flex: 1 1 120px; min-width: 0; color: #71837c; font-size: 8px; font-weight: 800; }
@@ -1684,8 +1731,7 @@ button { cursor: pointer; }
 }
 .handoff-request-wrap:hover .handoff-request-tooltip, .handoff-request-wrap:focus-within .handoff-request-tooltip { opacity: 1; }
 .map-actions-band { display: flex; flex: 0 0 auto; align-items: center; flex-wrap: wrap; justify-content: flex-start; gap: 8px 24px; border-bottom: 1px solid #e4e9e4; background: #f7fbf7; padding: 10px 16px 9px; }
-.map-tabs-row { position: relative; z-index: 30; flex: 0 0 auto; width: 100%; padding: 6px 16px 0; }
-.map-tabs-row .alternative-tabs { padding: 0; }
+.map-tabs-row { position: relative; z-index: 30; flex: 0 0 auto; width: 100%; padding: 6px 7px 0; }
 .alternative-description { display: block; max-width: 220px; overflow: hidden; color: #71817d; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .map-result-wrap { position: relative; flex: 1 1 auto; min-height: 0; }
 .map-result-wrap .region-map-wrap, .map-result-wrap .region-map { height: 100%; min-height: 0; }
