@@ -1854,6 +1854,51 @@ button { cursor: pointer; }
 .handoff-review-note textarea { width: 100%; box-sizing: border-box; resize: vertical; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; color: #173d38; font: inherit; font-size: 11px; }
 .handoff-review-note-text { margin: 0; color: #718078; font-size: 10px; line-height: 1.5; }
 .handoff-review-modal > footer { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid #e2e8f0; padding: 14px 20px 18px; }
+/* ── 좌측 패널 활자 위계 ───────────────────────────────────────────────
+   여섯 단계로 정리한다. 크기는 10px 아래로 내려가지 않고, 굵기는
+   400/600/700만 쓴다. 그보다 작은 차이는 크기·굵기 대신 색으로 준다.
+
+     15/700  대안 이름
+     13/600  섹션 제목 · 행 라벨 · CTA
+     12/700  탭
+     12/600  지표 이름
+     11/700  그룹 헤더 · 필드 라벨 · 입력값
+     10/400  설명 · 보조 문구
+   ------------------------------------------------------------------ */
+
+/* 15/700 — 패널에서 가장 큰 한 줄 */
+.fixed-row-alt-name { font-size: 15px; font-weight: 700; }
+
+/* 13/600 — 섹션 제목과 행 라벨 */
+.fixed-block-title,
+.fixed-row-label,
+.outline-button { font-size: 13px; font-weight: 600; }
+
+/* 12/700 — 탭. 800~1000은 이 크기에서 뭉개져 보여 700으로 낮춘다 */
+.left-panel-tabs button { font-size: 12px; font-weight: 700; }
+.project-meta .project-breadcrumb .project-breadcrumb-part { font-weight: 700; }
+.request-manager .request-manager-toggle,
+.request-manager .request-manager-count,
+.request-manager .request-manager-caret { font-weight: 700; }
+
+/* 12/600 — 목록의 주인공. 그룹 헤더보다 커야 한다 */
+.indicator-copy strong { font-size: 12px; font-weight: 600; letter-spacing: normal; }
+
+/* 11/700 — 라벨과 값 */
+.group-label { font-size: 11px; font-weight: 700; letter-spacing: .02em; }
+.group-count { font-weight: 600; }
+.dimension-tag { font-size: 11px; font-weight: 700; }
+.analysis-fixed-selects label { font-size: 11px; font-weight: 700; }
+.analysis-fixed-selects select { font-size: 11px; font-weight: 600; }
+.weight-stepper-value { font-size: 11px; font-weight: 700; }
+
+/* 10/400 — 설명과 보조. 8px·7px은 본문으로 읽히지 않아 바닥을 10px로 올린다 */
+.indicator-copy span { font-size: 10px; }
+.group-collapsed-summary { font-size: 10px; }
+.alternative-description { font-size: 10px; }
+.weight { font-size: 10px; }
+.clear-all-link { font-size: 11px; }
+
 @media(max-width:1400px) {
     .workspace-split { grid-template-columns: 420px minmax(0, 1fr); }
     .lab-analysis-runner { grid-template-columns: minmax(240px, 1fr) auto; }
