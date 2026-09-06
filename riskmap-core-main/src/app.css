@@ -1256,7 +1256,7 @@ button { cursor: pointer; }
     --color-brand-dark: #102f2d;
 }
 .workspace { display: block; }
-.main { max-width: 100%; padding: 30px 8px 12px; }
+.main { max-width: 100%; padding: 14px 8px 12px; }
 .hero { display: flex; align-items: flex-end; min-height: 0; padding-bottom: 0; border-bottom: 0; }
 .hero:has(.hero-actions:empty) { display: none; }
 .hero-actions { display: flex; flex-wrap: wrap; width: 100%; padding-bottom: 10px; border-bottom: 1px solid #cfd8d0; }
@@ -1313,10 +1313,10 @@ button { cursor: pointer; }
     grid-template-rows: minmax(0, 1fr);
     align-items: stretch;
     gap: 16px;
-    height: calc(100vh - 163px);
+    height: calc(100vh - 147px);
     min-height: 620px;
 }
-.app-shell:has(.hero-actions:empty) .workspace-split { height: calc(100vh - 116px); }
+.app-shell:has(.hero-actions:empty) .workspace-split { height: calc(100vh - 100px); }
 .left-panel {
     display: flex;
     flex-direction: column;
@@ -1609,14 +1609,14 @@ button { cursor: pointer; }
     width: 100%;
     align-items: center;
     height: 32px;
-    padding: 0 8px;
+    padding: 0 6px;
     background: #FAF9F5;
     border: 1px solid #E5E3DE;
     border-radius: 10px;
 }
-.hev-cell { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.hev-cell { display: flex; align-items: center; justify-content: center; gap: 4px; }
 .hev-label { font-size: 15px; font-weight: 700; white-space: nowrap; }
-.hev-slash { color: #C9C6C0; font-size: 13px; font-weight: 300; padding: 0 2px; }
+.hev-slash { color: #C9C6C0; font-size: 13px; font-weight: 300; padding: 0; }
 .hev-cell--h .hev-label { color: var(--color-hazard); }
 .hev-cell--e .hev-label { color: var(--color-exposure); }
 .hev-cell--v .hev-label { color: var(--color-vulnerability); }
@@ -1636,8 +1636,9 @@ button { cursor: pointer; }
 .hev-cell--v .hev-badge { background: var(--color-vulnerability); }
 .run-analysis-button.cta {
     display: inline-flex;
-    flex: 0 0 148px;
-    width: 148px;
+    /* 안쪽 알약의 글자 양옆 여백을 검토 요청 버튼과 같게 맞춘 폭 */
+    flex: 0 0 167px;
+    width: 167px;
     align-items: center;
     justify-content: space-between;
     margin-top: 4px;
