@@ -28,8 +28,8 @@
             maxZoom: 19
         },
         grayscale: {
-            url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            attribution: '&copy; OpenStreetMap contributors',
             maxZoom: 19
         }
     };
@@ -2244,20 +2244,22 @@
 
     function createBaseLayer(L, style) {
         const config = BASE_TILE_STYLES[style] || BASE_TILE_STYLES.default;
-        return L.tileLayer(config.url, {
+        const layer = L.tileLayer(config.url, {
             attribution: config.attribution,
             crossOrigin: true,
             maxZoom: config.maxZoom
         });
+        layer.on('add', () => {
+            layer.getContainer()?.classList.toggle('grayscale-basemap', baseMapStyle === 'grayscale');
+        });
+        return layer;
     }
 
     function setBaseMapStyle(style) {
         if (style === baseMapStyle || !BASE_TILE_STYLES[style]) return;
         baseMapStyle = style;
         if (!map || !window.L) return;
-        const nextLayer = createBaseLayer(window.L, style).addTo(map);
-        if (baseLayer) baseLayer.remove();
-        baseLayer = nextLayer;
+        baseLayer?.getContainer()?.classList.toggle('grayscale-basemap', style === 'grayscale');
     }
 
     function initializeMap(L) {
@@ -2562,31 +2564,6 @@
                         </button>
                         <span>{parcelCandidateStatus}</span>
                     </div>
-                    {#if parcelCandidateLegend.length}
-                        <section class="parcel-candidate-legend" aria-label="실천권역 내 유형별 실천지구 범례">
-                            <h3>실천권역 내 유형별 실천지구</h3>
-                            <div class="candidate-legend-items">
-                                {#each parcelCandidateLegend as candidate}
-                                    <button
-                                        type="button"
-                                        style={`--practice-color:${candidate.practiceTypeColor || '#f97316'}`}
-                                        class:priority={candidate.isPriority}
-                                        class:active={focusedParcelCandidateKey === parcelCandidateKey(candidate)}
-                                        onpointerdown={(event) => {
-                                            event.preventDefault();
-                                            event.stopPropagation();
-                                            focusParcelCandidate(candidate, true);
-                                        }}
-                                        onclick={() => focusParcelCandidate(candidate, true)}
-                                    >
-                                        <i aria-hidden="true"></i>
-                                        <b>{candidate.name}</b>
-                                        <small>{candidate.practiceTypeLabel} · Risk {candidate.riskLabel} · {candidate.parcelLabel}필지 · {candidate.totalAreaLabel}</small>
-                                    </button>
-                                {/each}
-                            </div>
-                        </section>
-                    {/if}
                 </div>
             {/if}
         </div>
@@ -2654,6 +2631,10 @@
 </div>
 
 <style>
+    .region-map :global(.grayscale-basemap) {
+        filter: grayscale(1);
+    }
+
     .region-map-wrap {
         position: relative;
     }
