@@ -1632,6 +1632,32 @@ button { cursor: pointer; }
     font-size: 11px;
     font-weight: 600;
 }
+/* 체크박스를 지표가 속한 H/E/V 색으로 물들여 상단 요약과 연결한다.
+   체크 표시는 accent-color가 고르는 색 대신 항상 흰색으로 그린다. */
+.indicator-item input[type=checkbox] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    border: 1.5px solid #c3ccc6;
+    border-radius: 4px;
+    background: #fff;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 11px 11px;
+    cursor: pointer;
+    transition: background-color .12s ease, border-color .12s ease;
+}
+.indicator-item input[type=checkbox]:checked {
+    border-color: transparent;
+    background-color: var(--checkbox-color, #315d54);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12.6 9.2 18 20 6.4'/%3E%3C/svg%3E");
+}
+.indicator-item input[type=checkbox]:disabled { cursor: not-allowed; }
+.indicator-item[data-dimension="H"] input[type=checkbox] { --checkbox-color: var(--color-hazard); }
+.indicator-item[data-dimension="E"] input[type=checkbox] { --checkbox-color: var(--color-exposure); }
+.indicator-item[data-dimension="V"] input[type=checkbox] { --checkbox-color: var(--color-vulnerability); }
 .hev-cell--h .hev-badge { background: var(--color-hazard); }
 .hev-cell--e .hev-badge { background: var(--color-exposure); }
 .hev-cell--v .hev-badge { background: var(--color-vulnerability); }

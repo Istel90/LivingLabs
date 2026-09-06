@@ -2926,7 +2926,7 @@
                             </button>
                             {#if groupExpanded[group]}
                             {#each indicators.filter((item) => item.group === group) as item}
-                                <div class="indicator-item" class:disabled={!item.enabled} class:unavailable={!isIndicatorAvailable(item)}>
+                                <div class="indicator-item" data-dimension={item.dimension} class:disabled={!item.enabled} class:unavailable={!isIndicatorAvailable(item)}>
                                     <input
                                         type="checkbox"
                                         checked={item.enabled}
