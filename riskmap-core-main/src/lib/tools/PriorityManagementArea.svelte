@@ -377,7 +377,7 @@
     let supabaseDrafts = [];
     let supabaseHistoryOpen = false;
     let supabaseBusy = false;
-    let supabaseStatus = 'Supabase 저장 준비';
+    let supabaseStatus = '저장 준비됨';
     let supabaseSaveDialog = null;
     let indicatorDialog = null;
     let devResetPollTimer = null;
@@ -671,11 +671,11 @@
                 limit: 30
             });
             supabaseStatus = supabaseDrafts.length
-                ? `Supabase 저장 이력 ${supabaseDrafts.length}건`
-                : 'Supabase 저장 이력이 없습니다.';
+                ? `저장 이력 ${supabaseDrafts.length}건`
+                : '저장 이력이 없습니다.';
         } catch (error) {
             console.warn(error);
-            supabaseStatus = error?.message || 'Supabase 이력 조회 실패';
+            supabaseStatus = error?.message || '저장 이력을 불러오지 못했습니다.';
         } finally {
             supabaseBusy = false;
         }
@@ -697,7 +697,7 @@
         supabaseSaveDialog = {
             state: 'saving',
             title: '대안 저장 중',
-            message: '분석 결과를 정리해 Supabase에 새 버전으로 저장하고 있습니다.'
+            message: '분석 결과를 정리해 새 버전으로 저장하고 있습니다.'
         };
         persistAlternative(activeAlternative);
         const payload = buildSupabaseDraftPayload();
@@ -725,7 +725,7 @@
                 || String(error?.message || '').toLowerCase().includes('statement timeout');
             supabaseStatus = timedOut
                 ? '저장 데이터 처리 시간이 초과되었습니다. 다시 시도해 주세요.'
-                : error?.message || 'Supabase 저장 실패';
+                : error?.message || '저장에 실패했습니다.';
             supabaseSaveDialog = {
                 state: 'error',
                 title: '대안 저장 실패',
@@ -777,7 +777,7 @@
         }
         supabaseDrafts = [];
         supabaseHistoryOpen = false;
-        supabaseStatus = '개발 초기화 완료 · Supabase 저장 이력 삭제됨';
+        supabaseStatus = '개발 초기화 완료 · 저장 이력 삭제됨';
         draftStorageStatus = '개발 초기화 완료 · 새 대안 1';
         draftLoadComplete = true;
     }
@@ -3015,7 +3015,7 @@
                                 <div class="database-actions">
                                     <label>
                                         <span>작업자</span>
-                                        <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="Supabase 저장 작업자" />
+                                        <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="저장 기록에 남을 작업자 이름" title="저장할 때 기록에 남는 이름입니다" />
                                     </label>
                                     <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy}>
                                         {supabaseBusy ? '처리 중' : '저장'}
@@ -3246,7 +3246,7 @@
                 <span>작성자</span>
                 <span>날짜</span>
             </div>
-            <div class="saved-draft-rows" aria-label="Supabase 저장 이력">
+            <div class="saved-draft-rows" aria-label="저장 이력">
                 {#if supabaseBusy}
                     <p class="saved-draft-empty">저장 이력을 불러오는 중입니다.</p>
                 {:else if supabaseDrafts.length}
@@ -3261,7 +3261,7 @@
                         </button>
                     {/each}
                 {:else}
-                    <p class="saved-draft-empty">불러올 Supabase 저장본이 없습니다.</p>
+                    <p class="saved-draft-empty">불러올 저장본이 없습니다.</p>
                 {/if}
             </div>
             <footer>

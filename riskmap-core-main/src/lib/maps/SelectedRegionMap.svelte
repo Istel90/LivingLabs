@@ -2352,20 +2352,6 @@
                         onclick={() => (legendInfoOpen = !legendInfoOpen)}
                     >ⓘ</button>
                 </div>
-                {#if legendInfoOpen}
-                    <div class="legend-info-popover" role="dialog" aria-label="표시 레이어 안내">
-                        <div class="legend-info-popover-head">
-                            <span class="legend-info-chip">안내</span>
-                            <button type="button" class="legend-info-close" aria-label="안내 닫기" onclick={() => (legendInfoOpen = false)}>×</button>
-                        </div>
-                        <p>
-                            {riskGrid?.preview
-                                ? '분석 전 미리보기 · H·E·V 탭과 체크박스로 01 지표 데이터를 확인합니다.'
-                                : 'H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.'}
-                        </p>
-                        <p>표시를 끄면 지도 레이어가 숨겨지고 범례 행도 흐려집니다. Risk 분석 포함 여부는 01 분석 지표 선택에서 설정합니다.</p>
-                    </div>
-                {/if}
                 {#if riskGrid?.stats}
                     <label class="risk-surface-summary">
                         <input
@@ -2421,6 +2407,20 @@
                     <p>선택된 분석 지표가 없습니다.</p>
                 {/if}
             </div>
+            {#if legendInfoOpen}
+                <div class="legend-info-popover" role="dialog" aria-label="표시 레이어 안내">
+                    <div class="legend-info-popover-head">
+                        <span class="legend-info-chip">안내</span>
+                        <button type="button" class="legend-info-close" aria-label="안내 닫기" onclick={() => (legendInfoOpen = false)}>×</button>
+                    </div>
+                    <p>
+                        {riskGrid?.preview
+                            ? '분석 전 미리보기 · H·E·V 탭과 체크박스로 01 지표 데이터를 확인합니다.'
+                            : 'H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.'}
+                    </p>
+                    <p>표시를 끄면 지도 레이어가 숨겨지고 범례 행도 흐려집니다. Risk 분석 포함 여부는 01 분석 지표 선택에서 설정합니다.</p>
+                </div>
+            {/if}
             {#if riskGrid?.stats}
                 <div class="parcel-candidate-panel" aria-label="실천권역 도출 패널">
                     <div class="parcel-candidate-tools">
@@ -2831,21 +2831,27 @@
     .legend-info-toggle:hover,
     .legend-info-toggle.active { color: #0f766e; }
 
+    /* 스크롤되는 범례 패널 안에 두면 패널이 늘어나므로, 오버레이 스택에 직접 띄운다.
+       top = 범례 테두리 1px + 패딩 12.8px + 헤드 21.1px + 간격 8px */
     .legend-info-popover {
-        position: relative;
-        margin-top: 8px;
+        position: absolute;
+        top: 43px;
+        left: 0;
+        right: 0;
+        z-index: 90;
         border-radius: 10px;
         background: var(--color-brand-dark);
         color: #fff;
         padding: 10px 12px 12px;
         box-shadow: 0 18px 36px rgb(15 23 42 / 22%);
+        pointer-events: auto;
     }
 
     .legend-info-popover::before {
         content: '';
         position: absolute;
         top: -4px;
-        left: 70px;
+        left: 85px;
         width: 11px;
         height: 11px;
         transform: rotate(45deg);
@@ -2883,8 +2889,7 @@
 
     .legend-info-popover .legend-info-close:hover { color: #fff; }
 
-    /* .analysis-legend p 가 색·크기를 덮어써서 특이도를 올려 둔다 */
-    .analysis-legend .legend-info-popover p {
+    .legend-info-popover p {
         margin: 0 0 6px;
         color: #fff;
         font-size: 11px;
@@ -2892,7 +2897,7 @@
         line-height: 1.5;
     }
 
-    .analysis-legend .legend-info-popover p:last-child { margin-bottom: 0; }
+    .legend-info-popover p:last-child { margin-bottom: 0; }
 
     .risk-surface-summary {
         display: grid;
