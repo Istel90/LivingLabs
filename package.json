@@ -7,6 +7,8 @@
     "build": "vite build",
     "build:all": "npm run build && npm --prefix \"Survey platform for collaboration\" run build && npm --prefix riskmap-core-main run build",
     "build:unified": "node scripts/build-unified-platform.mjs",
+    "build:demo": "node scripts/build-demo-platform.mjs",
+    "build:cloudflare": "node scripts/build-cloudflare-platform.mjs",
     "dev": "vite",
     "dev:portal": "vite",
     "dev:survey": "npm --prefix \"Survey platform for collaboration\" run dev",
@@ -18,10 +20,17 @@
     "platform:dev": "npm run platform:start:dev",
     "platform:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/status-platform.ps1",
     "platform:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-platform.ps1",
+    "platform:remote:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-remote-platform.ps1",
+    "platform:remote:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/status-remote-platform.ps1",
+    "platform:remote:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-remote-platform.ps1",
+    "platform:remote:install-autostart": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-remote-platform-autostart.ps1",
     "postgis:backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-livinglabs-postgis.ps1",
     "postgis:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/status-livinglabs-postgis.ps1",
     "platform:refresh": "npm run build:unified && npm run platform:stop && npm run platform:start",
     "weather:build-lst-catalog": "node scripts/build-gyeonggi-lst-catalog.mjs",
+    "weather:collect-national-heatwave": "node scripts/collect-kma-national-heatwave.mjs",
+    "weather:test-national-heatwave": "node scripts/collect-kma-national-heatwave.mjs --self-test",
+    "weather:export-yearly-lst": ".\\.venv-gee\\Scripts\\python.exe riskmap-core-main\\scripts\\gee\\national-lst-yearly-queue.py",
     "install:all": "npm install && npm --prefix \"Survey platform for collaboration\" install && npm --prefix riskmap-core-main install"
   },
   "engines": {
@@ -90,7 +99,8 @@
     "@tailwindcss/vite": "4.1.12",
     "@vitejs/plugin-react": "4.7.0",
     "tailwindcss": "4.1.12",
-    "vite": "6.3.5"
+    "vite": "6.3.5",
+    "wrangler": "^4.129.0"
   },
   "peerDependencies": {
     "react": "18.3.1",

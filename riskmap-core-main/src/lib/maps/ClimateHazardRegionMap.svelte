@@ -1,17 +1,12 @@
 <script>
-    import { onDestroy, onMount, untrack } from 'svelte';
-    import html2canvas from 'html2canvas-pro';
+    import { onMount } from 'svelte';
     import {
         getBoundaryFeaturesForRegionCode,
         getRegionByCode,
         getRegionCenter,
         regionZoom
     } from '$lib/data/administrativeRegions.js';
-    import {
-        enrichPracticeDistricts,
-        PRACTICE_DISTRICT_COLOR,
-        PRACTICE_DISTRICT_FILL_COLOR
-    } from '$lib/data/practiceDistricts.js';
+    import { enrichPracticeDistricts, PRACTICE_TYPE_META } from '$lib/data/practiceDistricts.js';
     import {
         createVWorldDataUrl,
         createVWorldWmsOptions,
@@ -21,23 +16,9 @@
         VWORLD_WMS_URL
     } from '../../../../shared/map/vworld.js';
 
-    const BASE_TILE_STYLES = {
-        default: {
-            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            attribution: '&copy; OpenStreetMap contributors',
-            maxZoom: 19
-        },
-        grayscale: {
-            url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-            maxZoom: 19
-        }
-    };
-
     let {
         regionCode = '41110',
         regionName = '경기도 수원시',
-        hazard = 'heatwave',
         height = '320px',
         showCadastral = true,
         showSidoBoundary = false,
@@ -48,7 +29,6 @@
         onGridLayerChange = () => {},
         onParcelCandidatesChange = () => {},
         onParcelCandidateFocus = () => {},
-        onParcelDerivationComplete = () => {},
         parcelCandidates = [],
         candidateContextKey = '',
         mapResetKey = 0,
@@ -67,11 +47,6 @@
         '적응역량': 'Adaptive Capacity'
     };
     const gridLayers = ['H', 'E', 'V', 'Risk', 'Hotspot'];
-    const dimensionTabColors = {
-        H: 'var(--color-hazard)',
-        E: 'var(--color-exposure)',
-        V: 'var(--color-vulnerability)'
-    };
     const gridLayerLabels = {
         Risk: '종합 Risk',
         H: '기후위험 H',
@@ -83,12 +58,7 @@
     let mapElement;
     let map;
     let mapLoading = $state(true);
-    let baseLayer;
-    let baseMapStyle = $state('default');
-    let legendInfoOpen = $state(false);
-    let locateButtonOffset = $state(72);
-    let scaleBottomOffset = $state(28);
-    let scaleControlEl;
+    let marker;
     let selectedBoundaryLayer;
     let regionViewBounds;
     let sidoLayer;
@@ -114,256 +84,6 @@
     let parcelCandidateRunId = 0;
     let parcelCandidateHydrationScope = '';
     let appliedMapResetKey;
-    let exportBusy = $state(false);
-    let exportStatus = $state('');
-    let exportStatusTimer;
-
-    const exportHazardLabels = {
-        heatwave: '폭염',
-        flood: '홍수',
-        ecosystem: '생태계'
-    };
-
-    function safeFilenamePart(value, fallback = '지도') {
-        const cleaned = String(value || '')
-            .replace(/[\\/:*?"<>|]+/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-        return cleaned || fallback;
-    }
-
-    function exportDateStamp() {
-        const parts = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Seoul',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        }).formatToParts(new Date());
-        const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-        return `${values.year}-${values.month}-${values.day}`;
-    }
-
-    function mapExportFilename() {
-        const hazardLabel = exportHazardLabels[hazard] || hazard;
-        const layerLabel = gridLayerLabels[selectedGridLayer] || selectedGridLayer;
-        return [
-            safeFilenamePart(regionName, regionCode),
-            safeFilenamePart(hazardLabel, '기후위험'),
-            safeFilenamePart(layerLabel, '결과'),
-            '결과지도',
-            exportDateStamp()
-        ].join('_') + '.png';
-    }
-
-    function setExportStatus(message, clearAfter = 0) {
-        exportStatus = message;
-        if (exportStatusTimer) window.clearTimeout(exportStatusTimer);
-        if (clearAfter > 0) {
-            exportStatusTimer = window.setTimeout(() => {
-                exportStatus = '';
-                exportStatusTimer = null;
-            }, clearAfter);
-        }
-    }
-
-    function waitForVisibleMapTiles(timeout = 7000) {
-        const tiles = Array.from(mapElement?.querySelectorAll('.leaflet-tile') || [])
-            .filter((tile) => tile instanceof HTMLImageElement && tile.offsetParent !== null);
-        if (!tiles.length) return Promise.resolve();
-
-        return Promise.all(tiles.map((tile) => {
-            if (tile.complete && tile.naturalWidth > 0) return Promise.resolve();
-            return new Promise((resolve) => {
-                const finish = () => resolve();
-                tile.addEventListener('load', finish, { once: true });
-                tile.addEventListener('error', finish, { once: true });
-                window.setTimeout(finish, timeout);
-            });
-        }));
-    }
-
-    async function flattenMapOverlaysForExport(captureElement) {
-        const sourceCanvases = Array.from(mapElement?.querySelectorAll('.risk-grid-canvas') || []);
-        const sourceVectors = Array.from(mapElement?.querySelectorAll('.leaflet-pane svg.leaflet-zoom-animated') || []);
-        if (!sourceCanvases.length && !sourceVectors.length) return () => {};
-
-        const rootRect = captureElement.getBoundingClientRect();
-        const mapRect = mapElement.getBoundingClientRect();
-        const rasterScale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-        const composite = document.createElement('canvas');
-        composite.width = Math.max(1, Math.round(mapRect.width * rasterScale));
-        composite.height = Math.max(1, Math.round(mapRect.height * rasterScale));
-        const context = composite.getContext('2d');
-        context.scale(rasterScale, rasterScale);
-
-        const sources = [...sourceCanvases, ...sourceVectors]
-            .map((source, order) => {
-                const rect = source.getBoundingClientRect();
-                const pane = source.closest('.leaflet-pane');
-                const zIndex = Number.parseInt(window.getComputedStyle(pane || source).zIndex, 10) || 420;
-                return { source, rect, zIndex, order };
-            })
-            .filter(({ rect }) => rect.width > 0 && rect.height > 0)
-            .sort((left, right) => left.zIndex - right.zIndex || left.order - right.order);
-
-        const waitForImage = (image) => (
-            typeof image.decode === 'function'
-                ? image.decode().catch(() => {})
-                : new Promise((resolve) => {
-                    image.addEventListener('load', resolve, { once: true });
-                    image.addEventListener('error', resolve, { once: true });
-                })
-        );
-
-        for (const { source, rect } of sources) {
-            const left = rect.left - mapRect.left;
-            const top = rect.top - mapRect.top;
-            if (source instanceof HTMLCanvasElement) {
-                context.drawImage(source, left, top, rect.width, rect.height);
-                continue;
-            }
-            if (!(source instanceof SVGElement)) continue;
-
-            const vector = source.cloneNode(true);
-            vector.classList.remove('leaflet-zoom-animated');
-            vector.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-            vector.setAttribute('width', String(rect.width));
-            vector.setAttribute('height', String(rect.height));
-            Object.assign(vector.style, {
-                width: `${rect.width}px`,
-                height: `${rect.height}px`,
-                margin: '0',
-                transform: 'none',
-                transformOrigin: '0 0',
-                overflow: 'visible'
-            });
-            const image = new Image();
-            image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(vector))}`;
-            await waitForImage(image);
-            context.drawImage(image, left, top, rect.width, rect.height);
-        }
-
-        const snapshot = document.createElement('img');
-        snapshot.className = 'map-export-canvas-snapshot';
-        snapshot.alt = '';
-        snapshot.setAttribute('aria-hidden', 'true');
-        snapshot.src = composite.toDataURL('image/png');
-        Object.assign(snapshot.style, {
-            position: 'absolute',
-            left: `${mapRect.left - rootRect.left}px`,
-            top: `${mapRect.top - rootRect.top}px`,
-            width: `${mapRect.width}px`,
-            height: `${mapRect.height}px`,
-            zIndex: '620',
-            maxWidth: 'none',
-            pointerEvents: 'none',
-            imageRendering: 'auto'
-        });
-
-        const previousVisibility = sources.map(({ source }) => [source, source.style.visibility]);
-        previousVisibility.forEach(([source]) => { source.style.visibility = 'hidden'; });
-        captureElement.appendChild(snapshot);
-        await waitForImage(snapshot);
-
-        return () => {
-            previousVisibility.forEach(([source, visibility]) => { source.style.visibility = visibility; });
-            snapshot.remove();
-        };
-    }
-
-    function canvasToPngBlob(canvas) {
-        return new Promise((resolve, reject) => {
-            canvas.toBlob((blob) => {
-                if (blob) resolve(blob);
-                else reject(new Error('PNG 파일을 만들 수 없습니다.'));
-            }, 'image/png');
-        });
-    }
-
-    async function writeMapImage(blob, filename) {
-        if (typeof window.showSaveFilePicker === 'function') {
-            try {
-                const handle = await window.showSaveFilePicker({
-                    suggestedName: filename,
-                    types: [{
-                        description: 'PNG 지도 이미지',
-                        accept: { 'image/png': ['.png'] }
-                    }]
-                });
-                const writable = await handle.createWritable();
-                await writable.write(blob);
-                await writable.close();
-                return 'selected-location';
-            } catch (error) {
-                if (error?.name === 'AbortError') return 'cancelled';
-                console.warn('선택 위치 저장 실패, 기본 다운로드 방식으로 전환합니다.', error);
-            }
-        }
-
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = filename;
-        anchor.rel = 'noopener';
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        return 'downloads';
-    }
-
-    async function exportMapImage() {
-        if (exportBusy || mapLoading || !mapElement) return;
-        exportBusy = true;
-        setExportStatus('배경지도 준비 중...');
-
-        try {
-            map?.closePopup();
-            map?.invalidateSize({ pan: false });
-            await waitForVisibleMapTiles();
-            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-            const captureElement = mapElement.closest('.region-map-wrap') || mapElement;
-            setExportStatus('격자와 경계 위치 맞춤 중...');
-            const restoreMapOverlays = await flattenMapOverlaysForExport(captureElement);
-            let canvas;
-            try {
-                setExportStatus('고해상도 PNG 생성 중...');
-                canvas = await html2canvas(captureElement, {
-                    allowTaint: false,
-                    useCORS: true,
-                    imageTimeout: 12000,
-                    logging: false,
-                    backgroundColor: '#e8f3f5',
-                    scale: Math.min(2.5, Math.max(2, window.devicePixelRatio || 1)),
-                    ignoreElements: (element) =>
-                        element.hasAttribute?.('data-map-export-ignore') ||
-                        element.classList?.contains('leaflet-control-zoom')
-                });
-            } finally {
-                restoreMapOverlays();
-            }
-            const blob = await canvasToPngBlob(canvas);
-            const result = await writeMapImage(blob, mapExportFilename());
-
-            if (result === 'cancelled') {
-                setExportStatus('저장을 취소했습니다.', 3000);
-            } else if (result === 'selected-location') {
-                setExportStatus('선택한 위치에 PNG를 저장했습니다.', 5000);
-            } else {
-                setExportStatus('기본 다운로드 폴더에 PNG를 저장했습니다.', 5000);
-            }
-        } catch (error) {
-            console.error('지도 PNG 저장 실패', error);
-            setExportStatus(`이미지 저장 실패 · ${error?.message || '잠시 후 다시 시도해 주세요.'}`);
-        } finally {
-            exportBusy = false;
-        }
-    }
-
-    onDestroy(() => {
-        if (exportStatusTimer) window.clearTimeout(exportStatusTimer);
-    });
 
     function groupsForGridLayer(layer) {
         if (layer === 'H') return ['기후위험'];
@@ -417,27 +137,11 @@
         renderRiskGridLayer();
     }
 
-    function escapeTooltipHtml(value) {
-        return String(value ?? '')
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
-    }
-
     function createAnalysisLayer(L, item) {
         if (!item.geojson) return null;
 
         const color = item.color || '#64748b';
         const tooltip = `${item.group} · ${item.label}`;
-        const hasPointFeatures = item.geojson?.features?.some((feature) => feature?.geometry?.type === 'Point');
-        if (hasPointFeatures && map && !map.getPane('analysis-point-pane')) {
-            const pane = map.createPane('analysis-point-pane');
-            pane.style.zIndex = '640';
-            pane.style.pointerEvents = 'auto';
-        }
-
         return L.geoJSON(item.geojson, {
             interactive: true,
             style: {
@@ -448,30 +152,13 @@
                 weight: 2
             },
             pointToLayer: (_feature, latlng) => L.circleMarker(latlng, {
-                pane: 'analysis-point-pane',
-                radius: 5,
-                color: '#ffffff',
+                radius: 7,
+                color,
                 fillColor: color,
-                fillOpacity: 0.98,
-                opacity: 1,
-                weight: 1.5
-            }),
-            onEachFeature: (feature, layer) => {
-                if (feature?.geometry?.type !== 'Point') {
-                    layer.bindTooltip(tooltip);
-                    return;
-                }
-                const properties = feature.properties || {};
-                const name = escapeTooltipHtml(properties.name || item.label);
-                const address = escapeTooltipHtml(properties.address || '');
-                const capacity = Number(properties.capacity);
-                const details = [
-                    address,
-                    Number.isFinite(capacity) ? `최대수용 ${capacity.toLocaleString()}명` : ''
-                ].filter(Boolean);
-                layer.bindTooltip(`<b>${name}</b>${details.length ? `<br>${details.join('<br>')}` : ''}`);
-            }
-        });
+                fillOpacity: 0.75,
+                weight: 2
+            })
+        }).bindTooltip(tooltip);
     }
 
     function renderAnalysisLayers() {
@@ -901,58 +588,53 @@
             return [lng, lat];
         };
 
-        const candidateIndices = Array.isArray(grid.validIndices) && grid.validIndices.length
-            ? grid.validIndices
-            : Array.from({ length: rows * columns }, (_, index) => index);
+        for (let row = 0; row < rows; row += 1) {
+            for (let column = 0; column < columns; column += 1) {
+                const index = (row * columns) + column;
+                const risk = Number(grid.values[index]);
+                if (!Number.isFinite(risk) || risk < threshold) continue;
 
-        for (const index of candidateIndices) {
-            const row = Math.floor(index / columns);
-            const column = index % columns;
-            const risk = Number(grid.values[index]);
-            if (!Number.isFinite(risk) || risk < threshold) continue;
+                const leftX = originX + (column * cellWidth);
+                const rightX = leftX + cellWidth;
+                const topY = originY - (row * cellHeight);
+                const bottomY = topY - cellHeight;
+                const point = toLngLat(leftX + (cellWidth / 2), topY - (cellHeight / 2));
+                if (!pointInBoundary(point, boundaryFeatures)) continue;
 
-            const leftX = originX + (column * cellWidth);
-            const rightX = leftX + cellWidth;
-            const topY = originY - (row * cellHeight);
-            const bottomY = topY - cellHeight;
-            const point = toLngLat(leftX + (cellWidth / 2), topY - (cellHeight / 2));
-            if (!pointInBoundary(point, boundaryFeatures)) continue;
+                const corners = [
+                    toLngLat(leftX, topY),
+                    toLngLat(rightX, topY),
+                    toLngLat(rightX, bottomY),
+                    toLngLat(leftX, bottomY)
+                ];
+                const lngs = corners.map((corner) => corner[0]);
+                const lats = corners.map((corner) => corner[1]);
 
-            const corners = [
-                toLngLat(leftX, topY),
-                toLngLat(rightX, topY),
-                toLngLat(rightX, bottomY),
-                toLngLat(leftX, bottomY)
-            ];
-            const lngs = corners.map((corner) => corner[0]);
-            const lats = corners.map((corner) => corner[1]);
-
-            points.push({
-                index,
-                row,
-                column,
-                point,
-                corners,
-                bounds: {
-                    minLng: Math.min(...lngs),
-                    minLat: Math.min(...lats),
-                    maxLng: Math.max(...lngs),
-                    maxLat: Math.max(...lats)
-                },
-                risk,
-                h: Number(grid.hValues?.[index]),
-                e: Number(grid.eValues?.[index]),
-                v: Number(grid.vValues?.[index])
-            });
+                points.push({
+                    index,
+                    row,
+                    column,
+                    point,
+                    corners,
+                    bounds: {
+                        minLng: Math.min(...lngs),
+                        minLat: Math.min(...lats),
+                        maxLng: Math.max(...lngs),
+                        maxLat: Math.max(...lats)
+                    },
+                    risk,
+                    h: Number(grid.hValues?.[index]),
+                    e: Number(grid.eValues?.[index]),
+                    v: Number(grid.vValues?.[index])
+                });
+            }
         }
 
         return points.sort((left, right) => right.risk - left.risk);
     }
 
     function hotspotRequestBoxes(points) {
-        // Keep each PostGIS query small so dense urban blocks can be paged and
-        // rendered without sending one oversized GeoJSON response to the browser.
-        const tileSize = 0.0024;
+        const tileSize = 0.006;
         const boxes = new Map();
 
         points.forEach((hotspot) => {
@@ -979,24 +661,17 @@
 
         return [...boxes.values()]
             .sort((left, right) => (right.maxRisk - left.maxRisk) || (right.count - left.count))
-            // Candidate districts are ranked from the highest-risk cells, so the
-            // top 20 tiles preserve the decision focus without querying every
-            // lower-ranked hotspot across a metropolitan-scale boundary.
-            .slice(0, 20)
+            .slice(0, 12)
             .map((box) => ({
-                minLng: box.minLng - 0.00035,
-                minLat: box.minLat - 0.00035,
-                maxLng: box.maxLng + 0.00035,
-                maxLat: box.maxLat + 0.00035,
+                minLng: box.minLng - 0.0012,
+                minLat: box.minLat - 0.0012,
+                maxLng: box.maxLng + 0.0012,
+                maxLat: box.maxLat + 0.0012,
                 count: box.count
             }));
     }
 
-    function extractGeoJsonFeatures(payload) {
-        return Array.isArray(payload?.features) ? payload.features : [];
-    }
-
-    function extractVWorldGeoJsonFeatures(payload) {
+    function extractVWorldFeatures(payload) {
         return payload?.response?.result?.featureCollection?.features ||
             payload?.response?.result?.features ||
             payload?.features ||
@@ -1012,228 +687,64 @@
         return new Promise((resolve) => window.setTimeout(resolve, 0));
     }
 
-    function wait(milliseconds) {
-        return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-    }
+    async function fetchJsonWithTimeout(url, timeoutMs = 9000) {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), timeoutMs);
 
-    function isTransientApiStatus(status) {
-        return [408, 425, 429, 500, 502, 503, 504].includes(Number(status));
-    }
-
-    async function fetchJsonWithRetry(url, { timeoutMs = 12000, retries = 1 } = {}) {
-        let lastError;
-
-        for (let attempt = 0; attempt <= retries; attempt += 1) {
-            const controller = new AbortController();
-            const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-
-            try {
-                const response = await fetch(url, {
-                    signal: controller.signal,
-                    headers: { Accept: 'application/json' }
-                });
-                const text = await response.text();
-
-                if (!response.ok) {
-                    const error = new Error(`PostGIS ${response.status}`);
-                    error.status = response.status;
-                    throw error;
-                }
-
-                try {
-                    return JSON.parse(text);
-                } catch {
-                    throw new Error('PostGIS invalid-json');
-                }
-            } catch (error) {
-                lastError = error?.name === 'AbortError' ? new Error('request-timeout') : error;
-                const retryable = error?.name === 'AbortError' ||
-                    error instanceof TypeError ||
-                    isTransientApiStatus(error?.status);
-                if (!retryable || attempt >= retries) throw lastError;
-                await wait(450 * (attempt + 1));
-            } finally {
-                window.clearTimeout(timer);
-            }
+        try {
+            const response = await fetch(url, { signal: controller.signal });
+            if (!response.ok) throw new Error(`VWorld ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            if (error?.name === 'AbortError') throw new Error('request-timeout');
+            throw error;
+        } finally {
+            window.clearTimeout(timer);
         }
-
-        throw lastError || new Error('PostGIS request-failed');
     }
 
-    async function fetchPostgisCadastralFeatures(
-        boxes,
-        { timeoutMs = 75000, concurrency = 6, onProgress = () => {} } = {}
-    ) {
+    async function fetchVWorldCadastralFeatures(boxes, { timeoutMs = 45000 } = {}) {
         const featuresById = new Map();
-        const pageSize = 1000;
-        const maxPagesPerBox = 5;
-        const maxFeatures = 12000;
-        const deadline = Date.now() + timeoutMs;
-        const queue = [...boxes];
-        const failures = [];
-        let completed = 0;
-
-        async function fetchBox(box) {
-            if (Date.now() > deadline) throw new Error('request-timeout');
-            const features = [];
-            let truncated = false;
-
-            for (let page = 0; page < maxPagesPerBox; page += 1) {
-                if (Date.now() > deadline) throw new Error('request-timeout');
-                try {
-                    const url = new URL('/cadastre/bbox', window.location.origin);
-                    url.searchParams.set('bbox', [box.minLng, box.minLat, box.maxLng, box.maxLat].join(','));
-                    url.searchParams.set('limit', String(pageSize));
-                    url.searchParams.set('offset', String(page * pageSize));
-                    url.searchParams.set('simplifyMeters', '0.2');
-                    const remainingTime = Math.max(3000, Math.min(12000, deadline - Date.now()));
-                    const payload = await fetchJsonWithRetry(url, { timeoutMs: remainingTime });
-                    const pageFeatures = extractGeoJsonFeatures(payload);
-                    features.push(...pageFeatures);
-                    const hasMore = Boolean(payload?.metadata?.hasMore) || pageFeatures.length >= pageSize;
-                    if (!hasMore || Date.now() > deadline - 3000) {
-                        truncated = hasMore;
-                        break;
-                    }
-                    if (page === maxPagesPerBox - 1) truncated = true;
-                } catch (error) {
-                    if (page === 0 || !features.length) throw error;
-                    return { features, truncated: true };
-                }
-            }
-
-            return { features, truncated };
-        }
-
-        async function worker() {
-            while (queue.length && featuresById.size < maxFeatures) {
-                const box = queue.shift();
-                try {
-                    const result = await fetchBox(box);
-                    const features = result.features;
-                    features.forEach((feature) => {
-                        const id = featureId(feature);
-                        if (id) featuresById.set(id, feature);
-                    });
-                    if (result.truncated) failures.push(new Error('PostGIS response-truncated'));
-                } catch (error) {
-                    failures.push(error);
-                } finally {
-                    completed += 1;
-                    onProgress({ completed, total: boxes.length, failed: failures.length, features: featuresById.size });
-                    await yieldToBrowser();
-                }
-            }
-        }
-
-        await Promise.all(
-            Array.from({ length: Math.min(concurrency, Math.max(1, boxes.length)) }, () => worker())
-        );
-
-        if (!featuresById.size && failures.length) {
-            const timeoutFailure = failures.find((error) => error?.message === 'request-timeout');
-            throw timeoutFailure || failures[0];
-        }
-
-        return {
-            features: [...featuresById.values()],
-            failureCount: failures.length,
-            completedCount: completed,
-            requestedCount: boxes.length
-        };
-    }
-
-    async function fetchVWorldCadastralFeatures(
-        boxes,
-        { timeoutMs = 45000, concurrency = 4, onProgress = () => {} } = {}
-    ) {
-        const featuresById = new Map();
+        const pageSize = 650;
+        const maxPages = 1;
         const maxFeatures = 5000;
         const deadline = Date.now() + timeoutMs;
-        const queue = [...boxes];
-        const failures = [];
-        let completed = 0;
 
-        async function fetchBox(box) {
+        for (const box of boxes) {
+            if (featuresById.size >= maxFeatures) break;
             if (Date.now() > deadline) throw new Error('request-timeout');
-            const geomFilter = `BOX(${box.minLng},${box.minLat},${box.maxLng},${box.maxLat})`;
-            const url = createVWorldDataUrl(VWORLD_DATASETS.cadastral, {
-                geomFilter,
-                size: 650,
-                page: 1
-            });
-            const controller = new AbortController();
-            const remainingTime = Math.max(3000, Math.min(12000, deadline - Date.now()));
-            const timer = window.setTimeout(() => controller.abort(), remainingTime);
-
-            try {
-                const response = await fetch(url, {
-                    signal: controller.signal,
-                    headers: { Accept: 'application/json' }
+            for (let page = 1; page <= maxPages; page += 1) {
+                if (Date.now() > deadline) throw new Error('request-timeout');
+                const geomFilter = `BOX(${box.minLng},${box.minLat},${box.maxLng},${box.maxLat})`;
+                const url = createVWorldDataUrl(VWORLD_DATASETS.cadastral, {
+                    geomFilter,
+                    size: pageSize,
+                    page
                 });
-                if (!response.ok) throw new Error(`VWorld ${response.status}`);
-                const payload = await response.json();
+                const payload = await fetchJsonWithTimeout(url);
                 if (payload?.response?.status === 'ERROR') {
                     const code = payload.response.error?.code || 'API_ERROR';
-                    const message = payload.response.error?.text || 'VWorld 데이터 API 오류';
-                    throw new Error(`VWorld ${code}: ${message}`);
+                    const text = payload.response.error?.text || 'VWorld 데이터 API 오류';
+                    throw new Error(`VWorld ${code}: ${text}`);
                 }
-                return extractVWorldGeoJsonFeatures(payload);
-            } catch (error) {
-                if (error?.name === 'AbortError') throw new Error('request-timeout');
-                throw error;
-            } finally {
-                window.clearTimeout(timer);
+                const features = extractVWorldFeatures(payload);
+                features.forEach((feature) => {
+                    const id = featureId(feature);
+                    if (id) featuresById.set(id, feature);
+                });
+
+                await yieldToBrowser();
+                if (featuresById.size >= maxFeatures) break;
+                if (features.length < pageSize) break;
             }
         }
 
-        async function worker() {
-            while (queue.length && featuresById.size < maxFeatures) {
-                const box = queue.shift();
-                try {
-                    const features = await fetchBox(box);
-                    features.forEach((feature) => {
-                        const id = featureId(feature);
-                        if (id) featuresById.set(id, feature);
-                    });
-                } catch (error) {
-                    failures.push(error);
-                } finally {
-                    completed += 1;
-                    onProgress({
-                        completed,
-                        total: boxes.length,
-                        failed: failures.length,
-                        features: featuresById.size
-                    });
-                    await yieldToBrowser();
-                }
-            }
-        }
-
-        await Promise.all(
-            Array.from({ length: Math.min(concurrency, Math.max(1, boxes.length)) }, () => worker())
-        );
-
-        if (!featuresById.size && failures.length) {
-            const timeoutFailure = failures.find((error) => error?.message === 'request-timeout');
-            throw timeoutFailure || failures[0];
-        }
-
-        return {
-            features: [...featuresById.values()],
-            failureCount: failures.length,
-            completedCount: completed,
-            requestedCount: boxes.length
-        };
+        return [...featuresById.values()];
     }
 
     function parcelLabel(feature) {
         const properties = feature?.properties || {};
-        const legalDong = properties.legal_dong_name || properties.legalDongName || '';
-        const lotNumber = properties.lot_number || properties.lotNumber || '';
-        return properties.jibun || properties.JIBUN || properties.addr || properties.ADDR ||
-            [legalDong, lotNumber].filter(Boolean).join(' ') || properties.pnu || properties.PNU || '필지';
+        return properties.jibun || properties.JIBUN || properties.addr || properties.ADDR || properties.pnu || properties.PNU || '필지';
     }
 
     function parcelScoreRecords(features, hotspots) {
@@ -1363,7 +874,7 @@
                 v: Number((cluster.vMean || 0).toFixed(2)),
                 rank: index + 1,
                 reason: `연속지적도 필지 교차 · 최고 Risk ${Number.isFinite(cluster.riskMax) ? cluster.riskMax.toFixed(2) : '--'} · 대표 ${cluster.members[0]?.label || '필지'}`,
-                basis: 'PostGIS cadastre.parcels_readable + 100m hotspot cell-parcel intersection',
+                basis: 'VWorld LP_PA_CBND_BUBUN + 100m hotspot cell-parcel intersection',
                 parcelCount: cluster.members.length,
                 hotspotCount: cluster.hotspotCount,
                 totalAreaSqm: Number(cluster.totalAreaSqm.toFixed(1)),
@@ -1378,7 +889,7 @@
 
     function renderParcelCandidateLayer(candidates) {
         if (!map || !window.L) return;
-        candidates = enrichPracticeDistricts(candidates, hazard);
+        candidates = enrichPracticeDistricts(candidates);
         parcelCandidateLayer?.remove();
         parcelCandidateLayer = null;
         const legendCandidates = candidates.filter(Boolean);
@@ -1412,7 +923,6 @@
                     candidateRank: candidate.rank,
                     practiceType: candidate.practiceType,
                     practiceTypeLabel: candidate.practiceTypeLabel,
-                    practiceTypeDescription: candidate.practiceTypeDescription,
                     practiceTypeColor: candidate.practiceTypeColor,
                     practiceTypeFillColor: candidate.practiceTypeFillColor,
                     classificationReason: candidate.classificationReason
@@ -1433,25 +943,12 @@
                     fillOpacity: parcelFeatureStyle(feature).fillOpacity
                 }),
                 onEachFeature: (feature, layer) => {
-                    const properties = feature.properties || {};
-                    const candidateName = escapeTooltipHtml(properties.candidateName || '실천지구');
-                    const practiceTypeLabel = escapeTooltipHtml(properties.practiceTypeLabel || '유형 검토 중');
-                    const practiceTypeDescription = escapeTooltipHtml(properties.practiceTypeDescription || '');
-                    const candidateRisk = Number(properties.candidateRisk);
                     layer.bindTooltip(
-                        `<strong>${candidateName}</strong>` +
-                        `<span>${practiceTypeLabel} · Risk ${Number.isFinite(candidateRisk) ? candidateRisk.toFixed(2) : '--'}</span>` +
-                        (practiceTypeDescription ? `<small>${practiceTypeDescription}</small>` : ''),
-                        {
-                            className: 'practice-district-map-tooltip',
-                            direction: 'top',
-                            offset: [0, -8],
-                            opacity: 0.96,
-                            sticky: false,
-                            interactive: false
-                        }
+                        `<strong>${feature.properties?.candidateName || '실천권역'}</strong><br>` +
+                        `${feature.properties?.practiceTypeLabel || '유형 검토 중'} · Risk ${feature.properties?.candidateRisk || '--'}<br>` +
+                        `<span>${feature.properties?.classificationReason || ''}</span>`,
+                        { sticky: true }
                     );
-                    layer.on('mouseout', () => layer.closeTooltip?.());
                     layer.on('click', () => {
                         const key = feature.properties?.candidateId || feature.properties?.candidateName || '';
                         const candidate = legendCandidates.find((item) =>
@@ -1501,7 +998,7 @@
             (candidate.pnuList || []).length &&
             candidate.bounds
         );
-        if (!missingGeometry.length) return;
+        if (!missingGeometry.length || !hasVWorldApiKey()) return;
 
         const requestBoxes = missingGeometry.map(candidateRequestBox).filter(Boolean);
         if (!requestBoxes.length) return;
@@ -1511,13 +1008,7 @@
         parcelCandidateStatus = `저장된 필지 도형 복원 중 · ${missingGeometry.length}개 후보`;
 
         try {
-            const fetchResult = await fetchPostgisCadastralFeatures(requestBoxes, {
-                timeoutMs: 60000,
-                onProgress: ({ completed, total, failed }) => {
-                    parcelCandidateStatus = `저장된 필지 도형 복원 중 · ${completed}/${total} 구역${failed ? ` · ${failed}개 재조회 실패` : ''}`;
-                }
-            });
-            const fetchedFeatures = fetchResult.features;
+            const fetchedFeatures = await fetchVWorldCadastralFeatures(requestBoxes, { timeoutMs: 45000 });
             if (parcelCandidateRunId !== runId || parcelCandidateLayerScope(parcelCandidates) !== scope) return;
 
             const featureById = new Map(fetchedFeatures.map((feature) => [String(featureId(feature)), feature]));
@@ -1540,7 +1031,7 @@
             if (parcelCandidateRunId !== runId) return;
             parcelCandidateStatus = error?.message === 'request-timeout'
                 ? '필지 도형 복원 시간이 초과되었습니다. 잠시 후 저장본을 다시 불러오세요.'
-                : `필지 도형 복원 실패 · ${error?.message || 'PostGIS 조회 오류'}`;
+                : `필지 도형 복원 실패 · ${error?.message || 'VWorld 조회 오류'}`;
         } finally {
             if (parcelCandidateRunId === runId) parcelCandidateRunning = false;
         }
@@ -1594,10 +1085,12 @@
         const key = String(feature?.properties?.candidateId || feature?.properties?.candidateName || '');
         const selected = focusedParcelCandidateKey && key === focusedParcelCandidateKey;
         const priority = rank <= 3;
+        const type = feature?.properties?.practiceType || 'facility';
+        const meta = PRACTICE_TYPE_META[type] || PRACTICE_TYPE_META.facility;
         return {
-            color: PRACTICE_DISTRICT_COLOR,
+            color: selected ? '#111827' : meta.color,
             weight: selected ? 4 : priority ? 2.4 : 1.4,
-            fillColor: PRACTICE_DISTRICT_FILL_COLOR,
+            fillColor: meta.fillColor,
             fillOpacity: selected ? 0.48 : priority ? 0.32 : 0.22
         };
     }
@@ -1673,7 +1166,6 @@
 
     function moveMapToCandidateBounds(bounds) {
         if (!map || !bounds?.isValid?.()) return false;
-        map.stop?.();
         map.invalidateSize?.({ pan: false });
         const center = bounds.getCenter?.();
         if (!center) return false;
@@ -1682,7 +1174,15 @@
             ? map.getBoundsZoom(bounds, false, padding)
             : map.getZoom();
         const targetZoom = Math.min(18, Math.max(15, Number.isFinite(fitZoom) ? fitZoom : 15));
-        map.setView(center, targetZoom, { animate: false });
+        const options = {
+            animate: true,
+            duration: 0.65
+        };
+        if (typeof map.flyTo === 'function') {
+            map.flyTo(center, targetZoom, options);
+        } else {
+            map.setView(center, targetZoom);
+        }
         window.setTimeout(() => map.invalidateSize?.({ pan: false }), 80);
         return true;
     }
@@ -1695,19 +1195,22 @@
         const center = candidateCenterLatLng(candidate);
         if (!center) return false;
         map.invalidateSize?.({ pan: false });
-        map.stop?.();
-        map.setView(center, 17, { animate: false });
+        if (typeof map.flyTo === 'function') {
+            map.flyTo(center, 17, { animate: true, duration: 0.65 });
+        } else {
+            map.setView(center, 17);
+        }
         return true;
     }
 
     function focusParcelCandidate(candidate, notify = false) {
-        if (!map || !window.L || !candidate) return false;
-        parcelCandidateLayer?.eachLayer((layer) => layer.closeTooltip?.());
+        if (!map || !window.L || !candidate) return;
         focusedParcelCandidateKey = parcelCandidateKey(candidate);
         if (notify) onParcelCandidateFocus(candidate);
 
         if (!parcelCandidateLayer) {
-            return fitCandidateBounds(candidate);
+            fitCandidateBounds(candidate);
+            return;
         }
 
         const layers = [];
@@ -1720,28 +1223,20 @@
             layer.setStyle?.(parcelFeatureStyle(layer.feature));
         });
         if (!layers.length) {
-            return fitCandidateBounds(candidate);
+            fitCandidateBounds(candidate);
+            return;
         }
 
         const group = window.L.featureGroup(layers);
         const bounds = group.getBounds();
         if (!bounds.isValid()) {
-            return fitCandidateBounds(candidate);
+            fitCandidateBounds(candidate);
+            return;
         }
 
-        const moved = moveMapToCandidateBounds(bounds);
+        moveMapToCandidateBounds(bounds);
         layers.forEach((layer) => layer.bringToFront?.());
-        return moved;
-    }
-
-    export function focusCandidate(candidate) {
-        if (!candidate) return false;
-        const moved = focusParcelCandidate(candidate);
-        window.requestAnimationFrame(() => {
-            map?.invalidateSize?.({ pan: false });
-            focusParcelCandidate(candidate);
-        });
-        return moved;
+        layers[0]?.openTooltip?.();
     }
 
     async function deriveParcelCandidates() {
@@ -1749,6 +1244,11 @@
             parcelCandidateStatus = 'Risk 분석 결과가 먼저 필요합니다.';
             return;
         }
+        if (!hasVWorldApiKey()) {
+            parcelCandidateStatus = 'VWorld API 키가 없어 필지 geometry를 가져올 수 없습니다.';
+            return;
+        }
+
         parcelCandidateRunning = true;
         parcelCandidateStatus = 'Hotspot 격자 준비 중';
         const runCandidateContextKey = candidateContextKey;
@@ -1759,25 +1259,8 @@
             if (!hotspots.length) throw new Error('hotspot-empty');
 
             const requestBoxes = hotspotRequestBoxes(hotspots);
-            parcelCandidateStatus = `PostGIS 연속지적도 요청 중 · ${requestBoxes.length}개 구역`;
-            let candidateSource = 'postgis';
-            let fetchResult;
-            try {
-                fetchResult = await fetchPostgisCadastralFeatures(requestBoxes, {
-                    onProgress: ({ completed, total, failed, features }) => {
-                        parcelCandidateStatus = `PostGIS 필지 조회 · ${completed}/${total} 구역 · ${features.toLocaleString()}필지${failed ? ` · ${failed}개 구역 부분 조회` : ''}`;
-                    }
-                });
-            } catch (postgisError) {
-                candidateSource = 'vworld';
-                parcelCandidateStatus = `PostGIS 연결 없음 · VWorld 연속지적도 대체 조회 중 · ${requestBoxes.length}개 구역`;
-                fetchResult = await fetchVWorldCadastralFeatures(requestBoxes, {
-                    onProgress: ({ completed, total, failed, features }) => {
-                        parcelCandidateStatus = `VWorld 필지 조회 · ${completed}/${total} 구역 · ${features.toLocaleString()}필지${failed ? ` · ${failed}개 구역 부분 조회` : ''}`;
-                    }
-                });
-            }
-            const cadastralFeatures = fetchResult.features;
+            parcelCandidateStatus = `연속지적도 API 요청 중 · ${requestBoxes.length}개 구역`;
+            const cadastralFeatures = await fetchVWorldCadastralFeatures(requestBoxes);
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             if (!cadastralFeatures.length) throw new Error('parcel-empty');
 
@@ -1789,14 +1272,7 @@
 
             await yieldToBrowser();
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
-            const sourceCandidates = clusterParcelRecords(parcelRecords).map((candidate) => candidateSource === 'vworld'
-                ? {
-                    ...candidate,
-                    basis: 'VWorld LP_PA_CBND_BUBUN + 100m hotspot cell-parcel intersection'
-                }
-                : candidate
-            );
-            const candidates = enrichPracticeDistricts(sourceCandidates, hazard);
+            const candidates = enrichPracticeDistricts(clusterParcelRecords(parcelRecords));
             renderParcelCandidateLayer(candidates);
             const slimCandidates = candidates.map(({ features, ...candidate }) => ({
                 ...candidate,
@@ -1813,37 +1289,30 @@
                 featureLimit: features?.length || 0,
                 featureTotal: features?.length || 0
             }));
-            const partialLabel = fetchResult.failureCount
-                ? ` · ${fetchResult.failureCount}개 구역은 응답 누락으로 부분 분석`
-                : '';
-            const sourceLabel = candidateSource === 'vworld' ? 'VWorld 연속지적도' : 'PostGIS 연속지적도';
             const message = candidates.length
-                ? `실천권역 내 ${candidates.length}개 실천지구 도출 · ${sourceLabel} ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류${partialLabel}`
+                ? `실천권역 내 ${candidates.length}개 실천지구 도출 · ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류`
                 : '교차된 필지가 있으나 실천지구 기준을 충족하지 못했습니다.';
             parcelCandidateStatus = message;
             onParcelCandidatesChange(slimCandidates, message, runCandidateContextKey);
-            if (candidates.length) onParcelDerivationComplete(candidates, runCandidateContextKey);
         } catch (error) {
             if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
             console.error(error);
+            parcelCandidateLayer?.remove();
+            parcelCandidateLayer = null;
+            parcelCandidateLegend = [];
             const message = error?.message === 'parcel-empty'
-                ? '연속지적도에서 필지 geometry를 찾지 못했습니다.'
+                ? '연속지적도 API에서 필지 geometry를 받지 못했습니다.'
                 : error?.message === 'intersection-empty'
                     ? 'Hotspot과 겹치는 필지를 찾지 못했습니다.'
                     : error?.message === 'hotspot-empty'
                         ? 'Hotspot 격자가 없습니다.'
                         : error?.message === 'request-timeout'
-                            ? '연속지적도 필지 조회 시간이 초과되었습니다. 범위를 줄이거나 잠시 후 다시 실행하세요.'
-                        : (error?.message?.startsWith('PostGIS ') || error?.message?.startsWith('VWorld '))
+                            ? 'VWorld 필지 API 응답 시간이 초과되었습니다. 범위를 줄이거나 잠시 후 다시 실행하세요.'
+                        : error?.message?.startsWith('VWorld ')
                             ? error.message
-                            : '실천권역 도출 실패 · 연속지적도 서비스 상태를 확인하세요.';
+                            : '실천권역 도출 실패 · VWorld API 응답을 확인하세요.';
             parcelCandidateStatus = message;
-            // A transient API failure must not erase a previously completed
-            // analysis. Keep the last valid candidates visible and only report
-            // the failed refresh in the status area.
-            if (!(parcelCandidates || []).length) {
-                onParcelCandidatesChange([], message, runCandidateContextKey);
-            }
+            onParcelCandidatesChange([], message, runCandidateContextKey);
         } finally {
             if (parcelCandidateRunId === runId) parcelCandidateRunning = false;
         }
@@ -1854,15 +1323,7 @@
     }
 
     function isGridValueCollection(values) {
-        return Array.isArray(values) || ArrayBuffer.isView(values) || values instanceof Map;
-    }
-
-    function gridValueAt(values, index) {
-        return values instanceof Map ? values.get(index) : values?.[index];
-    }
-
-    function gridValueCollectionSize(values) {
-        return values instanceof Map ? values.size : Number(values?.length) || 0;
+        return Array.isArray(values) || ArrayBuffer.isView(values);
     }
 
     function visibleGridIndicatorsForLayer(layer) {
@@ -1894,14 +1355,9 @@
             return items[0].gridValues;
         }
 
-        const useSparseMap = cellCount > 500_000;
-        const values = useSparseMap ? new Map() : new Float32Array(cellCount);
-        if (!useSparseMap) values.fill(Number.NaN);
-        const indices = Array.isArray(grid.validIndices) && grid.validIndices.length
-            ? grid.validIndices
-            : Array.from({ length: cellCount }, (_, index) => index);
+        const values = new Array(cellCount).fill(null);
 
-        for (const index of indices) {
+        for (let index = 0; index < cellCount; index += 1) {
             let weightedSum = 0;
             let totalWeight = 0;
 
@@ -1909,7 +1365,7 @@
                 const weight = Math.max(0, Number(item.weight) || 0);
                 if (weight <= 0) return;
 
-                const rawValue = Number(gridValueAt(item.gridValues, index));
+                const rawValue = Number(item.gridValues[index]);
                 if (!Number.isFinite(rawValue)) return;
 
                 const value = layer === 'V' && item.direction === 'negative'
@@ -1920,11 +1376,7 @@
                 totalWeight += weight;
             });
 
-            if (totalWeight > 0) {
-                const value = weightedSum / totalWeight;
-                if (useSparseMap) values.set(index, value);
-                else values[index] = value;
-            }
+            values[index] = totalWeight > 0 ? weightedSum / totalWeight : null;
         }
 
         return values;
@@ -1983,7 +1435,7 @@
 
         const layer = selectedGridLayer || 'Risk';
         const values = gridValuesForLayer(grid, layer);
-        if (!gridValueCollectionSize(values)) return null;
+        if (!values.length) return null;
         const columns = Number(grid.columns);
         const rows = Number(grid.rows);
         const originX = Number(grid.transform.originX);
@@ -2055,7 +1507,7 @@
                 context.globalAlpha = 0.58;
 
                 for (const cell of drawableCells) {
-                    const value = Number(gridValueAt(values, cell.index));
+                    const value = Number(values[cell.index]);
                     if (!Number.isFinite(value)) continue;
                     if (Number.isFinite(hotspotThreshold) && value < hotspotThreshold) continue;
 
@@ -2123,6 +1575,8 @@
     }
 
     function clearSelectedRegion() {
+        marker?.remove();
+        marker = null;
         selectedBoundaryLayer?.remove();
         selectedBoundaryLayer = null;
     }
@@ -2202,6 +1656,7 @@
                     animate: true,
                     duration: 0.65
                 });
+                marker = L.marker(bounds.getCenter()).bindTooltip(label, { permanent: true, direction: 'top' }).addTo(map);
                 return;
             }
         }
@@ -2212,6 +1667,7 @@
             map.setMinZoom(9);
             regionViewBounds = null;
             map.setView(center, regionZoom(region));
+            marker = L.marker(center).bindTooltip(label, { permanent: true, direction: 'top' }).addTo(map);
         }
     }
 
@@ -2242,24 +1698,6 @@
         });
     }
 
-    function createBaseLayer(L, style) {
-        const config = BASE_TILE_STYLES[style] || BASE_TILE_STYLES.default;
-        return L.tileLayer(config.url, {
-            attribution: config.attribution,
-            crossOrigin: true,
-            maxZoom: config.maxZoom
-        });
-    }
-
-    function setBaseMapStyle(style) {
-        if (style === baseMapStyle || !BASE_TILE_STYLES[style]) return;
-        baseMapStyle = style;
-        if (!map || !window.L) return;
-        const nextLayer = createBaseLayer(window.L, style).addTo(map);
-        if (baseLayer) baseLayer.remove();
-        baseLayer = nextLayer;
-    }
-
     function initializeMap(L) {
         mapLoading = true;
         map = L.map(mapElement, {
@@ -2278,40 +1716,8 @@
         });
 
         if (!locked) {
-            const zoomControl = L.control.zoom({ position: 'bottomright' }).addTo(map);
-            const measureZoomOffsets = () => {
-                const zoomEl = zoomControl.getContainer();
-                if (!zoomEl || !mapElement) return false;
-                const mapRect = mapElement.getBoundingClientRect();
-                const zoomRect = zoomEl.getBoundingClientRect();
-                if (!zoomRect.height || !mapRect.height) return false;
-                locateButtonOffset = Math.round(mapRect.bottom - zoomRect.top + 8);
-                scaleBottomOffset = Math.round(mapRect.bottom - zoomRect.bottom);
-                return true;
-            };
-            let measureAttempts = 0;
-            const retryMeasure = () => {
-                if (measureZoomOffsets() || measureAttempts > 10) return;
-                measureAttempts += 1;
-                window.setTimeout(retryMeasure, 120);
-            };
-            retryMeasure();
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
         }
-
-        const scaleControl = L.control.scale({ metric: true, imperial: false, position: 'bottomright' }).addTo(map);
-        const attachScaleControl = () => {
-            const scaleEl = scaleControl.getContainer();
-            const target = scaleControlEl || mapElement?.parentElement?.querySelector('.map-scale-control');
-            if (!scaleEl || !target) return false;
-            if (scaleEl.parentElement !== target) target.appendChild(scaleEl);
-            return true;
-        };
-        if (!attachScaleControl()) {
-            window.setTimeout(() => {
-                if (!attachScaleControl()) window.setTimeout(attachScaleControl, 200);
-            }, 0);
-        }
-        L.control.scale({ position: 'bottomleft', metric: true, imperial: false }).addTo(map);
 
         if (!map.getPane('parcelCandidatePane')) {
             map.createPane('parcelCandidatePane');
@@ -2323,7 +1729,10 @@
             map.getPane('selectedBoundaryPane').style.pointerEvents = 'none';
         }
 
-        baseLayer = createBaseLayer(L, baseMapStyle).addTo(map);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
 
         if (hasVWorldApiKey()) {
             sidoLayer = L.tileLayer
@@ -2367,12 +1776,8 @@
             })
             .catch((error) => console.error(error));
 
-        const resizeObserver = new ResizeObserver(() => map?.invalidateSize?.({ pan: false }));
-        if (mapElement) resizeObserver.observe(mapElement);
-
         return () => {
             disposed = true;
-            resizeObserver.disconnect();
             removeRiskGridLayer();
             parcelCandidateLayer?.remove();
             adaptationSiteLayer?.remove();
@@ -2383,11 +1788,9 @@
     $effect(() => {
         regionCode;
         regionName;
-        untrack(() => {
-            locateRegion();
-            if (showAnalysisLegend) renderAnalysisLayers();
-            renderRiskGridLayer();
-        });
+        locateRegion();
+        if (showAnalysisLegend) renderAnalysisLayers();
+        renderRiskGridLayer();
     });
 
     $effect(() => {
@@ -2454,33 +1857,24 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </svelte:head>
 
-<div class={`region-map-wrap${exportBusy ? ' map-exporting' : ''}`}>
-    <div class:locked-map={locked} class:tabbed-map={showAnalysisLegend} class="region-map" bind:this={mapElement} style={`height:${height}`}></div>
+<div class="region-map-wrap">
+    <div class:locked-map={locked} class="region-map" bind:this={mapElement} style={`height:${height}`}></div>
     {#if mapLoading}
-        <div class="map-refresh-loading" role="status" aria-live="polite" data-map-export-ignore>
+        <div class="map-refresh-loading" role="status" aria-live="polite">
             <span></span>
             <strong>지도 준비 중</strong>
             <small>선택 지역의 배경지도와 분석 레이어를 준비하고 있습니다.</small>
         </div>
     {/if}
-    {#if exportStatus}
-        <div class="map-export-status" data-map-export-ignore role="status" aria-live="polite">{exportStatus}</div>
-    {/if}
-    <div class="map-scale-control" data-map-export-ignore style={`bottom:${scaleBottomOffset}px`} bind:this={scaleControlEl}></div>
     {#if showAnalysisLegend}
-        <div class="analysis-overlay-stack" data-map-export-ignore>
-            <div class="analysis-legend" aria-label="표시 레이어">
-                <div class="legend-head">
-                    <strong>표시 레이어</strong>
-                    <button
-                        type="button"
-                        class="legend-info-toggle"
-                        class:active={legendInfoOpen}
-                        aria-expanded={legendInfoOpen}
-                        aria-label={`표시 레이어 안내 ${legendInfoOpen ? '닫기' : '보기'}`}
-                        onclick={() => (legendInfoOpen = !legendInfoOpen)}
-                    >ⓘ</button>
-                </div>
+        <div class="analysis-overlay-stack">
+            <div class="analysis-legend" aria-label="분석 범례">
+                <strong>분석 범례</strong>
+                <span class="legend-note">
+                    {riskGrid?.preview
+                        ? '분석 전 미리보기 · H·E·V 탭과 체크박스로 01 지표 데이터를 확인합니다.'
+                        : 'H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.'}
+                </span>
                 {#if riskGrid?.stats}
                     <label class="risk-surface-summary">
                         <input
@@ -2499,8 +1893,6 @@
                         <button
                             type="button"
                             class:active={selectedGridLayer === layer}
-                            class:dim-tab={dimensionTabColors[layer]}
-                            style={dimensionTabColors[layer] ? `--dim-tab-color:${dimensionTabColors[layer]}` : undefined}
                             disabled={riskGrid?.preview && ['Risk', 'Hotspot'].includes(layer)}
                             onclick={() => { selectedGridLayer = layer; onGridLayerChange(layer); renderRiskGridLayer(); }}
                         >
@@ -2515,7 +1907,7 @@
                             <h3>{group} ({analysisGroupEnglish[group]})</h3>
                             <div class="legend-items">
                                 {#each items as item}
-                                    <label class:dimmed={!visibleAnalysisLayerIds.includes(String(item.id))}>
+                                    <label>
                                         <input
                                             type="checkbox"
                                             checked={visibleAnalysisLayerIds.includes(String(item.id))}
@@ -2523,7 +1915,7 @@
                                         />
                                         <i style={`--legend-color:${item.color || '#64748b'}`}></i>
                                         <b>{item.label}</b>
-                                        <small title={item.group === '적응역량' ? '값이 높을수록 위험도가 낮아집니다' : '값이 높을수록 위험도가 높아집니다'}>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</small>
+                                        <small>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</small>
                                     </label>
                                 {/each}
                             </div>
@@ -2535,27 +1927,16 @@
                 {:else if !enabledAnalysisIndicators().length}
                     <p>선택된 분석 지표가 없습니다.</p>
                 {/if}
+                {#if enabledAnalysisIndicators().length && !enabledAnalysisIndicators().some((item) => item.geojson) && !riskGrid?.values?.length}
+                    <p>실제 공간 결과 레이어는 아직 연결 전입니다.</p>
+                {/if}
             </div>
-            {#if legendInfoOpen}
-                <div class="legend-info-popover" role="dialog" aria-label="표시 레이어 안내">
-                    <div class="legend-info-popover-head">
-                        <span class="legend-info-chip">안내</span>
-                        <button type="button" class="legend-info-close" aria-label="안내 닫기" onclick={() => (legendInfoOpen = false)}>×</button>
-                    </div>
-                    <p>
-                        {riskGrid?.preview
-                            ? '분석 전 미리보기 · H·E·V 탭과 체크박스로 01 지표 데이터를 확인합니다.'
-                            : 'H·E·V 탭과 체크박스로 지도 시각화를 켜고 끌 수 있습니다.'}
-                    </p>
-                    <p>표시를 끄면 지도 레이어가 숨겨지고 범례 행도 흐려집니다. Risk 분석 포함 여부는 01 분석 지표 선택에서 설정합니다.</p>
-                </div>
-            {/if}
             {#if riskGrid?.stats}
                 <div class="parcel-candidate-panel" aria-label="실천권역 도출 패널">
                     <div class="parcel-candidate-tools">
                         <button
                             type="button"
-                            disabled={parcelCandidateRunning}
+                            disabled={parcelCandidateRunning || !hasVWorldApiKey()}
                             onclick={deriveParcelCandidates}
                         >
                             {parcelCandidateRunning ? '실천권역 분석 중...' : '실천권역도출하기'}
@@ -2591,63 +1972,35 @@
             {/if}
         </div>
     {/if}
-    <div class="display-settings-panel" data-map-export-ignore aria-label="표시 설정">
-        <label class="display-toggle-row">
-            <span class="display-toggle-label">흑백 지도</span>
-            <span class="switch">
-                <input
-                    type="checkbox"
-                    checked={baseMapStyle === 'grayscale'}
-                    onchange={(event) => setBaseMapStyle(event.currentTarget.checked ? 'grayscale' : 'default')}
-                />
-                <span class="switch-track" aria-hidden="true"></span>
-            </span>
+    <div class="layer-panel">
+        <strong>베이스·행정 레이어</strong>
+        <span class="local-boundary">{selectedBoundaryVisible ? '선택지역 경계 표시 중' : '선택지역 경계 숨김'}</span>
+        <label>
+            <input
+                type="checkbox"
+                checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
+                disabled={forceSelectedBoundary}
+                onchange={(event) => {
+                    if (forceSelectedBoundary) return;
+                    selectedBoundaryVisible = event.currentTarget.checked;
+                    toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
+                }}
+            />
+            선택지역 경계
         </label>
-        <label class="display-toggle-row">
-            <span class="display-toggle-label">분석지역 경계</span>
-            <span class="switch">
-                <input
-                    type="checkbox"
-                    checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
-                    disabled={forceSelectedBoundary}
-                    onchange={(event) => {
-                        if (forceSelectedBoundary) return;
-                        selectedBoundaryVisible = event.currentTarget.checked;
-                        toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
-                    }}
-                />
-                <span class="switch-track" aria-hidden="true"></span>
-            </span>
-        </label>
-    </div>
-    <div class="map-control-column" data-map-export-ignore style={`bottom:${locateButtonOffset}px`}>
-        <button
-            class="map-icon-button"
-            type="button"
-            aria-label="지도 PNG 다운로드"
-            title={exportBusy ? 'PNG 생성 중' : '지도 PNG 다운로드'}
-            disabled={mapLoading || exportBusy}
-            onclick={exportMapImage}
-        >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 3.5v10"></path>
-                <path d="M7.75 9.75 12 14l4.25-4.25"></path>
-                <path d="M4.5 19.5h15"></path>
-            </svg>
-        </button>
+        {#if hasVWorldApiKey()}
+            <label><input type="checkbox" checked={sidoBoundaryVisible} onchange={(event) => { sidoBoundaryVisible = event.currentTarget.checked; toggleLayer(sidoLayer, sidoBoundaryVisible); }} /> 시도 경계</label>
+            <label><input type="checkbox" checked={sigunguBoundaryVisible} onchange={(event) => { sigunguBoundaryVisible = event.currentTarget.checked; toggleLayer(sggLayer, sigunguBoundaryVisible); }} /> 시군구 경계</label>
+            {#if showCadastral}
+                <label><input type="checkbox" checked={cadastralVisible} onchange={(event) => { cadastralVisible = event.currentTarget.checked; toggleLayer(cadastralLayer, cadastralVisible); }} /> 연속지적도</label>
+            {/if}
+        {:else}
+            <span>VWorld API 키가 없으면 공식 WMS 레이어만 비활성화됩니다.</span>
+        {/if}
         {#if !locked}
-            <button
-                class="map-icon-button"
-                type="button"
-                aria-label={regionReturnLabel()}
-                title={`${regionName || '선택 지역'} 전체 보기`}
-                onclick={() => returnToSelectedRegion()}
-            >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <circle cx="12" cy="12" r="6.25"></circle>
-                    <path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
-                    <circle class="target-dot" cx="12" cy="12" r="1.4"></circle>
-                </svg>
+            <button class="return-region-button" type="button" onclick={returnToSelectedRegion} title={`${regionName || '선택 지역'} 전체 보기`}>
+                <span aria-hidden="true">⌖</span>
+                {regionReturnLabel()}
             </button>
         {/if}
     </div>
@@ -2664,70 +2017,6 @@
         border: 1px solid #d9e7ee;
         border-radius: 1rem;
         background: #e8f3f5;
-    }
-
-    /* 대안 탭이 위에 얹히는 배치에서는 탭의 오목 곡선과 같은 반경으로 맞춘다 */
-    .region-map.tabbed-map {
-        border-radius: 9px;
-    }
-
-
-    .map-export-canvas-snapshot {
-        position: absolute;
-        z-index: 430;
-        max-width: none;
-        pointer-events: none;
-        image-rendering: auto;
-    }
-
-    .map-export-status {
-        position: absolute;
-        right: .85rem;
-        bottom: 4.15rem;
-        z-index: 900;
-        max-width: 18rem;
-        border-radius: .55rem;
-        background: rgb(15 23 42 / 88%);
-        color: #fff;
-        padding: .42rem .58rem;
-        font-size: .66rem;
-        font-weight: 800;
-        line-height: 1.35;
-        text-align: right;
-        pointer-events: none;
-    }
-
-    .map-scale-control {
-        position: absolute;
-        right: 3.4rem;
-        z-index: 700;
-        pointer-events: none;
-    }
-
-    .map-scale-control :global(.leaflet-control-scale) {
-        margin: 0;
-    }
-
-    .map-scale-control :global(.leaflet-control-scale-line) {
-        border: 2px solid #1f2937;
-        border-top: 0;
-        border-radius: 0;
-        background: transparent;
-        box-shadow: none;
-        color: #1f2937;
-        padding: 0 .2rem;
-        font-size: .66rem;
-        font-weight: 800;
-        line-height: 1.25;
-        text-align: right;
-        text-shadow: 0 0 3px #fff, 0 0 3px #fff;
-    }
-
-    .map-exporting .analysis-legend,
-    .map-exporting .parcel-candidate-panel,
-    .map-exporting .display-settings-panel {
-        background: #fff;
-        backdrop-filter: none;
     }
 
     .map-refresh-loading {
@@ -2766,146 +2055,49 @@
         font-size: .65rem;
     }
 
-    .display-settings-panel {
+    .return-region-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: .35rem;
+        width: 100%;
+        margin-top: .3rem;
+        border: 1px solid rgb(15 118 110 / 26%);
+        border-radius: .65rem;
+        background: #ecfdf5;
+        color: #0f766e;
+        padding: .52rem .72rem;
+        font-size: .72rem;
+        font-weight: 900;
+        cursor: pointer;
+    }
+
+    .return-region-button:hover {
+        border-color: #0f766e;
+        background: #ecfdf5;
+    }
+
+    .return-region-button span {
+        font-size: 1rem;
+        line-height: 1;
+    }
+
+    .layer-panel {
         position: absolute;
-        left: .85rem;
-        bottom: .85rem;
-        z-index: 640;
+        right: .85rem;
+        top: .85rem;
+        z-index: 500;
         display: grid;
-        gap: .625rem;
-        width: max-content;
+        gap: .38rem;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .9rem;
-        background: rgb(255 255 255 / 96%);
-        padding: .75rem;
-        box-shadow: 0 22px 46px rgb(15 23 42 / 18%);
+        background: rgb(255 255 255 / 92%);
+        padding: .75rem .85rem;
+        box-shadow: 0 18px 36px rgb(15 23 42 / 14%);
+        color: #0f172a;
+        font-size: .78rem;
+        font-weight: 800;
         backdrop-filter: blur(10px);
-        pointer-events: auto;
-    }
-
-    .display-toggle-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1.2rem;
-        cursor: pointer;
-    }
-
-    .display-toggle-label {
-        color: #64748b;
-        font-size: .75rem;
-        font-weight: 700;
-        white-space: nowrap;
-    }
-
-    .switch {
-        position: relative;
-        display: inline-flex;
-        flex: 0 0 auto;
-        width: 2.1rem;
-        height: 1.15rem;
-    }
-
-    .switch input {
-        position: absolute;
-        inset: 0;
-        margin: 0;
-        opacity: 0;
-        cursor: pointer;
-    }
-
-    .switch-track {
-        position: absolute;
-        inset: 0;
-        border-radius: 999px;
-        background: #cbd5e1;
-        transition: background .16s ease;
-    }
-
-    .switch-track::before {
-        content: '';
-        position: absolute;
-        top: .13rem;
-        left: .13rem;
-        width: .9rem;
-        height: .9rem;
-        border-radius: 999px;
-        background: #fff;
-        box-shadow: 0 1px 3px rgb(15 23 42 / 30%);
-        transition: transform .16s ease;
-    }
-
-    .switch input:checked + .switch-track {
-        background: #0f766e;
-    }
-
-    .switch input:checked + .switch-track::before {
-        transform: translateX(.95rem);
-    }
-
-    .switch input:disabled + .switch-track {
-        opacity: .5;
-        cursor: not-allowed;
-    }
-
-    .switch input:focus-visible + .switch-track {
-        outline: 2px solid rgb(45 212 191 / 55%);
-        outline-offset: 2px;
-    }
-
-    .map-control-column {
-        position: absolute;
-        right: .625rem;
-        z-index: 680;
-        display: flex;
-        flex-direction: column;
-        gap: .5rem;
-        pointer-events: auto;
-    }
-
-    .map-icon-button {
-        display: grid;
-        place-items: center;
-        width: 2.125rem;
-        height: 2.125rem;
-        border: 2px solid rgb(0 0 0 / 20%);
-        border-radius: 4px;
-        background: #fff;
-        color: #000;
-        padding: 0;
-        box-shadow: none;
-        cursor: pointer;
-        transition: background .16s ease, color .16s ease;
-    }
-
-    .map-icon-button:hover:not(:disabled) {
-        background: #f4f4f4;
-    }
-
-    .map-icon-button:disabled {
-        color: #9ca3af;
-        cursor: wait;
-    }
-
-    .map-icon-button:focus-visible {
-        outline: 3px solid rgb(45 212 191 / 38%);
-        outline-offset: 2px;
-    }
-
-    .map-icon-button svg {
-        width: 1.05rem;
-        height: 1.05rem;
-        overflow: visible;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.9;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-    }
-
-    .map-icon-button .target-dot {
-        fill: currentColor;
-        stroke: none;
     }
 
     .analysis-overlay-stack {
@@ -2915,7 +2107,7 @@
         z-index: 640;
         display: grid;
         gap: .6rem;
-        width: min(14.5rem, calc(100% - 2rem));
+        width: min(19rem, calc(100% - 2rem));
         max-height: calc(100% - 1.7rem);
         pointer-events: none;
     }
@@ -2934,99 +2126,20 @@
         pointer-events: auto;
     }
 
-    .legend-head {
-        display: flex;
-        align-items: center;
-        gap: .35rem;
-    }
-
-    .legend-head strong {
+    .analysis-legend > strong {
+        display: block;
         color: #073b52;
         font-size: .88rem;
         font-weight: 900;
     }
 
-    .legend-info-toggle {
-        flex: 0 0 auto;
-        border: 0;
-        background: transparent;
-        color: #9aa8a2;
-        padding: 0;
-        font-size: .78rem;
-        line-height: 1;
-        cursor: pointer;
-    }
-
-    .legend-info-toggle:hover,
-    .legend-info-toggle.active { color: #0f766e; }
-
-    /* 스크롤되는 범례 패널 안에 두면 패널이 늘어나므로, 오버레이 스택에 직접 띄운다.
-       top = 범례 테두리 1px + 패딩 12.8px + 헤드 21.1px + 간격 8px */
-    .legend-info-popover {
-        position: absolute;
-        top: 43px;
-        left: 0;
-        right: 0;
-        z-index: 90;
-        border-radius: 10px;
-        background: var(--color-brand-dark);
-        color: #fff;
-        padding: 10px 12px 12px;
-        box-shadow: 0 18px 36px rgb(15 23 42 / 22%);
-        pointer-events: auto;
-    }
-
-    .legend-info-popover::before {
-        content: '';
-        position: absolute;
-        top: -4px;
-        left: 85px;
-        width: 11px;
-        height: 11px;
-        transform: rotate(45deg);
-        border-radius: 2px;
-        background: var(--color-brand-dark);
-    }
-
-    .legend-info-popover-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        margin-bottom: 8px;
-    }
-
-    .legend-info-chip {
-        border-radius: 999px;
-        background: rgb(255 255 255 / 18%);
-        padding: 3px 9px;
-        font-size: 10px;
+    .legend-note {
+        display: block;
+        margin-top: .2rem;
+        color: #64748b;
+        font-size: .68rem;
         font-weight: 800;
     }
-
-    .legend-info-popover .legend-info-close {
-        flex: 0 0 auto;
-        border: 0;
-        background: transparent;
-        color: rgb(255 255 255 / 78%);
-        padding: 0 2px;
-        font-size: 15px;
-        font-weight: 600;
-        line-height: 1;
-        cursor: pointer;
-    }
-
-    .legend-info-popover .legend-info-close:hover { color: #fff; }
-
-    .legend-info-popover p {
-        margin: 0 0 6px;
-        color: #fff;
-        font-size: 11px;
-        font-weight: 600;
-        line-height: 1.5;
-    }
-
-    .legend-info-popover p:last-child { margin-bottom: 0; }
 
     .risk-surface-summary {
         display: grid;
@@ -3072,44 +2185,22 @@
     }
 
     .analysis-grid-tabs {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: .28rem;
         margin-top: .5rem;
     }
 
     .analysis-grid-tabs button {
-        flex: 0 1 auto;
         min-width: 0;
         border: 1px solid rgb(15 23 42 / 10%);
         border-radius: .45rem;
         background: #f8fafc;
         color: #475569;
-        padding: .34rem .5rem;
+        padding: .34rem .18rem;
         font-size: .62rem;
         font-weight: 900;
         cursor: pointer;
-    }
-
-    .analysis-grid-tabs button.dim-tab {
-        display: grid;
-        place-items: center;
-        flex: 0 0 auto;
-        width: 1.7rem;
-        height: 1.7rem;
-        border: 1px solid var(--dim-tab-color);
-        border-radius: 999px;
-        background: #f8fafc;
-        color: #475569;
-        padding: 0;
-    }
-
-    .analysis-grid-tabs button.dim-tab.active {
-        border-color: var(--dim-tab-color);
-        background: var(--dim-tab-color);
-        color: #fff;
-        box-shadow: 0 8px 18px rgb(15 23 42 / 18%);
     }
 
     .analysis-grid-tabs button.active {
@@ -3262,16 +2353,15 @@
         gap: .35rem;
     }
 
-
     .legend-items label {
         display: grid;
         grid-template-columns: .85rem .75rem minmax(0, 1fr) auto;
         gap: .45rem;
         align-items: center;
         min-width: 0;
-        color: #475569;
-        font-size: .66rem;
-        font-weight: 700;
+        color: #334155;
+        font-size: .72rem;
+        font-weight: 800;
         cursor: pointer;
     }
 
@@ -3288,21 +2378,6 @@
         border-radius: 999px;
         background: var(--legend-color);
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--legend-color) 18%, transparent);
-    }
-
-    .legend-items label.dimmed i {
-        opacity: .35;
-        box-shadow: none;
-    }
-
-    .legend-items label.dimmed b {
-        color: #94a3b8;
-        font-weight: 600;
-    }
-
-    .legend-items label.dimmed small {
-        background: #f1f5f9;
-        color: #94a3b8;
     }
 
     .legend-items b {
@@ -3328,4 +2403,25 @@
         font-weight: 700;
     }
 
+    .layer-panel strong {
+        color: #073b52;
+        font-size: .85rem;
+    }
+
+    .layer-panel label {
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+        white-space: nowrap;
+    }
+
+    .layer-panel span {
+        max-width: 14rem;
+        color: #64748b;
+        line-height: 1.45;
+    }
+
+    .local-boundary {
+        color: #047857 !important;
+    }
 </style>

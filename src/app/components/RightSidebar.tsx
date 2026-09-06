@@ -1,6 +1,6 @@
-import { CloudSun, ExternalLink, FlaskConical, Wrench } from 'lucide-react';
+import { ExternalLink, FlaskConical, Wrench } from 'lucide-react';
 import { Link } from 'react-router';
-import { planningOptimizationLabUrl } from '../toolUrls';
+import { climateHazardLabUrl } from '../toolUrls';
 
 interface RightSidebarProps {
   selectedItem: string;
@@ -30,17 +30,10 @@ const sidebarItems = [
     icon: Wrench,
   },
   {
-    id: 'climate-data-lab',
-    label: '기후·기상 데이터 실험실',
-    description: '지도 기반 관측·LST·IC4 미래전망',
-    internalUrl: '/climate-scenario-lab',
-    icon: CloudSun,
-  },
-  {
     id: 'climate-hazard-lab',
-    label: '전국 기후위험 실험실',
-    description: '행정구역별 H01~H10 100m 지표 확인',
-    externalUrl: planningOptimizationLabUrl,
+    label: 'H01~H10 기후위험 실험실',
+    description: '새로 구축한 전국 100m 지표 기반 분석',
+    sameTabUrl: climateHazardLabUrl,
     icon: Wrench,
   },
 ];
@@ -77,6 +70,10 @@ export function RightSidebar({ selectedItem, onSelectItem }: RightSidebarProps) 
 
           return item.externalUrl ? (
             <a key={item.id} href={item.externalUrl} target="_blank" rel="noopener noreferrer" className={className}>
+              {content}
+            </a>
+          ) : item.sameTabUrl ? (
+            <a key={item.id} href={item.sameTabUrl} className={className}>
               {content}
             </a>
           ) : item.internalUrl ? (

@@ -3,7 +3,7 @@
     import { base } from '$app/paths';
     import proj4 from 'proj4';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
-    import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
+    import SelectedRegionMap from '$lib/maps/ClimateHazardRegionMap.svelte';
     import {
         enrichPracticeDistricts,
         PRACTICE_TYPE_META,
@@ -55,7 +55,7 @@
             heroEmphasis: '우선 대응지를 찾습니다.',
             heroDescription: '기후위험(H), 노출(E), 취약성(V) 지표를 직접 구성하고 공간 분석 결과를 의사결정으로 연결하세요.',
             sampleNotice: '전국 행정구역별 H01~H10 100m 분석격자를 확인할 수 있습니다.',
-            mapSource: '전국 최근 5년 H01~H05·H07·H10 / SSP245 H01~H09 100m 격자',
+            mapSource: '전국 최근 5년 H01~H10 / SSP H01~H09 100m 격자',
             rasterPath: null,
             dataSummaryPath: '/analysis-data/suwon-heatwave-data-summary.json',
             rasterReadyPrefix: '선택 행정구역 100m Hazard 격자',
@@ -76,9 +76,9 @@
                 { label: '관련 현황 데이터', source: '인구·녹지·무더위쉼터·표준격자' }
             ],
             alternatives: [
-                { name: '대안 1', status: '검토중', description: '취약계층 밀집지역 중심 그늘·쉼터 보강안' },
-                { name: '대안 2', status: '검토중', description: '보행축과 대중교통 결절점 중심 대응안' },
-                { name: '대안 3', status: '검토중', description: '공공시설·녹지 연계 복합 대응안' }
+                { name: '대안1', status: '검토중', description: '취약계층 밀집지역 중심 그늘·쉼터 보강안' },
+                { name: '대안2', status: '검토중', description: '보행축과 대중교통 결절점 중심 대응안' },
+                { name: '대안3', status: '검토중', description: '공공시설·녹지 연계 복합 대응안' }
             ],
             indicators: [
                 { id: 101, indicatorCode: 'H01', icon: '🌡', label: 'H01 · 평균기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#f59e0b' },
@@ -92,21 +92,16 @@
                 { id: 109, indicatorCode: 'H09', icon: '⏱', label: 'H09 · 최대 온난일 계속기간 WSDIx', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#c2410c' },
                 { id: 110, indicatorCode: 'H10', icon: '🛰', label: 'H10 · 여름철 지표면온도 P90', description: '2021~2025 Landsat 30m 원자료를 집계한 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'Landsat-LST-100m', supportedGridUnits: ['100m'], color: '#b45309' },
                 { id: 3, iconPath: asset('/indicator-icons/보행자.png'), label: '유동인구 노출량', description: 'Pop_Grid_100m Day_Total을 EPSG:5179 표준 100m 격자에 연결한 유동인구 노출량', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/E_population_floating_count_100m.json', value: 0.01259, color: '#db9d3e' },
-                { id: 4, floodIndicator: 'FE01', icon: '♟', label: '상주인구 노출량', description: '2024 전국 총인구 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], color: '#d4af42' },
-                { id: 5, iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 수', description: '국토정보플랫폼 2024년 10월 고령인구 수를 공통 EPSG:5179 100m 셀에 연결', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', populationIndicator: 'elderly', value: 0.06127, color: '#e45662' },
-                { id: 6, iconPath: asset('/indicator-icons/유소년인구비율.png'), label: '유아인구 수', description: '국토정보플랫폼 2024년 10월 유아인구 수를 공통 EPSG:5179 100m 셀에 연결', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', populationIndicator: 'infant', value: 0.02439, color: '#d96b72' },
+                { id: 4, icon: '♟', label: '상주인구 노출량', description: '국토통계 100m 격자 총인구 수를 EPSG:5179 표준 통계격자에 연결', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/E_population_resident_count_100m.json', value: 0.03308, color: '#d4af42' },
+                { id: 5, iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 비율', description: '국토통계 100m 격자 고령인구 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/V_sensitivity_elderly_ratio_100m.json', value: 0.06127, color: '#e45662' },
+                { id: 6, iconPath: asset('/indicator-icons/유소년인구비율.png'), label: '유소년인구 비율', description: '국토통계 100m 격자 유소년인구 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/V_sensitivity_children_ratio_100m.json', value: 0.02439, color: '#d96b72' },
                 { id: 7, iconPath: asset('/indicator-icons/1인가구.png'), label: '1인 가구', description: '행정동 1인가구 비율을 EPSG:5179 표준 100m 격자에 할당한 정규화 지표', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_sensitivity_single_household_ratio_100m_z.json', value: 0.50044, color: '#cf6576' },
                 { id: 8, iconPath: asset('/indicator-icons/기저질환자.png'), label: '건강 취약 참고', description: '2021-2023 순환기·호흡기 진료인원 기반 구 단위 건강취약 proxy', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_sensitivity_chronic_disease_ratio_proxy_100m_z.json', value: 0.50816, color: '#b86c82' },
                 { id: 9, iconPath: asset('/indicator-icons/저소득층.png'), label: '저소득층', description: '2026 기초생활보장 수급자 현황 기반 행정동 저소득층 비율 proxy', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_adaptive_low_income_ratio_proxy_100m_z.json', value: 0.26613, color: '#a56d83' },
-                { id: 10, iconPath: asset('/indicator-icons/노후주택비율.png'), label: '30년 이상 건축물 비율', description: '전국 GIS 건물통합정보 사용승인일 확인 건축물 기준 100m 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], analysisIndicator: 'building-old-30y-ratio', color: '#a77a72' },
+                { id: 10, iconPath: asset('/indicator-icons/노후주택비율.png'), label: '노후주택 비율', description: '건축물 주거용도 proxy 중 30년 이상 footprint 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_adaptive_old_housing_ratio_100m_z.json', value: 0.17228, color: '#a77a72' },
                 { id: 11, iconPath: asset('/indicator-icons/무더위쉼터접근성.png'), label: '무더위쉼터 접근성', description: '379개 무더위쉼터 최근접 거리 기반 EPSG:5179 100m 접근성 점수', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'cooling-shelter-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/cooling-shelter/V_adaptive_cooling_shelter_accessibility_100m_z.json', value: 0.87419, color: '#3f9b80' },
                 { id: 12, iconPath: asset('/indicator-icons/녹지비율.png'), label: '녹지 비율', description: '세분류토지피복도 산림·초지·수역 기반 100m 녹지/자연자원 면적 비율', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_adaptive_green_natural_ratio_100m_z.json', value: 0.38105, color: '#57a66c' },
-                { id: 13, iconPath: asset('/indicator-icons/그늘면적.png'), label: '그늘 면적', description: '그늘/수목 공간데이터 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'file', value: 0.51, color: '#61958b' },
-                { id: 14, icon: '🚏', label: '버스정류장 노출 proxy', description: '전국 버스정류장 100m 셀 밀도 · 실제 이용량이 아닌 정류장 위치 기반 노출 참고지표', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-bus-stop', color: '#ca8a04' },
-                { id: 15, icon: '🚇', label: '도시철도 결절점', description: '전국 도시철도 역사 851개를 100m 셀에 집계한 대중교통 결절점 노출 proxy', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-rail-station', color: '#a16207' },
-                { id: 16, icon: '⌂', label: '주거용 건축물 밀도', description: '전국 GIS 건물통합정보의 주거용 건축물 수를 100m 셀에 집계', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], analysisIndicator: 'building-residential-count', color: '#b7791f' },
-                { id: 17, icon: '▰', label: '횡단보도 노출 proxy', description: '전국횡단보도 표준자료의 100m 셀 밀도 · 부산·대구·세종 보완 필요', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-crosswalk', color: '#d97706' },
-                { id: 18, icon: '⇄', label: '대중교통 접근성 proxy', description: '전국 버스정류장 100m 셀 밀도를 쉼터·공공시설 이동 접근성 참고지표로 사용 · 실제 이동시간은 아님', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-bus-stop', color: '#358b78' }
+                { id: 13, iconPath: asset('/indicator-icons/그늘면적.png'), label: '그늘 면적', description: '그늘/수목 공간데이터 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'file', value: 0.51, color: '#61958b' }
             ],
             candidates: [
                 { name: '후보지 03', area: '팔달구 인계동', risk: 0.82, h: 0.76, e: 0.91, v: 0.81, rank: 1, reason: '고령층·유동인구 집중, 쉼터 접근성 부족' },
@@ -119,12 +114,12 @@
             projectSuffix: '홍수 위험지역 분석',
             heroEmphasis: '우선 대응 침수권역을 찾습니다.',
             heroDescription: '침수위험(H), 노출(E), 취약성(V) 지표를 구성하고 배수·저류·대피 대안을 공간적으로 비교하세요.',
-            sampleNotice: '전국 침수위험·강우·DEM·인구·건축물·교통시설 100m PostGIS 격자를 연결했습니다.',
-            mapSource: '전국 홍수 H/E/V PostGIS 100m 서비스 격자',
+            sampleNotice: '현재 홍수 분석 데이터와 후보지는 구조 시연용 샘플입니다.',
+            mapSource: '침수흔적도·DEM·배수시설 데이터 연결 준비',
             rasterPath: null,
             dataSummaryPath: null,
-            rasterReadyPrefix: '선택 행정구역 홍수 100m 격자',
-            rasterError: '선택 행정구역 홍수 격자 연결 실패',
+            rasterReadyPrefix: '홍수 위험 래스터',
+            rasterError: '홍수 위험 래스터 연결 전 · 예시 격자 표시',
             actionTitle: '배수개선·저류공간·대피동선 우선 정비',
             brief: {
                 driverTitle: '반지하·저지대 주거',
@@ -141,37 +136,23 @@
                 { label: '관련 현황 데이터', source: '인구·도로·대피시설·표준격자' }
             ],
             alternatives: [
-                { name: '대안 1', status: '검토중', description: '상습 침수구역과 저지대 중심 우선 관리안' },
-                { name: '대안 2', status: '검토중', description: '하천·우수관로 연결축 중심 배수 개선안' },
-                { name: '대안 3', status: '검토중', description: '반지하·취약시설 보호 중심 대응안' }
+                { name: '대안1', status: '검토중', description: '상습 침수구역과 저지대 중심 우선 관리안' },
+                { name: '대안2', status: '검토중', description: '하천·우수관로 연결축 중심 배수 개선안' },
+                { name: '대안3', status: '검토중', description: '반지하·취약시설 보호 중심 대응안' }
             ],
             indicators: [
-                { id: 201, floodIndicator: 'FH01', icon: '≈', label: 'H01 · 도시침수 30년', description: '도시침수 30년 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#2563eb' },
-                { id: 209, floodIndicator: 'UF50', icon: '≈', label: '도시침수 50년', description: '50년 빈도 도시침수지도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#1e40af' },
-                { id: 210, floodIndicator: 'UF80', icon: '≈', label: '도시침수 80년', description: '80년 빈도 도시침수지도 5m 원자료 · 전국 묶음 중 2개 지역 원본 누락', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#3730a3' },
-                { id: 219, floodIndicator: 'UF100', icon: '≈', label: '도시침수 100년', description: '100년 빈도 도시침수지도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#312e81' },
-                { id: 202, floodIndicator: 'FH02', icon: '≋', label: 'H02 · 국가하천 100년', description: '국가하천 범람 100년 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#1d4ed8' },
-                { id: 203, floodIndicator: 'FH03', icon: '≋', label: 'H03 · 지방하천 50년', description: '지방하천 범람 50년 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#0369a1' },
-                { id: 204, analysisIndicator: 'rain-max-1h', icon: '☔', label: '1시간 최대강우량', description: '2016~2025년 4~10월 ASOS 관측 극값을 최근접 관측소 기준으로 연결', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-KMA-100m', supportedGridUnits: ['100m'], color: '#0284c7' },
-                { id: 205, analysisIndicator: 'terrain-low-elevation', icon: '▾', label: '저지대 지형', description: '전국 DEM 100m 표고 · 대상지 내 낮은 표고일수록 위험 점수 증가', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#0891b2' },
-                { id: 206, analysisIndicator: 'terrain-twi', icon: '◒', label: '지형습윤지수 TWI', description: '전국 DEM 기반 100m 지형습윤지수', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#0e7490' },
-                { id: 207, analysisIndicator: 'terrain-flow-accumulation', icon: '⇣', label: '유로 누적량', description: '전국 DEM 기반 100m 유로 누적량', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#155e75' },
-                { id: 208, analysisIndicator: 'terrain-depression-depth', icon: '⌄', label: '지형 함몰 깊이', description: '전국 DEM 기반 100m 함몰 깊이', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#164e63' },
-                { id: 211, floodIndicator: 'FE01', icon: '♟', label: 'FE01 · 상주인구', description: '2024 전국 총인구 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#d4af42' },
-                { id: 212, floodIndicator: 'FE02', icon: '⌂', label: 'FE02 · 주택 수', description: '2024 전국 주택 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#c58b2a' },
-                { id: 213, floodIndicator: 'FE03', coveragePrefix: '4111', icon: '🚶', label: 'FE03 · 유동인구', description: '2021 수원시 일평균 유동인구 100m · 현재 수원시만 제공', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#db9d3e' },
-                { id: 214, analysisIndicator: 'facility-bus-stop', icon: '🚏', label: '버스정류장 노출 proxy', description: '전국 정류장 위치의 100m 셀 밀도 · 실제 이용량은 아님', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#b7791f' },
-                { id: 215, analysisIndicator: 'facility-rail-station', icon: '🚇', label: '도시철도 결절점', description: '전국 도시철도 역사 851개의 100m 셀 밀도', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#a16207' },
-                { id: 216, analysisIndicator: 'facility-crosswalk', icon: '▰', label: '횡단보도 노출 proxy', description: '전국횡단보도 표준자료 100m 셀 밀도 · 부산·대구·세종 보완 필요', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#92400e' },
-                { id: 221, analysisIndicator: 'building-basement-count', icon: '⌂', label: '지하층 보유 건축물', description: '전국 GIS 건물통합정보의 지하층 보유 건축물 100m 셀 밀도', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], color: '#e45662' },
-                { id: 222, analysisIndicator: 'building-old-30y-ratio', icon: '🏚', label: '30년 이상 건축물 비율', description: '사용승인일 확인 건축물 중 30년 이상 건축물의 100m 셀 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], color: '#cf6576' },
-                { id: 223, populationIndicator: 'elderly', iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 수', description: '국토정보플랫폼 2024년 10월 전국 100m 고령인구', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', color: '#b86c82' },
-                { id: 224, populationIndicator: 'infant', iconPath: asset('/indicator-icons/유소년인구비율.png'), label: '유아인구 수', description: '국토정보플랫폼 2024년 10월 전국 100m 유아인구', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', color: '#a56d83' },
-                { id: 225, icon: '🏫', label: '어린이집·복지시설', description: '어린이집은 주소만 적재되어 좌표 원자료 보완 후 연결 예정', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'source-address-only', supportedGridUnits: ['100m'], color: '#9333ea' },
-                { id: 231, analysisIndicator: 'facility-bus-stop', icon: '⇄', label: '대중교통 대피 접근성 proxy', description: '전국 버스정류장 100m 셀 밀도를 대피 이동 접근성 참고지표로 사용 · 실제 대피경로·운행정보는 아님', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#358b78' },
-                { id: 234, analysisIndicator: 'facility-shelter', icon: '↗', label: '민방위 대피시설 접근성 proxy', description: '행정안전부 전국 현행 원본의 사용 중 시설 17,228개 실제 위치를 표시하고 400m 커널밀도를 계산 · 값이 높을수록 대피시설 접근성·적응역량이 높음', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-shelter-points-KDE-400m', supportedGridUnits: ['100m'], color: '#0f766e' },
-                { id: 232, icon: '◉', label: '빗물받이 밀도', description: '전국 빗물받이 원자료 보완 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'source-required', color: '#3f9b80' },
-                { id: 233, icon: '▤', label: '배수펌프장 접근성', description: '전국 배수펌프장·저류시설 원자료 보완 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'source-required', color: '#57a66c' }
+                { id: 1, icon: '≈', label: '침수흔적도', description: '과거 침수 이력 및 침수심 분포', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#2563eb' },
+                { id: 2, icon: '☔', label: '강우강도', description: '집중호우 강도 및 빈도', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#0284c7' },
+                { id: 3, icon: '▾', label: '저지대 지형', description: 'DEM 기반 저지대·경사 취약 구간', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, color: '#0891b2' },
+                { id: 4, icon: '♟', label: '상주인구', description: '침수권역 내 거주 인구', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#d4af42' },
+                { id: 5, icon: '🚶', label: '유동인구', description: '시간대별 보행·상권 유동 인구', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#db9d3e' },
+                { id: 6, icon: '🛣', label: '주요 도로', description: '침수 시 통행 영향 도로망', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, color: '#b7791f' },
+                { id: 7, icon: '⌂', label: '반지하 주거', description: '반지하·지하층 주거 밀집도', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#e45662' },
+                { id: 8, icon: '🏚', label: '노후건축물', description: '노후 건축물 및 취약 주택 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#cf6576' },
+                { id: 9, icon: '🏥', label: '취약시설', description: '복지시설·의료시설·학교 등 보호대상', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, color: '#a56d83' },
+                { id: 10, icon: '◉', label: '빗물받이 밀도', description: '빗물받이 및 우수 유입시설 분포', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#3f9b80' },
+                { id: 11, icon: '▤', label: '배수펌프장 접근성', description: '배수펌프장·저류시설 영향권', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#57a66c' },
+                { id: 12, icon: '↗', label: '대피시설 접근성', description: '대피소와 안전 이동경로 접근성', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, color: '#61958b' }
             ],
             candidates: [
                 { name: '후보지 02', area: '저지대 주거밀집지', risk: 0.84, h: 0.88, e: 0.79, v: 0.82, rank: 1, reason: '침수흔적과 반지하 주거가 중첩된 구역' },
@@ -206,9 +187,9 @@
                 { label: '관련 현황 데이터', source: '개발압력·인구·공원녹지·표준격자' }
             ],
             alternatives: [
-                { name: '대안 1', status: '검토중', description: '생태축 단절구간 중심 복원안' },
-                { name: '대안 2', status: '검토중', description: '도시녹지와 하천변 연결성 강화안' },
-                { name: '대안 3', status: '검토중', description: '서식지 민감지역 보호 중심 대응안' }
+                { name: '대안1', status: '검토중', description: '생태축 단절구간 중심 복원안' },
+                { name: '대안2', status: '검토중', description: '도시녹지와 하천변 연결성 강화안' },
+                { name: '대안3', status: '검토중', description: '서식지 민감지역 보호 중심 대응안' }
             ],
             indicators: [
                 { id: 1, icon: '◇', label: '생태축 단절도', description: '생태축 단절·훼손 구간 데이터 연결 필요', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'ecosystem-grid', value: 0.5, color: '#2f9e44' },
@@ -248,9 +229,9 @@
                             ? '2021~2025 평균 · 500m 원자료를 정렬한 지역 100m 분석격자'
                             : item.indicatorCode === 'H10'
                                 ? '2021~2025 여름철 P90 평균 · Landsat 30m를 집계한 지역 100m 격자'
-                                : observedCodes.has(item.indicatorCode)
-                                    ? '2021~2025 ASOS 95개소 지표를 IDW 공간화한 지역 100m 분석격자'
-                                    : '1991~2020 기준자료 수집 후 100m 공간모델 구축 예정'
+                                : ['H06', 'H08', 'H09'].includes(item.indicatorCode)
+                                    ? '1991~2020 기준자료와 2021~2025 ASOS 34개소 지표를 IDW 공간화한 지역 100m 분석격자'
+                                    : '2021~2025 ASOS 95개소 지표를 IDW 공간화한 지역 100m 분석격자'
                         : item.indicatorCode === 'H10'
                             ? 'SSP 기반 직접 미래 전망자료 없음'
                             : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 지역 100m 분석격자`,
@@ -266,29 +247,6 @@
                     enabled: available && item.indicatorCode === (observed ? 'H01' : 'H04')
                 };
             }
-            const covered = Boolean(code) && (!item.coveragePrefix || code.startsWith(item.coveragePrefix));
-            if (item.floodIndicator) {
-                const dataQuery = new URLSearchParams({ regionCode: code, indicator: item.floodIndicator });
-                return {
-                    ...item,
-                    dataPath: covered ? `/flood-grid?${dataQuery.toString()}` : null,
-                    dataStatus: covered ? (item.dataStatus || 'available') : 'missing',
-                    enabled: covered && item.enabled
-                };
-            }
-            if (item.analysisIndicator) {
-                const dataQuery = new URLSearchParams({ regionCode: code, indicator: item.analysisIndicator });
-                return {
-                    ...item,
-                    dataPath: covered ? `/analysis-grid?${dataQuery.toString()}` : null,
-                    dataStatus: covered ? (item.dataStatus || 'available') : 'missing',
-                    enabled: covered && item.enabled
-                };
-            }
-            if (item.populationIndicator) {
-                return { ...item, dataStatus: 'available' };
-            }
-            if (item.dataStatus === 'missing') return item;
             if (!code.startsWith('4111')) {
                 return { ...item, enabled: false, dataStatus: 'missing' };
             }
@@ -297,15 +255,10 @@
     }
 
     function isGridValueCollection(values) {
-        return Array.isArray(values) || ArrayBuffer.isView(values) || values instanceof Map;
+        return Array.isArray(values) || ArrayBuffer.isView(values);
     }
 
-    function gridValueCollectionSize(values) {
-        if (values instanceof Map) return values.size;
-        return Number(values?.length) || 0;
-    }
-
-    function decodeGridValues(grid, { preferDense = false } = {}) {
+    function decodeGridValues(grid) {
         if (Array.isArray(grid?.values)) {
             return { values: grid.values, validIndices: null };
         }
@@ -314,17 +267,15 @@
         }
 
         const valueCount = Number(grid.valueCount) || (Number(grid.columns) * Number(grid.rows));
-        const useSparseMap = !preferDense && valueCount > 500_000;
-        const values = useSparseMap ? new Map() : new Float32Array(valueCount);
-        if (!useSparseMap) values.fill(Number.NaN);
+        const values = new Float32Array(valueCount);
+        values.fill(Number.NaN);
         const validIndices = new Array(Math.floor(grid.sparseValues.length / 2));
         let validIndex = 0;
         for (let offset = 0; offset < grid.sparseValues.length; offset += 2) {
             const index = Number(grid.sparseValues[offset]);
             const value = Number(grid.sparseValues[offset + 1]);
             if (!Number.isInteger(index) || index < 0 || index >= valueCount || !Number.isFinite(value)) continue;
-            if (useSparseMap) values.set(index, value);
-            else values[index] = value;
+            values[index] = value;
             validIndices[validIndex] = index;
             validIndex += 1;
         }
@@ -343,14 +294,10 @@
     let hazardFuturePeriod = '2050';
     let regionChangeRunId = 0;
     $: projectName = `${region} ${config.projectSuffix}`;
-    $: projectBreadcrumb = [region, config.label, config.projectSuffix.replace(config.label, '').trim()].filter(Boolean);
     let analysisDone = false;
     let running = false;
-    let leftPanelTab = '01';
-    let candidatesInfoOpen = false;
     let selectedCandidate = 0;
     let activeAlternative = 0;
-    let pendingDeleteIndex = null;
     let gridUnit = '100m';
     let dimensionWeights = { H: 1, E: 1, V: 1 };
     let mapSource = config.mapSource;
@@ -360,16 +307,12 @@
     let analysisResult = null;
     let parcelCandidateMessage = 'Risk 분석 후 지도에서 실천권역도출하기를 실행하세요.';
     let focusedCandidate = null;
-    let selectedRegionMap;
     let mapResetKey = 0;
     let detailCandidateKey = null;
     let handoffMessage = '실천권역을 도출하면 주관부서 지원도구로 전달할 수 있습니다.';
     let handoffDialog = null;
     let latestHandoffPackage = null;
     let sentHandoffPackages = [];
-    let handoffReviewOpen = false;
-    let handoffScope = 'all';
-    let handoffNote = '';
     let requestListOpen = false;
     let draftStorageStatus = '임시 저장 준비 중';
     let draftLoadComplete = false;
@@ -378,7 +321,7 @@
     let supabaseDrafts = [];
     let supabaseHistoryOpen = false;
     let supabaseBusy = false;
-    let supabaseStatus = '저장 준비됨';
+    let supabaseStatus = 'Supabase 저장 준비';
     let supabaseSaveDialog = null;
     let indicatorDialog = null;
     let devResetPollTimer = null;
@@ -411,40 +354,15 @@
         '민감도': { english: 'Sensitivity', dimension: 'V', direction: 'positive', color: '#a855a8', icon: '◇' },
         '적응역량': { english: 'Adaptive Capacity', dimension: 'V', direction: 'negative', color: '#2f9b73', icon: '✚' }
     };
-    const dimensionColorVars = { H: '--color-hazard', E: '--color-exposure', V: '--color-vulnerability' };
-    let groupExpanded = Object.fromEntries(Object.keys(indicatorGroupMeta).map((group) => [group, true]));
-    let expandedDescriptions = {};
-    function groupDimensionColorVar(group) {
-        return `var(${dimensionColorVars[indicatorGroupMeta[group].dimension]})`;
-    }
-
-    function toggleGroupExpanded(group) {
-        groupExpanded = { ...groupExpanded, [group]: !groupExpanded[group] };
-    }
-
-    function collapsedGroupSummary(group) {
-        const selected = selectedIndicatorsFor(group);
-        if (!selected.length) return '';
-        const shown = selected.slice(0, 2).map((item) => item.label).join(', ');
-        return selected.length > 2 ? `${shown} 외 ${selected.length - 2}개` : shown;
-    }
-
-    function toggleIndicatorDescription(id) {
-        expandedDescriptions = { ...expandedDescriptions, [id]: !expandedDescriptions[id] };
-    }
-
-    function handleParcelDerivationComplete() {
-        leftPanelTab = '03';
-    }
     $: previewAnalysisIndicators = indicators.map((item) => {
         const loaded = loadedPreviewIndicators.find((previewItem) => previewItem.id === item.id);
         return loaded
             ? { ...loaded, enabled: item.enabled && isIndicatorAvailable(item), weight: item.weight, direction: item.direction }
-            : { ...item, enabled: false };
+            : item;
     });
     $: if (indicatorPreviewGrid && !analysisDone && ['Risk', 'Hotspot'].includes(activeLayer)) activeLayer = 'H';
     $: candidateList = analysisResult?.parcelCandidates?.length
-        ? enrichPracticeDistricts(analysisResult.parcelCandidates, hazard)
+        ? enrichPracticeDistricts(analysisResult.parcelCandidates)
         : [];
     $: practiceDistrictGroups = PRACTICE_TYPE_ORDER.map((type) => ({
         type,
@@ -476,31 +394,9 @@
     });
 
     $: enabledCount = indicators.filter((item) => item.enabled).length;
-    $: dimensionSelectedCounts = {
-        H: indicators.filter((item) => item.enabled && item.dimension === 'H').length,
-        E: indicators.filter((item) => item.enabled && item.dimension === 'E').length,
-        V: indicators.filter((item) => item.enabled && item.dimension === 'V').length
-    };
     $: availableCount = indicators.filter(isIndicatorAvailable).length;
     $: resultScores = analysisResult?.dimensionScores || { H: null, E: null, V: null };
     $: resultRiskScore = analysisResult?.riskScore ?? null;
-
-    function clearAllIndicators() {
-        if (!enabledCount) return;
-        indicators = indicators.map((item) => ({ ...item, enabled: false }));
-        loadedPreviewIndicators = loadedPreviewIndicators.map((item) => ({ ...item, enabled: false }));
-        markAnalysisDirty();
-    }
-
-    let previousActiveAlternativeIndex = activeAlternative;
-    let alternativeFlash = false;
-    let alternativeFlashTimer;
-    $: if (activeAlternative !== previousActiveAlternativeIndex) {
-        previousActiveAlternativeIndex = activeAlternative;
-        alternativeFlash = true;
-        clearTimeout(alternativeFlashTimer);
-        alternativeFlashTimer = setTimeout(() => { alternativeFlash = false; }, 700);
-    }
 
     function priorityDraftKey(code = regionCode) {
         return `${PRIORITY_DRAFT_SCHEMA_VERSION}:${hazard}:${code || 'unknown'}`;
@@ -672,11 +568,11 @@
                 limit: 30
             });
             supabaseStatus = supabaseDrafts.length
-                ? `저장 이력 ${supabaseDrafts.length}건`
-                : '저장 이력이 없습니다.';
+                ? `Supabase 저장 이력 ${supabaseDrafts.length}건`
+                : 'Supabase 저장 이력이 없습니다.';
         } catch (error) {
             console.warn(error);
-            supabaseStatus = error?.message || '저장 이력을 불러오지 못했습니다.';
+            supabaseStatus = error?.message || 'Supabase 이력 조회 실패';
         } finally {
             supabaseBusy = false;
         }
@@ -698,7 +594,7 @@
         supabaseSaveDialog = {
             state: 'saving',
             title: '대안 저장 중',
-            message: '분석 결과를 정리해 새 버전으로 저장하고 있습니다.'
+            message: '분석 결과를 정리해 Supabase에 새 버전으로 저장하고 있습니다.'
         };
         persistAlternative(activeAlternative);
         const payload = buildSupabaseDraftPayload();
@@ -726,7 +622,7 @@
                 || String(error?.message || '').toLowerCase().includes('statement timeout');
             supabaseStatus = timedOut
                 ? '저장 데이터 처리 시간이 초과되었습니다. 다시 시도해 주세요.'
-                : error?.message || '저장에 실패했습니다.';
+                : error?.message || 'Supabase 저장 실패';
             supabaseSaveDialog = {
                 state: 'error',
                 title: '대안 저장 실패',
@@ -778,8 +674,8 @@
         }
         supabaseDrafts = [];
         supabaseHistoryOpen = false;
-        supabaseStatus = '개발 초기화 완료 · 저장 이력 삭제됨';
-        draftStorageStatus = '개발 초기화 완료 · 새 대안 1';
+        supabaseStatus = '개발 초기화 완료 · Supabase 저장 이력 삭제됨';
+        draftStorageStatus = '개발 초기화 완료 · 새 대안1';
         draftLoadComplete = true;
     }
 
@@ -788,7 +684,7 @@
         region = params.get('regionName') || region;
         regionCode = params.get('regionCode') || regionCode;
         selectedSido = getRegionByCode(regionCode)?.sido || selectedSido;
-        hazardDatasetMode = hazard === 'heatwave' && params.get('hazardPeriod') === 'future' ? 'future' : 'observed';
+        hazardDatasetMode = params.get('hazardPeriod') === 'future' ? 'future' : 'observed';
         hazardScenario = hazardScenarios.includes(params.get('scenario')) ? params.get('scenario') : hazardScenario;
         hazardFuturePeriod = hazardFuturePeriods.includes(params.get('futurePeriod')) ? params.get('futurePeriod') : hazardFuturePeriod;
         indicators = configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
@@ -823,7 +719,7 @@
         if (!analysisResult?.gridResult) mapSource = config.mapSource;
 
         if (!analysisResult?.gridResult) {
-            loadedPreviewIndicators = await loadIndicatorInputs(initialPreviewTargets(indicators), [], { preferDense: true });
+            loadedPreviewIndicators = await loadIndicatorInputs(indicators.map((item) => ({ ...item })));
             indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
         }
 
@@ -999,63 +895,22 @@
         };
     }
 
-    function indicatorDataKey(item) {
-        return [
-            item.id,
-            item.dataPath || '',
-            item.populationIndicator || '',
-            item.indicatorCode || '',
-            item.floodIndicator || '',
-            item.analysisIndicator || ''
-        ].join('|');
-    }
-
-    function initialPreviewTargets(sourceIndicators) {
-        return sourceIndicators
-            .filter((item) => item.enabled && item.group === '기후위험' && item.dataPath)
-            .slice(0, 1)
-            .map((item) => ({ ...item }));
-    }
-
-    async function loadIndicatorInputs(sourceIndicators, cachedIndicators = [], { preferDense = false } = {}) {
-        const cachedByKey = new Map(
-            cachedIndicators
-                .filter((item) => isGridValueCollection(item.gridValues))
-                .map((item) => [indicatorDataKey(item), item])
-        );
+    async function loadIndicatorInputs(sourceIndicators) {
         const loaded = await Promise.all(sourceIndicators.map(async (item) => {
             if (!usableIndicator(item) || !item.dataPath) return item;
 
-            const cached = cachedByKey.get(indicatorDataKey(item));
-            if (cached) {
-                return {
-                    ...cached,
-                    ...item,
-                    gridValues: cached.gridValues,
-                    gridValidIndices: cached.gridValidIndices,
-                    gridMeta: cached.gridMeta,
-                    gridSummary: cached.gridSummary,
-                    loadedValue: cached.loadedValue
-                };
-            }
-
             try {
-                const dataUrl = item.populationIndicator
-                    ? `/population/grid?regionCode=${encodeURIComponent(regionCode)}&indicator=${encodeURIComponent(item.populationIndicator)}`
-                    : ['/hazard-grid', '/flood-grid', '/analysis-grid'].some((prefix) => item.dataPath.startsWith(prefix))
-                        ? item.dataPath
-                        : asset(item.dataPath);
+                const dataUrl = item.dataPath.startsWith('/hazard-grid') ? item.dataPath : asset(item.dataPath);
                 const response = await fetch(dataUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const grid = await response.json();
-                const decodedGrid = decodeGridValues(grid, { preferDense });
+                const decodedGrid = decodeGridValues(grid);
                 const loadedValue = Number(grid?.stats?.normalizedMean ?? grid?.stats?.mean);
                 if (!Number.isFinite(loadedValue)) throw new Error('normalizedMean is missing');
 
                 return {
                     ...item,
                     loadedValue,
-                    geojson: grid.pointFeatureCollection || item.geojson,
                     gridValues: decodedGrid.values,
                     gridValidIndices: decodedGrid.validIndices,
                     gridMeta: {
@@ -1074,18 +929,11 @@
                         rawMean: grid.stats?.rawMean,
                         rawUnit: grid.rawUnit || grid.unit || '',
                         normalizedMean: grid.stats?.normalizedMean ?? grid.stats?.mean,
-                        sourceResolution: grid.sourceResolution,
-                        pointFeatureCount: grid.pointFeatureCount || 0
+                        sourceResolution: grid.sourceResolution
                     }
                 };
             } catch (error) {
-                const serverBackedInput = Boolean(
-                    item.indicatorCode ||
-                    item.floodIndicator ||
-                    item.analysisIndicator ||
-                    item.populationIndicator
-                );
-                if ((nationalLab || base) && serverBackedInput) {
+                if (nationalLab && item.indicatorCode) {
                     return {
                         ...item,
                         publicFallbackPending: true,
@@ -1131,22 +979,15 @@
     }
 
     function createIndicatorPreviewGrid(sourceIndicators) {
-        const previewItems = sourceIndicators.filter((item) =>
+        const reference = sourceIndicators.find((item) =>
             item.enabled &&
             isGridValueCollection(item.gridValues) &&
-            gridValueCollectionSize(item.gridValues) &&
+            item.gridValues.length &&
             item.gridMeta?.columns &&
             item.gridMeta?.rows &&
             item.gridMeta?.transform
         );
-        const reference = previewItems[0];
         if (!reference) return null;
-        const hasSparseIndices = previewItems.every((item) =>
-            Array.isArray(item.gridValidIndices) && item.gridValidIndices.length
-        );
-        const validIndices = hasSparseIndices
-            ? [...new Set(previewItems.flatMap((item) => item.gridValidIndices))]
-            : null;
 
         return {
             preview: true,
@@ -1157,18 +998,18 @@
             transform: reference.gridMeta.transform,
             crs: reference.gridMeta.crs,
             values: reference.gridValues,
-            validIndices
+            validIndices: reference.gridValidIndices || null
         };
     }
 
     function isIndicatorAvailable(item) {
-        return ['available', 'partial'].includes(item.dataStatus) && (!item.supportedGridUnits || item.supportedGridUnits.includes(gridUnit));
+        return item.dataStatus === 'available' && (!item.supportedGridUnits || item.supportedGridUnits.includes(gridUnit));
     }
 
     function indicatorStatusText(item) {
-        if (!['available', 'partial'].includes(item.dataStatus)) return '연결대기';
+        if (item.dataStatus !== 'available') return '연결대기';
         if (item.supportedGridUnits && !item.supportedGridUnits.includes(gridUnit)) return '격자미지원';
-        return item.dataStatus === 'partial' ? `${item.sourceType} · 일부 보완 필요` : item.sourceType;
+        return item.sourceType;
     }
 
     function usableIndicator(item) {
@@ -1221,7 +1062,7 @@
 
     function gridValue(item, index) {
         if (!isGridValueCollection(item.gridValues)) return null;
-        return finiteGridValue(item.gridValues instanceof Map ? item.gridValues.get(index) : item.gridValues[index]);
+        return finiteGridValue(item.gridValues[index]);
     }
 
     function weightedCellMean(items, index, valueGetter = gridValue) {
@@ -1243,17 +1084,7 @@
     }
 
     function summarizeGridValues(values) {
-        const validValues = [];
-        let min = Infinity;
-        let max = -Infinity;
-        let sum = 0;
-        for (const value of values) {
-            if (!Number.isFinite(value)) continue;
-            validValues.push(value);
-            min = Math.min(min, value);
-            max = Math.max(max, value);
-            sum += value;
-        }
+        const validValues = values.filter((value) => Number.isFinite(value));
         if (!validValues.length) {
             return {
                 validCells: 0,
@@ -1265,13 +1096,14 @@
             };
         }
 
+        const sum = validValues.reduce((total, value) => total + value, 0);
         const sorted = [...validValues].sort((left, right) => right - left);
         const topCount = Math.max(1, Math.ceil(sorted.length * 0.1));
 
         return {
             validCells: validValues.length,
-            min,
-            max,
+            min: Math.min(...validValues),
+            max: Math.max(...validValues),
             mean: sum / validValues.length,
             topCount,
             topThreshold: sorted[topCount - 1]
@@ -1290,7 +1122,7 @@
         const availableIndicators = sourceIndicators.filter(usableIndicator);
         const reference = availableIndicators.find((item) =>
             isGridValueCollection(item.gridValues) &&
-            gridValueCollectionSize(item.gridValues) &&
+            item.gridValues.length &&
             item.gridMeta?.columns &&
             item.gridMeta?.rows
         );
@@ -1302,7 +1134,7 @@
         const cellCount = columns * rows;
         const gridIndicators = availableIndicators.filter((item) =>
             isGridValueCollection(item.gridValues) &&
-            (item.gridValues instanceof Map || item.gridValues.length >= cellCount) &&
+            item.gridValues.length >= cellCount &&
             Number(item.gridMeta?.columns) === columns &&
             Number(item.gridMeta?.rows) === rows
         );
@@ -1316,26 +1148,14 @@
         const hazardOnly = nationalLab && (!eItems.length || !sensitivityItems.length || !adaptiveItems.length);
         if (!hazardOnly && (!eItems.length || !sensitivityItems.length || !adaptiveItems.length)) return null;
 
-        const createEmptyValues = () => {
-            const values = new Float32Array(cellCount);
-            values.fill(Number.NaN);
-            return values;
-        };
-        const hValues = createEmptyValues();
-        const eValues = createEmptyValues();
-        const sensitivityValues = createEmptyValues();
-        const adaptiveCapacityValues = createEmptyValues();
-        const vValues = createEmptyValues();
-        const riskValues = createEmptyValues();
-        const canUseSparseIndices = gridIndicators.every((item) =>
-            Array.isArray(item.gridValidIndices) && item.gridValidIndices.length
-        );
-        const analysisIndices = canUseSparseIndices
-            ? [...new Set(gridIndicators.flatMap((item) => item.gridValidIndices))]
-            : Array.from({ length: cellCount }, (_, index) => index);
-        const riskValidIndices = [];
+        const hValues = new Array(cellCount).fill(null);
+        const eValues = new Array(cellCount).fill(null);
+        const sensitivityValues = new Array(cellCount).fill(null);
+        const adaptiveCapacityValues = new Array(cellCount).fill(null);
+        const vValues = new Array(cellCount).fill(null);
+        const riskValues = new Array(cellCount).fill(null);
 
-        for (const index of analysisIndices) {
+        for (let index = 0; index < cellCount; index += 1) {
             const hScore = weightedCellMean(hItems, index);
             const eScore = weightedCellMean(eItems, index);
             const sensitivityScore = weightedCellMean(sensitivityItems, index);
@@ -1356,7 +1176,6 @@
 
             if (hazardOnly && Number.isFinite(hScore)) {
                 riskValues[index] = hScore;
-                riskValidIndices.push(index);
             } else if (
                 Number.isFinite(hScore) &&
                 Number.isFinite(eScore) &&
@@ -1367,7 +1186,6 @@
                 const riskScore = weightedGeometricMean({ H: hScore, E: eScore, V: vScore }, dimensionWeights);
                 vValues[index] = vScore;
                 riskValues[index] = riskScore;
-                riskValidIndices.push(index);
             }
         }
 
@@ -1398,7 +1216,6 @@
                 extent: reference.gridMeta.extent,
                 transform: reference.gridMeta.transform,
                 crs: reference.gridMeta.crs,
-                validIndices: riskValidIndices,
                 valueEncoding: hazardOnly
                     ? 'row-major 100m cells; preliminary Risk equals normalized Hazard score'
                     : 'row-major 100m cells aligned to the regional analysis grid',
@@ -1552,10 +1369,10 @@
     }
 
     async function setHazardDatasetMode(value) {
-        hazardDatasetMode = hazard === 'heatwave' && value === 'future' ? 'future' : 'observed';
+        hazardDatasetMode = value === 'future' ? 'future' : 'observed';
         await refreshHazardDataset(
             hazardDatasetMode === 'observed'
-                ? '최근 5년(2021~2025) 100m 자료로 전환했습니다. H01~H05·H07·H10을 사용할 수 있습니다.'
+                ? '최근 5년(2021~2025) 100m 자료로 전환했습니다. H01~H10을 사용할 수 있습니다.'
                 : `미래 ${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 100m 자료로 전환했습니다. H01~H09를 사용할 수 있습니다.`
         );
     }
@@ -1569,7 +1386,7 @@
     async function refreshHazardDataset(message) {
         indicators = configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
             .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
-        loadedPreviewIndicators = await loadIndicatorInputs(initialPreviewTargets(indicators), [], { preferDense: true });
+        loadedPreviewIndicators = await loadIndicatorInputs(indicators.map((item) => ({ ...item })));
         indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
         const url = new URL(window.location.href);
         url.searchParams.set('hazardPeriod', hazardDatasetMode);
@@ -1604,7 +1421,7 @@
         mapSource = `${region} 전국 100m 원본 연결 중`;
         markAnalysisDirty(`${region}의 100m Hazard 자료를 불러오는 중입니다.`);
 
-        const loaded = await loadIndicatorInputs(initialPreviewTargets(indicators), [], { preferDense: true });
+        const loaded = await loadIndicatorInputs(indicators.map((item) => ({ ...item })));
         if (runId !== regionChangeRunId) return;
         loadedPreviewIndicators = loaded;
         indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
@@ -1633,7 +1450,7 @@
         const target = indicators.find((item) => item.id === id);
         const cached = loadedPreviewIndicators.some((item) => item.id === id && isGridValueCollection(item.gridValues));
         if (enabled && target?.dataPath && !cached) {
-            const [loaded] = await loadIndicatorInputs([{ ...target }], loadedPreviewIndicators, { preferDense: true });
+            const [loaded] = await loadIndicatorInputs([{ ...target }]);
             loadedPreviewIndicators = [
                 ...loadedPreviewIndicators.filter((item) => item.id !== id),
                 loaded
@@ -1656,13 +1473,6 @@
             : item
         );
         markAnalysisDirty();
-    }
-
-    function adjustIndicatorWeight(id, delta) {
-        const item = indicators.find((entry) => entry.id === id);
-        if (!item) return;
-        const next = Math.min(3, Math.max(0, Math.round((Number(item.weight) + delta) * 10) / 10));
-        setIndicatorWeight(id, next);
     }
 
     function colorFor(value) {
@@ -1688,8 +1498,7 @@
         const runGridUnit = gridUnit;
         const runDimensionWeights = { ...dimensionWeights };
         const snapshot = indicators.map((item) => ({ ...item }));
-        const enrichedSnapshot = await loadIndicatorInputs(snapshot, loadedPreviewIndicators);
-        loadedPreviewIndicators = enrichedSnapshot.filter((item) => isGridValueCollection(item.gridValues));
+        const enrichedSnapshot = await loadIndicatorInputs(snapshot);
         const missingAfterLoad = analysisRequiredGroups(enrichedSnapshot)
             .find((group) => selectedIndicatorsFor(group, enrichedSnapshot).length === 0);
         if (missingAfterLoad) {
@@ -1750,7 +1559,7 @@
     }
 
     function handleParcelCandidates(candidates, message, sourceAlternativeId = activeAlternativeId) {
-        const nextCandidates = enrichPracticeDistricts(Array.isArray(candidates) ? candidates : [], hazard);
+        const nextCandidates = enrichPracticeDistricts(Array.isArray(candidates) ? candidates : []);
         const nextMessage = message || (nextCandidates.length
             ? `실천권역 내 ${nextCandidates.length}개 유형별 실천지구 도출`
             : '실천권역이 아직 없습니다.');
@@ -1807,7 +1616,6 @@
             pnuList: candidate.pnuList || [],
             requestedAt: Date.now()
         };
-        selectedRegionMap?.focusCandidate?.(focusedCandidate);
     }
 
     function compactCandidateForSupabase(candidate) {
@@ -1854,7 +1662,7 @@
 
     function createDefaultAlternative(index = 0) {
         const configured = config.alternatives[index] || {
-            name: `대안 ${index + 1}`,
+            name: `대안${index + 1}`,
             status: '검토중',
             description: '새 기후적응실천권역 대안'
         };
@@ -2284,7 +2092,7 @@
         schedulePriorityDraftSave();
     }
 
-    async function handoffToDepartmentPlatform(scope = 'all') {
+    async function handoffToDepartmentPlatform() {
         const activeSnapshot = {
             ...alternatives[activeAlternative],
             ...currentAlternativeState()
@@ -2293,8 +2101,7 @@
             index === activeAlternative ? activeSnapshot : alternative
         ));
         alternatives = sourceAlternatives;
-        const scopedAlternatives = scope === 'current' ? [activeSnapshot] : sourceAlternatives;
-        const payload = buildDepartmentHandoffPayload(scopedAlternatives);
+        const payload = buildDepartmentHandoffPayload(sourceAlternatives);
         if (!payload.candidates.length) {
             handoffMessage = '전달할 실천권역이 없습니다. Risk 분석 후 실천권역도출하기를 먼저 실행하세요.';
             return;
@@ -2304,8 +2111,7 @@
         const deliveredPayload = {
             ...payload,
             deliveredToLeadAt: deliveredAt,
-            deliveryStatus: 'sent-to-lead',
-            reviewNote: handoffNote.trim()
+            deliveryStatus: 'sent-to-lead'
         };
         const handoffJson = JSON.stringify(deliveredPayload);
         try {
@@ -2346,21 +2152,6 @@
             relayOk: deliveryOk
         };
         schedulePriorityDraftSave();
-    }
-
-    function openHandoffReview() {
-        handoffScope = 'all';
-        handoffReviewOpen = true;
-    }
-
-    function closeHandoffReview() {
-        handoffReviewOpen = false;
-    }
-
-    function confirmHandoffReview() {
-        handoffReviewOpen = false;
-        void handoffToDepartmentPlatform(handoffScope);
-        handoffNote = '';
     }
 
     function openIndicatorDialog() {
@@ -2579,7 +2370,7 @@
             return Math.max(largestNumber, optionNumber);
         }, 0) + 1;
         const nextAlternative = {
-            name: `대안 ${nextOptionNumber}`,
+            name: `대안${nextOptionNumber}`,
             status: '검토중',
             description: '새 기후적응실천권역 대안',
             id: `alternative-${Date.now()}`,
@@ -2606,7 +2397,7 @@
         schedulePriorityDraftSave();
     }
 
-    function deleteAlternativeAt(index) {
+    function deleteActiveAlternative() {
         if (alternatives.length <= 1) {
             const replacementAlternative = {
                 ...createDefaultAlternative(0),
@@ -2615,46 +2406,26 @@
                     dimensionWeights: { ...dimensionWeights },
                     indicators: cloneIndicatorsForAlternative(indicators)
                 },
-                analysisMessage: '마지막 대안을 삭제하고 새로운 대안 1을 만들었습니다.'
+                analysisMessage: '마지막 대안을 삭제하고 새로운 대안1을 만들었습니다.'
             };
             alternatives = [replacementAlternative];
             activeAlternative = 0;
             loadAlternative(0);
-            handoffMessage = '마지막 대안을 삭제하고 새로운 대안 1을 만들었습니다.';
+            handoffMessage = '마지막 대안을 삭제하고 새로운 대안1을 만들었습니다.';
             schedulePriorityDraftSave();
             return;
         }
 
-        const deletedAlternative = alternatives[index];
-        const wasActive = index === activeAlternative;
-        const nextAlternatives = alternatives.filter((_, alternativeIndex) => alternativeIndex !== index);
-        const nextIndex = wasActive
-            ? Math.min(index, nextAlternatives.length - 1)
-            : index < activeAlternative
-                ? activeAlternative - 1
-                : activeAlternative;
+        const deletedAlternative = alternatives[activeAlternative];
+        const nextAlternatives = alternatives.filter((_, index) => index !== activeAlternative);
+        const nextIndex = Math.min(activeAlternative, nextAlternatives.length - 1);
         alternatives = nextAlternatives;
         activeAlternative = nextIndex;
-        if (wasActive) loadAlternative(nextIndex);
+        loadAlternative(nextIndex);
         handoffMessage = latestHandoffPackage
             ? `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다. 이미 전달한 요청은 필요하면 별도로 회수하세요.`
             : `${deletedAlternative?.name || '선택 대안'}을 삭제했습니다.`;
         schedulePriorityDraftSave();
-    }
-
-    function requestDeleteAlternative(index) {
-        if (alternatives.length <= 1) return;
-        pendingDeleteIndex = index;
-    }
-
-    function cancelDeleteAlternative() {
-        pendingDeleteIndex = null;
-    }
-
-    function confirmDeleteAlternative() {
-        if (pendingDeleteIndex === null) return;
-        deleteAlternativeAt(pendingDeleteIndex);
-        pendingDeleteIndex = null;
     }
 
     function confirmAlternative() {
@@ -2667,27 +2438,10 @@
         schedulePriorityDraftSave();
     }
 
-    async function setActiveGridLayer(layer) {
+    function setActiveGridLayer(layer) {
         activeLayer = layer;
         persistAlternative(activeAlternative, { activeLayer: layer });
         schedulePriorityDraftSave();
-
-        if (analysisDone || !['H', 'E', 'V'].includes(layer)) return;
-        const groups = layer === 'H'
-            ? ['기후위험']
-            : layer === 'E'
-                ? ['노출']
-                : ['민감도', '적응역량'];
-        const targets = indicators.filter((item) => item.enabled && groups.includes(item.group));
-        const loaded = await loadIndicatorInputs(
-            targets.map((item) => ({ ...item })),
-            loadedPreviewIndicators,
-            { preferDense: true }
-        );
-        const loadedById = new Map(loadedPreviewIndicators.map((item) => [item.id, item]));
-        loaded.forEach((item) => loadedById.set(item.id, item));
-        loadedPreviewIndicators = [...loadedById.values()];
-        indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
     }
 
     function downloadConfig() {
@@ -2727,48 +2481,25 @@
             <div class="brand-mark">CR</div>
             <div>
                 <strong>Climate Risk Lab</strong>
-                <span>기후위험(H)·노출(E)·취약성(V) 기반 우선 대응지 선정</span>
+                <span>기후위험 평가·의사결정 지원</span>
             </div>
         </div>
         <div class="project-meta">
-            <div class="project-breadcrumb" aria-label={`프로젝트 ${projectName}`}>
-                <span class="project-breadcrumb-eyebrow">프로젝트</span>
-                <span class="project-breadcrumb-path">
-                    {#each projectBreadcrumb as part, index}
-                        {#if index > 0}<span class="project-breadcrumb-sep" aria-hidden="true">/</span>{/if}
-                        <span class="project-breadcrumb-part">{part}</span>
-                    {/each}
-                </span>
-            </div>
-            <a class="ghost-link" href={portalToolsUrl}>지원도구 페이지로 돌아가기<svg class="ghost-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5 4 8.5l4 4" /><path d="M4 8.5h9a5.5 5.5 0 0 1 0 11H6" /></svg></a>
-            <button class="ghost-button" onclick={downloadConfig}>설정 내보내기<svg class="ghost-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V7.5L14.5 3Z" /><path d="M14.5 3v3.5a1 1 0 0 0 1 1H19" /><path d="M12 17.5v-7M9.25 13.25 12 10.5l2.75 2.75" /></svg></button>
-            <div class="request-manager">
-                <button type="button" class="request-manager-toggle ghost-button" class:open={requestListOpen} aria-expanded={requestListOpen} onclick={() => requestListOpen = !requestListOpen}>보낸 요청 <span class="request-manager-count">{sentRequestCount}</span><span class="request-manager-caret" aria-hidden="true">{requestListOpen ? '▴' : '▾'}</span></button>
-                {#if requestListOpen}
-                    <div class="request-manager-panel">
-                        <div><strong>보낸 검토 요청</strong><small>초기화 후에도 이 목록에서 요청을 취소할 수 있습니다.</small></div>
-                        {#if sentHandoffPackages.length}
-                            <ul>{#each sentHandoffPackages as request}<li><button type="button" class="request-recall-button" onclick={() => recallDepartmentHandoff(request)}>요청 취소</button><div><b>{request.hazardLabel || config.label} · {request.region || region}</b><span>{request.alternativeCount || 0}개 대안 · {request.candidateCount || 0}개 후보 · {formatHandoffTime(request.deliveredAt)}</span><small>{request.packageId}</small></div></li>{/each}</ul>
-                            <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>전체 요청 취소</button>
-                        {:else}
-                            <p>현재 도구에 기록된 요청은 없습니다.</p>
-                            <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>주관부서 요청 비우기</button>
-                        {/if}
-                    </div>
-                {/if}
-            </div>
-            <div class="avatar" role="img" aria-label="관리">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.7 7.7 0 0 1 0 .255c-.008.379.137.75.43.991l1.004.828c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.5 6.5 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.5 6.5 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.241.437-.613.43-.992a6.9 6.9 0 0 1 0-.255c.007-.379-.138-.75-.43-.991l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281Z"></path>
-                    <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"></path>
-                </svg>
-            </div>
+            <div><span>프로젝트</span><strong>{projectName}</strong></div>
+            <a class="ghost-link" href={portalToolsUrl}>지원도구 페이지로 돌아가기</a>
+            <button class="ghost-button" onclick={downloadConfig}>설정 내보내기</button>
+            <div class="avatar">관리</div>
         </div>
     </header>
 
     <div class="workspace">
         <main class="main">
             <section class="hero">
+                <div>
+                    <span class="eyebrow">LOCAL CLIMATE RISK ASSESSMENT</span>
+                    <h1>지역의 위험을 읽고,<br /><em>{config.heroEmphasis}</em></h1>
+                    <p>{config.heroDescription}</p>
+                </div>
                 <div class="hero-actions">
                     {#if nationalLab}
                         <label>시·도
@@ -2786,10 +2517,60 @@
                             </select>
                         </label>
                         <label>선택 행정구역<input value={`${region} · ${regionCode}`} readonly /></label>
-                        <small>{config.sampleNotice}</small>
+                    {:else}
+                        <label>분석 대상 지역<input value={region} readonly /></label>
+                        <label>행정구역 코드<input value={regionCode} readonly /></label>
                     {/if}
+                    <small>{config.sampleNotice}</small>
+                    <div class="request-manager">
+                        <button type="button" class="request-manager-toggle" onclick={() => requestListOpen = !requestListOpen}>
+                            보낸 요청 관리
+                            <span>{sentRequestCount}</span>
+                        </button>
+                        {#if requestListOpen}
+                            <div class="request-manager-panel">
+                                <div>
+                                    <strong>보낸 검토 요청</strong>
+                                    <small>초기화 후에도 이 목록에서 요청을 회수할 수 있습니다.</small>
+                                </div>
+                                {#if sentHandoffPackages.length}
+                                    <ul>
+                                        {#each sentHandoffPackages as request}
+                                            <li>
+                                                <div>
+                                                    <b>{request.hazardLabel || config.label} · {request.region || region}</b>
+                                                    <span>{request.alternativeCount || 0}개 대안 · {request.candidateCount || 0}개 후보 · {formatHandoffTime(request.deliveredAt)}</span>
+                                                    <small>{request.packageId}</small>
+                                                </div>
+                                                <button type="button" onclick={() => recallDepartmentHandoff(request)}>회수</button>
+                                            </li>
+                                        {/each}
+                                    </ul>
+                                    <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>전체 요청 회수</button>
+                                {:else}
+                                    <p>현재 도구에 기록된 요청은 없습니다. 주관부서 화면에 이전 요청이 남아 있으면 아래 버튼으로 비울 수 있습니다.</p>
+                                    <button type="button" class="request-clear-all" onclick={recallAllDepartmentHandoffs}>주관부서 요청 비우기</button>
+                                {/if}
+                            </div>
+                        {/if}
+                    </div>
                 </div>
             </section>
+
+            <aside class="workflow-guide" aria-label="분석 워크플로우 안내">
+                <div class="workflow-title">
+                    <strong>분석 워크플로우</strong>
+                    <span>{enabledCount}개 선택 · {availableCount}개 사용 가능</span>
+                </div>
+                <ol>
+                    {#each steps as step, index}
+                        <li class:active={activeStep === index} class:complete={activeStep > index}>
+                            <span class="step-num">{activeStep > index ? '✓' : index + 1}</span>
+                            <span>{step}<small>{['범위와 기준 설정', 'H/E/V GeoTIFF 구성', '방향성과 영향 조정', '공간분석 계산', '위험도·핫스팟 확인', '우선관리 후보 검토'][index]}</small></span>
+                        </li>
+                    {/each}
+                </ol>
+            </aside>
 
             {#if nationalLab}
                 <section class="lab-analysis-runner" class:complete={analysisDone} aria-label="기후위험 실험실 분석 실행">
@@ -2811,130 +2592,59 @@
                 </section>
             {/if}
 
-            <section class="workspace-split">
-                <div class="left-panel">
-                    <div class="left-panel-tabs" role="tablist" aria-label="좌측 패널 탭">
-                        <span class="left-panel-tab-item" class:active={leftPanelTab === '01'}>
-                            <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 선택</button>
-                        </span>
-                        <span class="left-panel-tab-item" class:active={leftPanelTab === '03'}>
-                            <button type="button" role="tab" class:active={leftPanelTab === '03'} aria-selected={leftPanelTab === '03'} onclick={() => (leftPanelTab = '03')}>
-                                03 실천권역 구성
-                                {#if candidateList.length}<span class="tab-count">{candidateList.length}</span>{/if}
-                            </button>
-                            <span class="tab-info">
-                                <button
-                                    type="button"
-                                    class="tab-info-toggle"
-                                    class:active={candidatesInfoOpen}
-                                    aria-expanded={candidatesInfoOpen}
-                                    aria-label={`실천권역 구성 설명 ${candidatesInfoOpen ? '닫기' : '보기'}`}
-                                    onclick={() => candidatesInfoOpen = !candidatesInfoOpen}
-                                >ⓘ</button>
-                                {#if candidatesInfoOpen}
-                                    <div class="tab-info-popover" role="dialog" aria-label="실천권역 구성 설명">
-                                        <div class="tab-info-popover-head">
-                                            <span class="tab-info-chip">안내</span>
-                                            <button type="button" class="tab-info-close" aria-label="설명 닫기" onclick={() => candidatesInfoOpen = false}>×</button>
-                                        </div>
-                                        <p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p>
-                                    </div>
-                                {/if}
-                            </span>
-                        </span>
+            <section class="content-grid">
+                <div class="panel indicator-panel">
+                    <div class="panel-head">
+                        <div><span class="section-number">01</span><h2>분석 지표 구성</h2><p>사용 가능 지표만 Risk 분석에 반영됩니다.</p></div>
+                        <button class="add-button" onclick={openIndicatorDialog}>+ 지표 추가</button>
                     </div>
-                    {#if leftPanelTab === '01'}
-                    <div class="analysis-fixed-bar">
-                        <div class="fixed-block fixed-block-options">
-                            <span class="fixed-block-title">
-                                <svg class="fixed-block-title-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6.5" />
-                                    <path d="m8.4 11.8 3.3 3.4L19.6 6.6" />
-                                </svg>
-                                분석 옵션
-                            </span>
-                            <div class="analysis-fixed-selects">
-                            <label>기후위험 기준기간
-                                <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
-                                    <option value="observed">최근 5년 · 2021~2025</option>
-                                    <option value="future" disabled={hazard !== 'heatwave'}>미래 시나리오 · 2026~2100</option>
-                                </select>
-                            </label>
-                            {#if hazardDatasetMode === 'future'}
-                                <label>SSP 시나리오
-                                    <select value={hazardScenario} onchange={(event) => setHazardScenario(event.currentTarget.value)}>
-                                        {#each hazardScenarios as scenario}
-                                            <option value={scenario}>{scenario.toUpperCase()}</option>
-                                        {/each}
-                                    </select>
-                                </label>
-                                <label>미래 기간
-                                    <select value={hazardFuturePeriod} onchange={(event) => setHazardFuturePeriod(event.currentTarget.value)}>
-                                        {#each hazardFuturePeriods as period}
-                                            <option value={period}>{period}</option>
-                                        {/each}
-                                    </select>
-                                </label>
-                            {/if}
-                            <label>격자 크기
-                                <select value={gridUnit} onchange={(event) => setGridUnit(event.currentTarget.value)}>
-                                    {#each gridOptions as option}
-                                        <option value={option}>{option}</option>
+                    <div class="analysis-control-card">
+                        <div class="analysis-control-copy">
+                            <span>ANALYSIS SETUP</span>
+                            <strong>단위격자 기준으로 지표를 요약해 Risk를 계산합니다.</strong>
+                            <p>{analysisMessage}</p>
+                        </div>
+                        <label>Hazard 기준기간
+                            <select value={hazardDatasetMode} onchange={(event) => setHazardDatasetMode(event.currentTarget.value)}>
+                                <option value="observed">최근 5년 · 2021~2025</option>
+                                <option value="future">미래 시나리오 · 2026~2100</option>
+                            </select>
+                        </label>
+                        {#if hazardDatasetMode === 'future'}
+                            <label>SSP 시나리오
+                                <select value={hazardScenario} onchange={(event) => setHazardScenario(event.currentTarget.value)}>
+                                    {#each hazardScenarios as scenario}
+                                        <option value={scenario}>{scenario.toUpperCase()}</option>
                                     {/each}
                                 </select>
                             </label>
-                            </div>
+                            <label>미래 기간
+                                <select value={hazardFuturePeriod} onchange={(event) => setHazardFuturePeriod(event.currentTarget.value)}>
+                                    {#each hazardFuturePeriods as period}
+                                        <option value={period}>{period}</option>
+                                    {/each}
+                                </select>
+                            </label>
+                        {/if}
+                        <label>분석 단위 격자
+                            <select value={gridUnit} onchange={(event) => setGridUnit(event.currentTarget.value)}>
+                                {#each gridOptions as option}
+                                    <option value={option}>{option}</option>
+                                {/each}
+                            </select>
+                        </label>
+                        <div class="control-stats">
+                            <span>{enabledCount}개 선택</span>
+                            <span>{availableCount}개 사용 가능</span>
+                            <span>{draftStorageStatus}</span>
                         </div>
-
-                        <div class="fixed-block fixed-block-alternative">
-                            <div class="fixed-row-alt">
-                                <span class="fixed-row-alt-name" class:flash={alternativeFlash}>
-                                    <svg class="fixed-row-alt-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.443a1.125 1.125 0 0 0-1.006 0L3.622 5.88C3.24 6.07 3 6.462 3 6.887V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                                    </svg>
-                                    {alternatives[activeAlternative]?.name || '대안'}
-                                </span>
-                                <button class="outline-button" onclick={openIndicatorDialog}>+ 사용자 지표</button>
-                            </div>
-                            <div class="fixed-row-divider"></div>
-                            <div class="analysis-fixed-summary">
-                                <div class="fixed-summary-left">
-                                    <div class="fixed-row-clear">
-                                        <span class="fixed-row-label">현재 선택된 지표</span>
-                                        <button type="button" class="clear-all-link" onclick={clearAllIndicators} disabled={!enabledCount}>모두 지우기</button>
-                                    </div>
-                                    <div class="hev-summary" aria-label="H E V 선택 지표 수">
-                                        <span class="hev-cell hev-cell--h"><span class="hev-label">H</span><span class="hev-badge">{dimensionSelectedCounts.H}</span></span>
-                                        <span class="hev-slash" aria-hidden="true">/</span>
-                                        <span class="hev-cell hev-cell--e"><span class="hev-label">E</span><span class="hev-badge">{dimensionSelectedCounts.E}</span></span>
-                                        <span class="hev-slash" aria-hidden="true">/</span>
-                                        <span class="hev-cell hev-cell--v"><span class="hev-label">V</span><span class="hev-badge">{dimensionSelectedCounts.V}</span></span>
-                                    </div>
-                                </div>
-                                <button class="cta run-analysis-button" onclick={runAnalysis} disabled={running}>
-                                    <span class="run-analysis-label">{running ? '계산 중...' : 'Risk 분석 실행'}</span>
-                                    <svg class="run-analysis-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path d="M7 17 17 7M17 7H9M17 7v8" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                        <span class="sr-only" aria-live="polite" data-analysis-message>{analysisMessage}</span>
+                        <button class="primary" onclick={runAnalysis} disabled={running}>{running ? '계산 중...' : 'Risk 분석 실행'}</button>
                     </div>
-                    {/if}
-                    <div class="left-panel-body">
-                    {#if leftPanelTab === '01'}
-                    <div class="panel indicator-panel">
                     {#each ['기후위험', '노출', '민감도', '적응역량'] as group}
-                        <div class="indicator-group" class:collapsed={!groupExpanded[group]}>
-                            <button type="button" class="group-label" style={`--group-dim-color:${groupDimensionColorVar(group)}`} aria-expanded={groupExpanded[group]} onclick={() => toggleGroupExpanded(group)}>
-                                <span class="group-chevron" aria-hidden="true">▾</span><span class="group-name">{group} ({indicatorGroupMeta[group].english})</span>
-                                {#if !groupExpanded[group] && collapsedGroupSummary(group)}<span class="group-collapsed-summary">{collapsedGroupSummary(group)}</span>{/if}
-                                <span class="group-count">{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span>
-                            </button>
-                            {#if groupExpanded[group]}
+                        <div class="indicator-group">
+                            <div class="group-label">{group} ({indicatorGroupMeta[group].english})<span>{selectedIndicatorsFor(group).length}/{indicators.filter((item) => item.group === group && isIndicatorAvailable(item)).length} 사용</span></div>
                             {#each indicators.filter((item) => item.group === group) as item}
-                                <div class="indicator-item" data-dimension={item.dimension} class:disabled={!item.enabled} class:unavailable={!isIndicatorAvailable(item)}>
+                                <div class="indicator-item" class:disabled={!item.enabled} class:unavailable={!isIndicatorAvailable(item)}>
                                     <input
                                         type="checkbox"
                                         checked={item.enabled}
@@ -2944,86 +2654,24 @@
                                     <div class="indicator-icon" style={`--icon-color:${item.color}`}>
                                         {#if item.iconPath}<img src={item.iconPath} alt="" />{:else}{item.icon}{/if}
                                     </div>
-                                    <div class="indicator-copy">
-                                        <span class="indicator-name-row"><strong>{item.label}</strong><button type="button" class="info-toggle" class:active={expandedDescriptions[item.id]} aria-expanded={!!expandedDescriptions[item.id]} aria-label={`${item.label} 설명 ${expandedDescriptions[item.id] ? '닫기' : '보기'}`} onclick={() => toggleIndicatorDescription(item.id)}>ⓘ</button></span>
-                                        <span class="indicator-description-wrap" class:open={expandedDescriptions[item.id]}><span>{indicatorStatusText(item)} · {item.description}</span></span>
-                                    </div>
-                                    <div class="dimension-tag" title={item.group === '적응역량' ? '값이 높을수록 위험도가 낮아집니다' : '값이 높을수록 위험도가 높아집니다'}>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
-                                    <div class="weight">가중치<div class="weight-stepper"><button type="button" class="weight-stepper-btn" aria-label={`${item.label} 가중치 감소`} disabled={item.weight <= 0} onclick={() => adjustIndicatorWeight(item.id, -0.1)}>−</button><span class="weight-stepper-value">{Number(item.weight).toFixed(1)}</span><button type="button" class="weight-stepper-btn" aria-label={`${item.label} 가중치 증가`} disabled={item.weight >= 3} onclick={() => adjustIndicatorWeight(item.id, 0.1)}>+</button></div></div>
+                                    <div class="indicator-copy"><strong>{item.label}</strong><span>{indicatorStatusText(item)} · {item.description}</span></div>
+                                    <div class="dimension-tag">{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
+                                    <label class="weight">가중치<input type="number" min="0" max="3" step="0.1" value={item.weight} oninput={(event) => setIndicatorWeight(item.id, event.currentTarget.value)} /></label>
                                 </div>
                             {/each}
-                            {/if}
                         </div>
                     {/each}
-                    </div>
-                    {:else}
-                    <section class="panel candidates wide-candidates">
-                        {#if candidateList.length}
-                            <div class="practice-type-note">
-                                <strong>시연용 분류 v1</strong>
-                                <span>공간 규모가 큰 권역은 계획행정수단, Risk 집중 권역은 시설지원사업, 소규모 생활권은 시민실천으로 임시 분류했습니다.</span>
-                            </div>
-                            <div class="practice-district-groups">
-                                {#each practiceDistrictGroups as group}
-                                    <section class="practice-district-group" style={`--practice-color:${group.color};--practice-fill:${group.fillColor}`}>
-                                        <header>
-                                            <i aria-hidden="true"></i>
-                                            <span><strong>{group.label}</strong><small>{group.shortDescription}</small></span>
-                                            <b>{group.candidates.length}개</b>
-                                        </header>
-                                        <div class="candidate-list">
-                                            {#each group.candidates as candidate}
-                                                {@const index = candidateList.findIndex((item) => candidateIdentity(item) === candidateIdentity(candidate))}
-                                                <article class="candidate-card" class:active={selectedCandidate === index}>
-                                                    <button class="candidate-main" type="button" onclick={() => selectCandidate(candidate, index)}>
-                                                        <span class="rank">{String(candidate.districtNumber || candidate.rank).padStart(2, '0')}</span>
-                                                        <span class="candidate-name-row"><strong>{candidate.name}</strong><small>{candidate.area}</small></span>
-                                                        <b>{formatScore(candidate.risk)}</b>
-                                                    </button>
-                                                    <button class="candidate-detail-toggle" type="button" title="분류 사유 보기" aria-label={`${candidate.name} 분류 사유 보기`} onclick={() => showCandidateDetail(candidate, index)}>!</button>
-                                                </article>
-                                            {/each}
-                                        </div>
-                                    </section>
-                                {/each}
-                            </div>
-                            {#if detailCandidateItem}
-                                <aside class="candidate-detail-panel" aria-label="실천지구 분류 상세보기" style={`--practice-color:${detailCandidateItem.practiceTypeColor}`}>
-                                    <div>
-                                        <span>실천지구 분류 사유 · 시연용</span>
-                                        <strong>{detailCandidateItem.name}</strong>
-                                        <em>{detailCandidateItem.practiceTypeLabel}</em>
-                                        <small>{detailCandidateItem.classificationReason}</small>
-                                        <small class="classification-rule">적용 규칙: {detailCandidateItem.classificationRule}</small>
-                                    </div>
-                                    <dl>
-                                        <div><dt>총 필지 면적</dt><dd>{candidateTotalAreaLabel(detailCandidateItem)}</dd></div>
-                                        <div><dt>필지 수</dt><dd>{formatInteger(detailCandidateItem.parcelCount)}필지</dd></div>
-                                        <div><dt>Risk</dt><dd>{formatScore(detailCandidateItem.risk)}</dd></div>
-                                        <div><dt>H</dt><dd>{formatScore(detailCandidateItem.h)}</dd></div>
-                                        <div><dt>E</dt><dd>{formatScore(detailCandidateItem.e)}</dd></div>
-                                        <div><dt>V</dt><dd>{formatScore(detailCandidateItem.v)}</dd></div>
-                                    </dl>
-                                </aside>
-                            {/if}
-                        {:else}
-                            <div class="empty-candidate-state">
-                                <strong>실천권역 도출 대기</strong>
-                                <span>Risk 분석과 실천권역 도출이 끝나면 실천권역을 구성하는 실제 핫스팟-필지 교차 실천지구가 3개 시연 유형으로 표시됩니다.</span>
-                            </div>
-                        {/if}
-                    </section>
-                    {/if}
-                    </div>
                 </div>
 
-                <div class="right-map-column">
+                <div class="right-column">
                     <div class="panel analysis-map-panel">
-                        <div class="map-actions-band">
+                        <div class="panel-head map-head">
+                            <div><h2>{alternatives[activeAlternative]?.name} 분석 지도</h2><p>{alternatives[activeAlternative]?.description} · {region} · 행정구역 코드 {regionCode}</p></div>
+                            <div class="map-toolbar">
                                 <div class="database-actions">
                                     <label>
                                         <span>작업자</span>
-                                        <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="저장 기록에 남을 작업자 이름" title="저장할 때 기록에 남는 이름입니다" />
+                                        <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="Supabase 저장 작업자" />
                                     </label>
                                     <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy}>
                                         {supabaseBusy ? '처리 중' : '저장'}
@@ -3033,60 +2681,32 @@
                                     </button>
                                     <span>{supabaseStatus}</span>
                                 </div>
-                                <span class="handoff-request-wrap map-actions-handoff">
-                                    <button class="add-button handoff-request-button" onclick={openHandoffReview} disabled={!handoffCandidateCount}>
-                                        <span class="handoff-request-label">주관부서 지원도구로 검토 요청</span>
-                                        <svg class="handoff-request-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path d="M7 17 17 7M17 7H9M17 7v8" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-                                        </svg>
-                                    </button>
-                                    <span class="handoff-request-tooltip" role="tooltip">{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '실천권역 도출 후 요청 가능'}</span>
-                                </span>
-                        </div>
-                        <div class="map-tabs-row">
-                            <div class="alternative-tabs browser-tabs" aria-label="기후적응실천권역 대안">
-                                {#each alternatives as alternative, index}
-                                    <div class="browser-tab" class:active={activeAlternative === index}>
-                                        <button class="browser-tab-select" onclick={() => switchAlternative(index)}>
-                                            <span class="browser-tab-label">
-                                                <svg class="browser-tab-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                    <path d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.443a1.125 1.125 0 0 0-1.006 0L3.622 5.88C3.24 6.07 3 6.462 3 6.887V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                                                </svg>
-                                                <span class="browser-tab-name">{alternative.name}</span>
-                                                {#if alternative.description}<span class="browser-tab-desc">{alternative.description}</span>{/if}
-                                            </span>
+                                <div class="handoff-actions">
+                                    <div class="handoff-button-row">
+                                        <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>주관부서 지원도구로 검토 요청</button>
+                                        <button class="secondary-action" onclick={recallDepartmentHandoff} disabled={!latestHandoffPackage}>요청 회수</button>
+                                        <button class="secondary-action muted" onclick={resetAllAlternatives}>전체 대안 초기화</button>
+                                    </div>
+                                    <span class="handoff-note">{handoffStatusText}</span>
+                                </div>
+                                <div class="alternative-tabs" aria-label="기후적응실천권역 대안">
+                                    <button class="reset-alt" onclick={resetActiveAlternative} title="현재 대안 초기화">초기화</button>
+                                    <button class="delete-alt" onclick={deleteActiveAlternative} title="현재 대안 삭제">삭제</button>
+                                    <button class="add-alt" onclick={addAlternative} title="대안 추가">대안추가</button>
+                                    {#each alternatives as alternative, index}
+                                        <button class:active={activeAlternative === index} onclick={() => switchAlternative(index)}>
+                                            <span>{alternative.name}</span>
                                             <small>{alternativeStatusLabel(alternative)}</small>
                                         </button>
-                                        <button
-                                            class="browser-tab-close"
-                                            onclick={(event) => { event.stopPropagation(); requestDeleteAlternative(index); }}
-                                            disabled={alternatives.length <= 1}
-                                            title="{alternative.name} 삭제"
-                                            aria-label="{alternative.name} 삭제"
-                                        >×</button>
-                                    </div>
-                                {/each}
-                                <button class="browser-tab-add" onclick={addAlternative} title="대안 추가" aria-label="대안 추가">+</button>
-                            </div>
-                        </div>
-                        {#if pendingDeleteIndex !== null}
-                            <div class="alt-delete-confirm-backdrop" onclick={cancelDeleteAlternative}>
-                                <div class="alt-delete-confirm" role="dialog" aria-modal="true" aria-label="대안 삭제 확인" onclick={(event) => event.stopPropagation()}>
-                                    <p>'{alternatives[pendingDeleteIndex]?.name}'을(를) 삭제하시겠습니까?<br />대안 데이터가 사라지며 되돌릴 수 없습니다.</p>
-                                    <div class="alt-delete-confirm-actions">
-                                        <button class="secondary-action" onclick={cancelDeleteAlternative}>취소</button>
-                                        <button class="secondary-action danger" onclick={confirmDeleteAlternative}>삭제</button>
-                                    </div>
+                                    {/each}
                                 </div>
                             </div>
-                        {/if}
+                        </div>
                         <div class="map-result-wrap">
                             <SelectedRegionMap
-                                bind:this={selectedRegionMap}
                                 {regionCode}
                                 regionName={region}
-                                {hazard}
-                                height="100%"
+                                height="760px"
                                 showCadastral={false}
                                 analysisIndicators={analysisDone ? appliedIndicators : previewAnalysisIndicators}
                                 riskGrid={analysisResult?.gridResult || indicatorPreviewGrid}
@@ -3099,13 +2719,120 @@
                                 {focusedCandidate}
                                 onParcelCandidatesChange={handleParcelCandidates}
                                 onParcelCandidateFocus={handleMapParcelCandidateFocus}
-                                onParcelDerivationComplete={handleParcelDerivationComplete}
                             />
+                            <section class="score-row map-score-overlay" aria-label="리스크 평가 결과">
+                                <div class="score-card risk"><span>{analysisResult?.hazardOnly ? '예비 위험도' : '종합 위험도'}</span><strong>{formatScore(resultRiskScore)}</strong><small>{analysisDone ? `${analysisResult.gridUnit} · ${analysisResult.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk'}` : '분석 실행 대기'}</small></div>
+                                <div class="score-card"><span><b class="dot h"></b>기후위험 H</span><strong>{formatScore(resultScores.H)}</strong><label class="dimension-weight">통합 가중치<input type="number" min="0" step="0.1" value={dimensionWeights.H} oninput={(event) => setDimensionWeight('H', event.currentTarget.value)} /></label><div class="bar"><i style={`width:${(resultScores.H || 0) * 100}%`}></i></div></div>
+                                <div class="score-card"><span><b class="dot e"></b>노출 E</span><strong>{formatScore(resultScores.E)}</strong><label class="dimension-weight">통합 가중치<input type="number" min="0" step="0.1" value={dimensionWeights.E} oninput={(event) => setDimensionWeight('E', event.currentTarget.value)} /></label><div class="bar"><i style={`width:${(resultScores.E || 0) * 100}%`}></i></div></div>
+                                <div class="score-card"><span><b class="dot v"></b>취약성 V</span><strong>{formatScore(resultScores.V)}</strong><label class="dimension-weight">통합 가중치<input type="number" min="0" step="0.1" value={dimensionWeights.V} oninput={(event) => setDimensionWeight('V', event.currentTarget.value)} /></label><div class="bar"><i style={`width:${(resultScores.V || 0) * 100}%`}></i></div></div>
+                            </section>
                         </div>
                     </div>
                 </div>
             </section>
 
+            <section class="panel candidates wide-candidates">
+                <div class="panel-head">
+                    <div><span class="section-number">02</span><h2>실천권역 구성: 유형별 실천지구</h2><p>{analysisDone ? parcelCandidateMessage : 'Risk 분석 후 지도에서 실천권역도출하기를 실행하면 실천권역을 구성하는 유형별 실천지구가 표시됩니다.'}</p></div>
+                    <span class="count-badge">실천지구 {candidateList.length}개</span>
+                </div>
+                {#if candidateList.length}
+                    <div class="practice-type-note">
+                        <strong>시연용 분류 v1</strong>
+                        <span>공간 규모가 큰 권역은 계획행정수단, Risk 집중 권역은 시설지원사업, 소규모 생활권은 시민실천으로 임시 분류했습니다.</span>
+                    </div>
+                    <div class="practice-district-groups">
+                        {#each practiceDistrictGroups as group}
+                            <section class="practice-district-group" style={`--practice-color:${group.color};--practice-fill:${group.fillColor}`}>
+                                <header>
+                                    <i aria-hidden="true"></i>
+                                    <span><strong>{group.label}</strong><small>{group.shortDescription}</small></span>
+                                    <b>{group.candidates.length}개</b>
+                                </header>
+                                <div class="candidate-list">
+                                    {#each group.candidates as candidate}
+                                        {@const index = candidateList.findIndex((item) => candidateIdentity(item) === candidateIdentity(candidate))}
+                                        <article class="candidate-card" class:active={selectedCandidate === index}>
+                                            <button class="candidate-main" type="button" onclick={() => selectCandidate(candidate, index)}>
+                                                <span class="rank">{String(candidate.districtNumber || candidate.rank).padStart(2, '0')}</span>
+                                                <span><strong>{candidate.name}</strong><small>{candidate.area}</small></span>
+                                                <b>{formatScore(candidate.risk)}</b>
+                                            </button>
+                                            <button class="candidate-detail-toggle" type="button" title="분류 사유 보기" aria-label={`${candidate.name} 분류 사유 보기`} onclick={() => showCandidateDetail(candidate, index)}>!</button>
+                                        </article>
+                                    {/each}
+                                </div>
+                            </section>
+                        {/each}
+                    </div>
+                    {#if detailCandidateItem}
+                        <aside class="candidate-detail-panel" aria-label="실천지구 분류 상세보기" style={`--practice-color:${detailCandidateItem.practiceTypeColor}`}>
+                            <div>
+                                <span>실천지구 분류 사유 · 시연용</span>
+                                <strong>{detailCandidateItem.name}</strong>
+                                <em>{detailCandidateItem.practiceTypeLabel}</em>
+                                <small>{detailCandidateItem.classificationReason}</small>
+                                <small class="classification-rule">적용 규칙: {detailCandidateItem.classificationRule}</small>
+                            </div>
+                            <dl>
+                                <div><dt>총 필지 면적</dt><dd>{candidateTotalAreaLabel(detailCandidateItem)}</dd></div>
+                                <div><dt>필지 수</dt><dd>{formatInteger(detailCandidateItem.parcelCount)}필지</dd></div>
+                                <div><dt>Risk</dt><dd>{formatScore(detailCandidateItem.risk)}</dd></div>
+                                <div><dt>H</dt><dd>{formatScore(detailCandidateItem.h)}</dd></div>
+                                <div><dt>E</dt><dd>{formatScore(detailCandidateItem.e)}</dd></div>
+                                <div><dt>V</dt><dd>{formatScore(detailCandidateItem.v)}</dd></div>
+                            </dl>
+                        </aside>
+                    {/if}
+                {:else}
+                    <div class="empty-candidate-state">
+                        <strong>실천권역 도출 대기</strong>
+                        <span>Risk 분석과 실천권역 도출이 끝나면 실천권역을 구성하는 실제 핫스팟-필지 교차 실천지구가 3개 시연 유형으로 표시됩니다.</span>
+                    </div>
+                {/if}
+            </section>
+
+            <section class="decision-panel decision-transfer-summary" id="decision-transfer-summary">
+                <div class="decision-title">
+                    <span class="section-number">04</span>
+                    <div>
+                        <h2>검토 요청 전 최종 확인 및 전달 요약</h2>
+                        <p>현재 분석 결과와 저장 이력을 확인한 뒤 주관부서 지원도구로 검토를 요청합니다.</p>
+                    </div>
+                    <span class="summary-ready-badge">{handoffCandidateCount ? '전달 준비' : '분석 대기'}</span>
+                </div>
+                <div class="transfer-summary-grid">
+                    <article>
+                        <span>대상 지역·재해</span>
+                        <strong>{region} · {config.label}</strong>
+                        <small>행정구역 코드 {regionCode}</small>
+                    </article>
+                    <article>
+                        <span>현재 대안</span>
+                        <strong>{alternatives[activeAlternative]?.name}</strong>
+                        <small>{alternatives[activeAlternative]?.status || '검토중'} · 후보 {candidateList.length}개</small>
+                    </article>
+                    <article>
+                        <span>전체 전달 범위</span>
+                        <strong>{handoffAlternativeCount}개 대안 · {handoffCandidateCount}개 후보</strong>
+                        <small>{analysisDone ? `Risk ${formatScore(resultRiskScore)}` : 'Risk 분석 실행 전'}</small>
+                    </article>
+                    <article>
+                        <span>검토 요청 상태</span>
+                        <strong>{latestHandoffPackage ? '전달 완료' : handoffCandidateCount ? '전달 가능' : '후보 도출 필요'}</strong>
+                        <small>{handoffStatusText}</small>
+                    </article>
+                </div>
+                <div class="transfer-final-action">
+                    <div>
+                        <strong>최종 확인</strong>
+                        <span>선정 대안, 필지 후보와 분석 조건이 검토 요청 패키지에 함께 기록됩니다.</span>
+                    </div>
+                    <button class="decision-action" onclick={handoffToDepartmentPlatform} disabled={!handoffCandidateCount}>
+                        주관부서 지원도구로 검토 요청
+                    </button>
+                </div>
+            </section>
         </main>
     </div>
 </div>
@@ -3255,7 +2982,7 @@
                 <span>작성자</span>
                 <span>날짜</span>
             </div>
-            <div class="saved-draft-rows" aria-label="저장 이력">
+            <div class="saved-draft-rows" aria-label="Supabase 저장 이력">
                 {#if supabaseBusy}
                     <p class="saved-draft-empty">저장 이력을 불러오는 중입니다.</p>
                 {:else if supabaseDrafts.length}
@@ -3270,7 +2997,7 @@
                         </button>
                     {/each}
                 {:else}
-                    <p class="saved-draft-empty">불러올 저장본이 없습니다.</p>
+                    <p class="saved-draft-empty">불러올 Supabase 저장본이 없습니다.</p>
                 {/if}
             </div>
             <footer>
@@ -3280,49 +3007,6 @@
                 </button>
             </footer>
         </div>
-    </div>
-{/if}
-
-{#if handoffReviewOpen}
-    <div class="handoff-review-modal-backdrop" onclick={(event) => event.target === event.currentTarget && closeHandoffReview()}>
-        <section class="handoff-review-modal" role="dialog" aria-modal="true" aria-labelledby="handoff-review-title">
-            <header>
-                <h2 id="handoff-review-title">주관부서 지원도구로 검토 요청</h2>
-                <button type="button" class="handoff-review-close" onclick={closeHandoffReview} aria-label="닫기">×</button>
-            </header>
-            <div class="handoff-review-body">
-                <div class="handoff-review-row">
-                    <span>대상 지역·재해</span>
-                    <strong>{region} · {config.label}</strong>
-                    <small>행정구역 코드 {regionCode}</small>
-                </div>
-                <div class="handoff-review-row">
-                    <span>분석 조건</span>
-                    <strong>{hazardDatasetMode === 'observed' ? '최근 5년 · 2021~2025' : `${hazardScenario.toUpperCase()} · ${hazardFuturePeriod}`}</strong>
-                    <small>{gridUnit} 격자 · 지표 {enabledCount}개 사용</small>
-                </div>
-                <fieldset class="handoff-review-scope">
-                    <legend>전달 범위</legend>
-                    <label>
-                        <input type="radio" name="handoff-scope" value="current" checked={handoffScope === 'current'} onchange={() => (handoffScope = 'current')} />
-                        현재 대안만 <small>({alternatives[activeAlternative]?.name} · 후보 {candidateList.length}개)</small>
-                    </label>
-                    <label>
-                        <input type="radio" name="handoff-scope" value="all" checked={handoffScope === 'all'} onchange={() => (handoffScope = 'all')} />
-                        전체 대안 <small>({handoffAlternativeCount}개 대안 · {handoffCandidateCount}개 후보)</small>
-                    </label>
-                </fieldset>
-                <label class="handoff-review-note">
-                    전달 메모 <span class="handoff-review-optional">(선택 사항)</span>
-                    <textarea rows="2" placeholder="검토 담당자에게 전달할 메모를 입력하세요" value={handoffNote} oninput={(event) => (handoffNote = event.currentTarget.value)}></textarea>
-                </label>
-                <p class="handoff-review-note-text">선정 대안, 필지 후보와 분석 조건이 함께 기록됩니다.</p>
-            </div>
-            <footer>
-                <button type="button" class="secondary-action" onclick={closeHandoffReview}>취소</button>
-                <button type="button" class="decision-action" onclick={confirmHandoffReview} disabled={handoffScope === 'current' ? !candidateList.length : !handoffCandidateCount}>검토 요청</button>
-            </footer>
-        </section>
     </div>
 {/if}
 

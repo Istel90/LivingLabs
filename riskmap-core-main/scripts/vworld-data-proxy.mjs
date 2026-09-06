@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +8,7 @@ import { tmpdir } from 'node:os';
 import * as h5wasm from 'h5wasm/node';
 import proj4 from 'proj4';
 import pg from 'pg';
+import { buildNationalHazardGrid } from './hazard-grid-service.mjs';
 
 const { Pool } = pg;
 
@@ -31,6 +33,7 @@ try {
 }
 
 const apiKey = env.VITE_VWORLD_API_KEY || '';
+const tunnelToken = process.env.LIVINGLABS_TUNNEL_TOKEN || '';
 const kmaApiKey = env.KMA_API_KEY || '';
 const domain = env.VITE_VWORLD_DOMAIN || 'http://127.0.0.1:5175/';
 const allowInsecureTls = env.VWORLD_ALLOW_INSECURE_TLS === 'true' || process.env.VWORLD_ALLOW_INSECURE_TLS === 'true';
@@ -81,6 +84,25 @@ function send(response, status, body, contentType = 'application/json; charset=u
     'Content-Type': contentType,
   });
   response.end(body);
+}
+
+function secureEquals(left, right) {
+  const leftBuffer = Buffer.from(String(left || ''));
+  const rightBuffer = Buffer.from(String(right || ''));
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function isCloudflareTunnelRequest(request) {
+  return Boolean(
+    request.headers['cf-connecting-ip']
+    || request.headers['cf-ray']
+    || request.headers['cf-visitor'],
+  );
+}
+
+function isAuthorizedTunnelRequest(request) {
+  return Boolean(tunnelToken)
+    && secureEquals(request.headers['x-livinglabs-tunnel-token'], tunnelToken);
 }
 
 function featureCollection(rows) {
@@ -1370,6 +1392,11 @@ async function fetchKmaNetwork(type = 'asos', radiusKm = 35) {
   return payload;
 }
 const server = createServer(async (request, response) => {
+  if (isCloudflareTunnelRequest(request) && !isAuthorizedTunnelRequest(request)) {
+    send(response, 401, JSON.stringify({ ok: false, error: 'Unauthorized tunnel request' }));
+    return;
+  }
+
   if (request.method === 'OPTIONS') {
     send(response, 204, '');
     return;
@@ -1459,7 +1486,14 @@ const server = createServer(async (request, response) => {
 
   if (routePath === '/hazard-grid') {
     try {
-      const payload = await fetchHazardGrid(url.searchParams);
+      let payload;
+      try {
+        payload = await fetchHazardGrid(url.searchParams);
+      } catch (databaseError) {
+        payload = await buildNationalHazardGrid(url.searchParams).catch(() => {
+          throw databaseError;
+        });
+      }
       send(response, 200, JSON.stringify(payload), 'application/json; charset=utf-8', 'public, max-age=300');
     } catch (error) {
       const isInputError = /must be|not available|not loaded/.test(error?.message || '');
