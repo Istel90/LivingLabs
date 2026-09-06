@@ -1600,7 +1600,8 @@ button { cursor: pointer; }
 }
 .clear-all-link:hover:not(:disabled) { color: #0f766e; }
 .clear-all-link:disabled { opacity: .45; text-decoration: none; cursor: not-allowed; }
-.analysis-fixed-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* H/E/V 칸 아래가 Risk 버튼 아래와 같은 선에 놓이도록 밑변 정렬 */
+.analysis-fixed-summary { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
 .fixed-summary-left { display: flex; flex: 1 1 auto; flex-direction: column; justify-content: space-between; gap: 4px; min-width: 0; }
 .hev-summary {
     display: grid;
@@ -1608,27 +1609,27 @@ button { cursor: pointer; }
     min-width: 0;
     width: 100%;
     align-items: center;
-    height: 32px;
+    height: 28px;
     padding: 0 6px;
     background: #FAF9F5;
     border: 1px solid #E5E3DE;
-    border-radius: 10px;
+    border-radius: 9px;
 }
 .hev-cell { display: flex; align-items: center; justify-content: center; gap: 4px; }
-.hev-label { font-size: 15px; font-weight: 700; white-space: nowrap; }
-.hev-slash { color: #C9C6C0; font-size: 13px; font-weight: 300; padding: 0; }
+.hev-label { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.hev-slash { color: #C9C6C0; font-size: 12px; font-weight: 300; padding: 0; }
 .hev-cell--h .hev-label { color: var(--color-hazard); }
 .hev-cell--e .hev-label { color: var(--color-exposure); }
 .hev-cell--v .hev-label { color: var(--color-vulnerability); }
 .hev-badge {
-    width: 22px;
-    height: 20px;
+    width: 19px;
+    height: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 5px;
     color: #FFFFFF;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
 }
 .hev-cell--h .hev-badge { background: var(--color-hazard); }
