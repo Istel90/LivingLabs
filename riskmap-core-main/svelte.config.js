@@ -3,6 +3,8 @@ import adapter_static from '@sveltejs/adapter-static';
 /** @type {import('@sveltejs/kit').Config} */
 const config_static = {
     kit: {
+        // Portal links belong to the parent app; prerender only this app's routes.
+        prerender: { entries: ['*'], crawl: false },
         adapter: adapter_static({
             // default options are shown. On some platforms
             // these options are set automatically — see below

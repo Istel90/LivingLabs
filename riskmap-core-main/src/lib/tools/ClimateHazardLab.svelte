@@ -54,8 +54,8 @@
             projectSuffix: '폭염 위험지역 분석',
             heroEmphasis: '우선 대응지를 찾습니다.',
             heroDescription: '기후위험(H), 노출(E), 취약성(V) 지표를 직접 구성하고 공간 분석 결과를 의사결정으로 연결하세요.',
-            sampleNotice: '전국 행정구역별 H01~H10 100m 분석격자를 확인할 수 있습니다.',
-            mapSource: '전국 최근 5년 H01~H10 / SSP H01~H09 100m 격자',
+            sampleNotice: '전국 행정구역별 H01~H11 100m 분석격자를 확인할 수 있습니다.',
+            mapSource: '전국 최근 5년 H01~H11 / SSP H01~H09 100m 격자',
             rasterPath: null,
             dataSummaryPath: '/analysis-data/suwon-heatwave-data-summary.json',
             rasterReadyPrefix: '선택 행정구역 100m Hazard 격자',
@@ -91,6 +91,7 @@
                 { id: 108, indicatorCode: 'H08', icon: '📈', label: 'H08 · 온난일 TX90P', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#f97316' },
                 { id: 109, indicatorCode: 'H09', icon: '⏱', label: 'H09 · 최대 온난일 계속기간 WSDIx', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#c2410c' },
                 { id: 110, indicatorCode: 'H10', icon: '🛰', label: 'H10 · 여름철 지표면온도 P90', description: '2021~2025 Landsat 30m 원자료를 집계한 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'Landsat-LST-100m', supportedGridUnits: ['100m'], color: '#b45309' },
+                { id: 111, indicatorCode: 'H11', icon: '☀', label: 'H11 · 추정 WBGT P90 (시험)', description: '2021~2025년 6~9월 일최대 추정 WBGT P90의 연도 평균 · ASOS 관측소 보간', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-ASOS-WBGT-IDW-100m', supportedGridUnits: ['100m'], color: '#be123c' },
                 { id: 3, iconPath: asset('/indicator-icons/보행자.png'), label: '유동인구 노출량', description: 'Pop_Grid_100m Day_Total을 EPSG:5179 표준 100m 격자에 연결한 유동인구 노출량', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/E_population_floating_count_100m.json', value: 0.01259, color: '#db9d3e' },
                 { id: 4, icon: '♟', label: '상주인구 노출량', description: '국토통계 100m 격자 총인구 수를 EPSG:5179 표준 통계격자에 연결', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/E_population_resident_count_100m.json', value: 0.03308, color: '#d4af42' },
                 { id: 5, iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 비율', description: '국토통계 100m 격자 고령인구 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/V_sensitivity_elderly_ratio_100m.json', value: 0.06127, color: '#e45662' },
@@ -207,13 +208,13 @@
 
     const config = hazardConfigs[hazard] || hazardConfigs.heatwave;
     function configureIndicatorsForRegion(sourceIndicators, code, datasetMode = hazardDatasetMode) {
-        const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09', 'H10']);
+        const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09', 'H10', 'H11']);
         return sourceIndicators.map((item) => {
             if (item.indicatorCode) {
                 const observed = datasetMode === 'observed';
                 const availableForDataset = observed
                     ? observedCodes.has(item.indicatorCode)
-                    : item.indicatorCode !== 'H10';
+                    : !['H10', 'H11'].includes(item.indicatorCode);
                 const available = Boolean(code) && availableForDataset;
                 const dataQuery = new URLSearchParams({
                     regionCode: code,
@@ -225,18 +226,22 @@
                 return {
                     ...item,
                     description: observed
-                        ? item.indicatorCode === 'H01'
+                        ? item.indicatorCode === 'H11'
+                            ? '시험 자료 · 2021~2025년 6~9월 일최대 추정 WBGT P90의 연도 평균. ASOS 보간 100m 격자이며 필지별 그늘·건물 영향은 미반영'
+                            : item.indicatorCode === 'H01'
                             ? '2021~2025 평균 · 500m 원자료를 정렬한 지역 100m 분석격자'
                             : item.indicatorCode === 'H10'
                                 ? '2021~2025 여름철 P90 평균 · Landsat 30m를 집계한 지역 100m 격자'
                                 : ['H06', 'H08', 'H09'].includes(item.indicatorCode)
                                     ? '1991~2020 기준자료와 2021~2025 ASOS 34개소 지표를 IDW 공간화한 지역 100m 분석격자'
                                     : '2021~2025 ASOS 95개소 지표를 IDW 공간화한 지역 100m 분석격자'
-                        : item.indicatorCode === 'H10'
+                        : ['H10', 'H11'].includes(item.indicatorCode)
                             ? 'SSP 기반 직접 미래 전망자료 없음'
                             : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 지역 100m 분석격자`,
                     sourceType: observed
-                        ? item.indicatorCode === 'H10'
+                        ? item.indicatorCode === 'H11'
+                            ? 'KMA-ASOS-WBGT-IDW-100m'
+                            : item.indicatorCode === 'H10'
                             ? 'Landsat-LST-100m'
                             : item.indicatorCode === 'H01'
                                 ? 'KMA-observed-100m'
@@ -1372,7 +1377,7 @@
         hazardDatasetMode = value === 'future' ? 'future' : 'observed';
         await refreshHazardDataset(
             hazardDatasetMode === 'observed'
-                ? '최근 5년(2021~2025) 100m 자료로 전환했습니다. H01~H10을 사용할 수 있습니다.'
+                ? '최근 5년(2021~2025) 100m 자료로 전환했습니다. H01~H11을 사용할 수 있습니다.'
                 : `미래 ${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 100m 자료로 전환했습니다. H01~H09를 사용할 수 있습니다.`
         );
     }
@@ -2577,7 +2582,7 @@
                     <div class="lab-analysis-runner-copy">
                         <span>기존 실천권역 분석 기능</span>
                         <strong>{region} · {hazardDatasetMode === 'observed' ? '2021~2025 최근 5년' : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod}`}</strong>
-                        <small>{analysisDone ? analysisMessage : 'H01~H10 기후위험 지표와 기존 노출·취약성·적응역량 지표를 결합해 Risk를 계산합니다.'}</small>
+                        <small>{analysisDone ? analysisMessage : 'H01~H11 기후위험 지표와 기존 노출·취약성·적응역량 지표를 결합해 Risk를 계산합니다.'}</small>
                     </div>
                     <div class="lab-analysis-flow" aria-label="분석 흐름">
                         <span class:active={!analysisDone}><b>1</b> Risk 분석</span>

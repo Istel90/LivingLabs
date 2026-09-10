@@ -4,6 +4,9 @@
     import proj4 from 'proj4';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
+    import AlternativeOverlap from './AlternativeOverlap.svelte';
+    import { groupRegionalDrafts } from '$lib/data/regionalDraftGroups.js';
+    import { analysisJsonReplacer, restoreAnalysisPayload } from '$lib/data/analysisSerialization.js';
     import {
         enrichPracticeDistricts,
         PRACTICE_TYPE_META,
@@ -20,6 +23,7 @@
     import {
         draftPayloadFromRow,
         listPriorityAreaDrafts,
+        listRegionalPriorityAreaDrafts,
         savePriorityAreaDraft
     } from '../../../../shared/services/priorityAreaDrafts.js';
 
@@ -32,7 +36,6 @@
     );
 
     const steps = ['프로젝트 설정', '입력자료', '가중치 설정', '분석 실행', '결과 지도', '의사결정 지원'];
-    const gridOptions = ['100m', '50m', '10m', '5m'];
     const hazardScenarios = ['ssp126', 'ssp245', 'ssp370', 'ssp585'];
     const hazardFuturePeriods = ['2026', '2027', '2028', '2029', '2030', '2040', '2050', '2060', '2070', '2080', '2090', '2100'];
     const requiredGroups = ['기후위험', '노출', '민감도', '적응역량'];
@@ -54,7 +57,7 @@
             projectSuffix: '폭염 위험지역 분석',
             heroEmphasis: '우선 대응지를 찾습니다.',
             heroDescription: '기후위험(H), 노출(E), 취약성(V) 지표를 직접 구성하고 공간 분석 결과를 의사결정으로 연결하세요.',
-            sampleNotice: '전국 행정구역별 H01~H10 100m 분석격자를 확인할 수 있습니다.',
+            sampleNotice: '전국 행정구역별 H01~H11 100m 분석격자를 확인할 수 있습니다.',
             mapSource: '전국 최근 5년 H01~H05·H07·H10 / SSP245 H01~H09 100m 격자',
             rasterPath: null,
             dataSummaryPath: '/analysis-data/suwon-heatwave-data-summary.json',
@@ -91,6 +94,7 @@
                 { id: 108, indicatorCode: 'H08', icon: '📈', label: 'H08 · 온난일 TX90P', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#f97316' },
                 { id: 109, indicatorCode: 'H09', icon: '⏱', label: 'H09 · 최대 온난일 계속기간 WSDIx', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#c2410c' },
                 { id: 110, indicatorCode: 'H10', icon: '🛰', label: 'H10 · 여름철 지표면온도 P90', description: '2021~2025 Landsat 30m 원자료를 집계한 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'Landsat-LST-100m', supportedGridUnits: ['100m'], color: '#b45309' },
+                { id: 111, indicatorCode: 'H11', icon: '☀', label: 'H11 · 추정 WBGT (시험)', description: '폭염 대표조건에서 계산한 100m 공간 비교용 WBGT', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-KMAP-ASOS-building-DEM-100m', supportedGridUnits: ['100m'], color: '#be123c' },
                 { id: 3, iconPath: asset('/indicator-icons/보행자.png'), label: '유동인구 노출량', description: 'Pop_Grid_100m Day_Total을 EPSG:5179 표준 100m 격자에 연결한 유동인구 노출량', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/E_population_floating_count_100m.json', value: 0.01259, color: '#db9d3e' },
                 { id: 4, floodIndicator: 'FE01', icon: '♟', label: '상주인구 노출량', description: '2024 전국 총인구 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], color: '#d4af42' },
                 { id: 5, iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 수', description: '국토정보플랫폼 2024년 10월 고령인구 수를 공통 EPSG:5179 100m 셀에 연결', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', populationIndicator: 'elderly', value: 0.06127, color: '#e45662' },
@@ -169,7 +173,7 @@
                 { id: 224, populationIndicator: 'infant', iconPath: asset('/indicator-icons/유소년인구비율.png'), label: '유아인구 수', description: '국토정보플랫폼 2024년 10월 전국 100m 유아인구', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', color: '#a56d83' },
                 { id: 225, icon: '🏫', label: '어린이집·복지시설', description: '어린이집은 주소만 적재되어 좌표 원자료 보완 후 연결 예정', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'source-address-only', supportedGridUnits: ['100m'], color: '#9333ea' },
                 { id: 231, analysisIndicator: 'facility-bus-stop', icon: '⇄', label: '대중교통 대피 접근성 proxy', description: '전국 버스정류장 100m 셀 밀도를 대피 이동 접근성 참고지표로 사용 · 실제 대피경로·운행정보는 아님', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#358b78' },
-                { id: 234, analysisIndicator: 'facility-shelter', icon: '↗', label: '민방위 대피시설 접근성 proxy', description: '행정안전부 전국 현행 원본의 사용 중 시설 17,228개 실제 위치를 표시하고 400m 커널밀도를 계산 · 값이 높을수록 대피시설 접근성·적응역량이 높음', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-shelter-points-KDE-400m', supportedGridUnits: ['100m'], color: '#0f766e' },
+                { id: 234, analysisIndicator: 'facility-shelter', icon: '↗', label: '민방위 대피시설 접근성 proxy', description: '행정안전부 전국 현행 원본의 사용 중 시설 17,228개 실제 위치를 표시하고 400m 커널밀도를 계산 · 값이 높을수록 대피시설 접근성·적응역량이 높음', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-shelter-points-KDE-400m', supportedGridUnits: ['100m'], color: '#0f766e' },
                 { id: 232, icon: '◉', label: '빗물받이 밀도', description: '전국 빗물받이 원자료 보완 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'source-required', color: '#3f9b80' },
                 { id: 233, icon: '▤', label: '배수펌프장 접근성', description: '전국 배수펌프장·저류시설 원자료 보완 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'source-required', color: '#57a66c' }
             ],
@@ -226,13 +230,13 @@
 
     const config = hazardConfigs[hazard] || hazardConfigs.heatwave;
     function configureIndicatorsForRegion(sourceIndicators, code, datasetMode = hazardDatasetMode) {
-        const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09', 'H10']);
+        const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09', 'H10', 'H11']);
         return sourceIndicators.map((item) => {
             if (item.indicatorCode) {
                 const observed = datasetMode === 'observed';
                 const availableForDataset = observed
                     ? observedCodes.has(item.indicatorCode)
-                    : item.indicatorCode !== 'H10';
+                    : !['H10', 'H11'].includes(item.indicatorCode);
                 const available = Boolean(code) && availableForDataset;
                 const dataQuery = new URLSearchParams({
                     regionCode: code,
@@ -244,18 +248,22 @@
                 return {
                     ...item,
                     description: observed
-                        ? item.indicatorCode === 'H01'
+                        ? item.indicatorCode === 'H11'
+                            ? '전국 시험 자료 · ASOS 폭염 대표조건·KMAP 100m 일사량·NGII DEM·건물 높이와 그림자를 결합한 09·12·15시 최대 추정 WBGT. 수목·건물 주변 국지풍·상세 장파복사는 미반영. 실제 관측값이나 5년 평균 WBGT는 아님.'
+                            : item.indicatorCode === 'H01'
                             ? '2021~2025 평균 · 500m 원자료를 정렬한 지역 100m 분석격자'
                             : item.indicatorCode === 'H10'
                                 ? '2021~2025 여름철 P90 평균 · Landsat 30m를 집계한 지역 100m 격자'
                                 : observedCodes.has(item.indicatorCode)
                                     ? '2021~2025 ASOS 95개소 지표를 IDW 공간화한 지역 100m 분석격자'
                                     : '1991~2020 기준자료 수집 후 100m 공간모델 구축 예정'
-                        : item.indicatorCode === 'H10'
+                        : ['H10', 'H11'].includes(item.indicatorCode)
                             ? 'SSP 기반 직접 미래 전망자료 없음'
                             : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 지역 100m 분석격자`,
                     sourceType: observed
-                        ? item.indicatorCode === 'H10'
+                        ? item.indicatorCode === 'H11'
+                            ? 'KMA-KMAP-ASOS-building-DEM-100m'
+                            : item.indicatorCode === 'H10'
                             ? 'Landsat-LST-100m'
                             : item.indicatorCode === 'H01'
                                 ? 'KMA-observed-100m'
@@ -298,6 +306,21 @@
 
     function isGridValueCollection(values) {
         return Array.isArray(values) || ArrayBuffer.isView(values) || values instanceof Map;
+    }
+
+    async function applyRegionalAvailability(source, code) {
+        if (hazard !== 'flood') return source;
+        try {
+            const response = await fetch(`/indicator-availability?regionCode=${encodeURIComponent(code)}`, { signal: AbortSignal.timeout(15000) });
+            if (!response.ok) return source;
+            const coverage = await response.json();
+            return source.map((item) => item.floodIndicator && !coverage.flood?.[item.floodIndicator]?.available
+                ? { ...item, enabled: false, dataStatus: 'missing', description: `${item.description} · 이 지역에 연결된 유효 원자료가 없습니다.`, coverageNote: '지역 원자료 없음' }
+                : item);
+        } catch {
+            // The execution request will report the actual source error; never invent a grid.
+            return source;
+        }
     }
 
     function gridValueCollectionSize(values) {
@@ -346,6 +369,7 @@
     $: projectBreadcrumb = [region, config.label, config.projectSuffix.replace(config.label, '').trim()].filter(Boolean);
     let analysisDone = false;
     let running = false;
+    let analysisRunId = 0;
     let leftPanelTab = '01';
     let candidatesInfoOpen = false;
     let selectedCandidate = 0;
@@ -377,6 +401,48 @@
     let operatorName = '관리자';
     let supabaseDrafts = [];
     let supabaseHistoryOpen = false;
+    let supabaseHistoryTab = 'load';
+    let comparisonTabs = [];
+    let activeComparisonId = null;
+    let comparisonStorageMessage = '';
+    $: visibleComparisonTabs = comparisonTabs.filter(item => item.regionCode === regionCode && item.hazard === hazard);
+    $: activeComparison = visibleComparisonTabs.find(item => item.id === activeComparisonId) || null;
+
+    function comparisonStorageKey() { return `priority-overlap-tabs/v1:${hazard}:${regionCode}`; }
+    async function storeComparisonTabs() {
+        const storageKey = comparisonStorageKey();
+        const tabs = comparisonTabs.filter(item => item.regionCode === regionCode && item.hazard === hazard);
+        try {
+            const db = await openPriorityDraftDb();
+            try {
+                const transaction = db.transaction(PRIORITY_DRAFT_STORE_NAME, 'readwrite');
+                transaction.objectStore(PRIORITY_DRAFT_STORE_NAME).put({ id: storageKey, tabs });
+                await new Promise((resolve, reject) => { transaction.oncomplete = resolve; transaction.onerror = () => reject(transaction.error); transaction.onabort = () => reject(transaction.error); });
+            } finally { db.close(); }
+            comparisonStorageMessage = '이 브라우저에 결과 탭 보관됨';
+        } catch { comparisonStorageMessage = '결과 탭 보관 실패 · 비교 결과 내려받기로 보관해 주세요.'; }
+    }
+    function openComparisonResult(result, minimum) {
+        persistAlternative(activeAlternative);
+        const sequence = visibleComparisonTabs.reduce((max, item) => Math.max(max, Number(item.name.split(' ').at(-1)) || 0), 0) + 1;
+        const snapshot = { id: crypto.randomUUID(), name: `겹침 결과 ${sequence}`,
+            regionCode, hazard, createdAt: new Date().toISOString(), minimum, result: structuredClone(result) };
+        comparisonTabs = [...comparisonTabs, snapshot];
+        activeComparisonId = snapshot.id;
+        supabaseHistoryOpen = false;
+        storeComparisonTabs();
+    }
+    function updateComparisonMinimum(id, minimum) {
+        comparisonTabs = comparisonTabs.map(item => item.id === id ? { ...item, minimum } : item);
+        storeComparisonTabs();
+    }
+    function closeComparisonTab(id) {
+        comparisonTabs = comparisonTabs.filter(item => item.id !== id);
+        if (activeComparisonId === id) activeComparisonId = null;
+        storeComparisonTabs();
+    }
+    $: savedRegionGroups = groupRegionalDrafts(supabaseDrafts, getRegionByCode);
+    $: savedRegionCount = savedRegionGroups.reduce((sum, group) => sum + group.regions.length, 0);
     let supabaseBusy = false;
     let supabaseStatus = '저장 준비됨';
     let supabaseSaveDialog = null;
@@ -548,7 +614,7 @@
         try {
             const transaction = db.transaction(PRIORITY_DRAFT_STORE_NAME, 'readwrite');
             const store = transaction.objectStore(PRIORITY_DRAFT_STORE_NAME);
-            await requestToPromise(store.put(JSON.parse(JSON.stringify(payload))));
+            await requestToPromise(store.put(JSON.parse(JSON.stringify(payload, analysisJsonReplacer))));
         } finally {
             db.close();
         }
@@ -618,7 +684,9 @@
         if (draft.hazard !== hazard || draft.regionCode !== regionCode) return false;
         if (!Array.isArray(draft.alternatives) || !draft.alternatives.length) return false;
 
-        region = draft.region || region;
+        draft = restoreAnalysisPayload(draft);
+
+        region = getRegionByCode(regionCode)?.fullName || draft.region || region;
         gridUnit = draft.gridUnit || gridUnit;
         dimensionWeights = { ...(draft.dimensionWeights || dimensionWeights) };
         mapSource = draft.mapSource || mapSource;
@@ -666,16 +734,13 @@
     async function refreshSupabaseDrafts() {
         supabaseBusy = true;
         try {
-            supabaseDrafts = await listPriorityAreaDrafts({
-                regionCode,
-                hazardType: hazard,
-                limit: 30
-            });
+            supabaseDrafts = await listRegionalPriorityAreaDrafts(hazard, regionCode);
             supabaseStatus = supabaseDrafts.length
                 ? `저장 이력 ${supabaseDrafts.length}건`
                 : '저장 이력이 없습니다.';
         } catch (error) {
             console.warn(error);
+            supabaseDrafts = [];
             supabaseStatus = error?.message || '저장 이력을 불러오지 못했습니다.';
         } finally {
             supabaseBusy = false;
@@ -739,8 +804,15 @@
         }
     }
 
-    function loadSupabaseDraft(row) {
+    async function loadSupabaseDraft(row) {
         const payload = draftPayloadFromRow(row);
+        if (payload?.regionCode && String(payload.regionCode) !== regionCode && payload.hazard === hazard) {
+            await savePriorityDraft();
+            const target = new URL(window.location.href);
+            target.search = new URLSearchParams({ regionCode: payload.regionCode, savedDraft: row.id });
+            window.location.assign(target);
+            return;
+        }
         if (!restorePriorityDraftPayload(payload)) {
             supabaseStatus = '현재 지역·재해유형과 맞지 않는 저장본입니다.';
             return;
@@ -785,8 +857,16 @@
 
     onMount(async () => {
         const params = new URLSearchParams(window.location.search);
-        region = params.get('regionName') || region;
         regionCode = params.get('regionCode') || regionCode;
+        try {
+            const db = await openPriorityDraftDb();
+            try {
+                const stored = await requestToPromise(db.transaction(PRIORITY_DRAFT_STORE_NAME, 'readonly').objectStore(PRIORITY_DRAFT_STORE_NAME).get(comparisonStorageKey()));
+                comparisonTabs = Array.isArray(stored?.tabs) ? stored.tabs.filter(item => item.regionCode === regionCode && item.hazard === hazard && item.result?.grid && Array.isArray(item.result?.sources) && Array.isArray(item.result?.cells)) : [];
+                if (comparisonTabs.length) comparisonStorageMessage = '이 브라우저에 보관된 결과 탭';
+            } finally { db.close(); }
+        } catch { comparisonStorageMessage = '보관된 결과 탭을 읽지 못했습니다.'; }
+        region = getRegionByCode(regionCode)?.fullName || params.get('regionName') || regionCode;
         selectedSido = getRegionByCode(regionCode)?.sido || selectedSido;
         hazardDatasetMode = hazard === 'heatwave' && params.get('hazardPeriod') === 'future' ? 'future' : 'observed';
         hazardScenario = hazardScenarios.includes(params.get('scenario')) ? params.get('scenario') : hazardScenario;
@@ -810,6 +890,17 @@
             draftStorageStatus = '임시 저장소 연결 실패';
         }
 
+        indicators = await applyRegionalAvailability(indicators, regionCode);
+        if (params.get('savedDraft')) {
+            try {
+                const matches = await listPriorityAreaDrafts({ regionCode, hazardType: hazard, draftId: params.get('savedDraft'), limit: 1 });
+                if (!matches.length || !restorePriorityDraftPayload(draftPayloadFromRow(matches[0]))) throw new Error('해당 지역의 저장본을 불러오지 못했습니다.');
+                supabaseStatus = `${matches[0].analysis_version} 불러오기 완료 · ${region}`;
+                schedulePriorityDraftSave();
+                const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete('savedDraft');
+                window.history.replaceState(null, '', cleanUrl);
+            } catch (error) { supabaseStatus = error.message; }
+        }
         if (config.dataSummaryPath && regionCode === '41110') {
             try {
                 const dataResponse = await fetch(asset(config.dataSummaryPath));
@@ -823,7 +914,8 @@
         if (!analysisResult?.gridResult) mapSource = config.mapSource;
 
         if (!analysisResult?.gridResult) {
-            loadedPreviewIndicators = await loadIndicatorInputs(initialPreviewTargets(indicators), [], { preferDense: true });
+            const initialPreview = await loadIndicatorInputs(initialPreviewTargets(indicators), [], { preferDense: true });
+            loadedPreviewIndicators = mergePreviewInputs(loadedPreviewIndicators, initialPreview);
             indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
         }
 
@@ -883,12 +975,24 @@
     function loadAlternative(index) {
         const alternative = alternatives[index];
         if (!alternative) return;
+        analysisRunId += 1;
+        running = false;
 
         gridUnit = alternative.settings?.gridUnit || '100m';
         dimensionWeights = { ...(alternative.settings?.dimensionWeights || { H: 1, E: 1, V: 1 }) };
         indicators = cloneIndicatorsForAlternative(alternative.settings?.indicators || config.indicators)
             .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
         analysisResult = alternative.analysisResult || null;
+        // Compact server drafts omit derived H/E/V arrays. Rebuild them from
+        // preserved input grids using the saved alternative's weights.
+        if (analysisResult?.gridResult && !analysisResult.gridResult.vValues && analysisResult.indicators?.length) {
+            try {
+                const rebuilt = computeGridAnalysis(analysisResult.indicators);
+                if (rebuilt) analysisResult = { ...analysisResult, ...rebuilt };
+            } catch (error) {
+                console.warn('저장된 구성요소 격자 복원 실패', error);
+            }
+        }
         appliedIndicators = (alternative.appliedIndicators || []).map((item) => ({ ...item }));
         analysisDone = Boolean(alternative.analysisDone && analysisResult);
         analysisMessage = alternative.analysisMessage || '설정값을 확인한 뒤 Risk 분석을 실행하세요.';
@@ -908,95 +1012,12 @@
     }
 
     function switchAlternative(index) {
+        activeComparisonId = null;
         if (index === activeAlternative) return;
         persistAlternative(activeAlternative);
         activeAlternative = index;
         loadAlternative(index);
         schedulePriorityDraftSave();
-    }
-
-    function publicDemoSeed(item) {
-        return `${regionCode}:${item.indicatorCode || item.id}`
-            .split('')
-            .reduce((sum, character) => sum + character.charCodeAt(0), 0);
-    }
-
-    function publicDemoValue(index, columns, rows, seed) {
-        const column = index % columns;
-        const row = Math.floor(index / columns);
-        const x = columns > 1 ? column / (columns - 1) : 0.5;
-        const y = rows > 1 ? row / (rows - 1) : 0.5;
-        const wave = (Math.sin((x * 8.4) + (seed * 0.07)) + Math.cos((y * 7.1) - (seed * 0.05))) * 0.09;
-        const ridge = Math.max(0, 1 - Math.hypot(x - 0.64, y - 0.42) * 2.1) * 0.22;
-        const texture = (((index * 1103515245 + seed * 12345) >>> 8) % 101) / 1000;
-        return clamp01(0.34 + wave + ridge + texture);
-    }
-
-    function createPublicDemoFallbackGrid(item, referenceItem = null) {
-        let columns = Number(referenceItem?.gridMeta?.columns);
-        let rows = Number(referenceItem?.gridMeta?.rows);
-        let extent = referenceItem?.gridMeta?.extent;
-        let transform = referenceItem?.gridMeta?.transform;
-
-        if (!(columns > 0 && rows > 0 && transform)) {
-            const bounds = getRegionBounds(regionCode);
-            if (!bounds) return null;
-            const [xmin, ymin] = proj4('EPSG:4326', 'EPSG:5179', [bounds.west, bounds.south]);
-            const [xmax, ymax] = proj4('EPSG:4326', 'EPSG:5179', [bounds.east, bounds.north]);
-            const originX = Math.floor(Math.min(xmin, xmax) / 100) * 100;
-            const originY = Math.ceil(Math.max(ymin, ymax) / 100) * 100;
-            columns = Math.max(1, Math.ceil((Math.max(xmin, xmax) - originX) / 100));
-            rows = Math.max(1, Math.ceil((originY - Math.min(ymin, ymax)) / 100));
-            transform = { originX, originY, pixelWidth: 100, pixelHeight: 100 };
-            extent = {
-                xmin: originX,
-                ymin: originY - (rows * 100),
-                xmax: originX + (columns * 100),
-                ymax: originY
-            };
-        }
-
-        const cellCount = columns * rows;
-        if (!Number.isFinite(cellCount) || cellCount <= 0 || cellCount > 450000) return null;
-        const seed = publicDemoSeed(item);
-        const values = new Float32Array(cellCount);
-        let sum = 0;
-        for (let index = 0; index < cellCount; index += 1) {
-            const value = publicDemoValue(index, columns, rows, seed);
-            values[index] = value;
-            sum += value;
-        }
-        const mean = sum / cellCount;
-
-        return {
-            ...item,
-            enabled: item.enabled,
-            dataStatus: 'available',
-            sourceType: 'PUBLIC-DEMO-FALLBACK',
-            demoFallback: true,
-            loadedValue: mean,
-            gridValues: values,
-            gridValidIndices: null,
-            gridMeta: {
-                gridUnit: '100m',
-                rows,
-                columns,
-                extent,
-                transform,
-                crs: 'EPSG:5179'
-            },
-            gridSummary: {
-                gridUnit: '100m',
-                rows,
-                columns,
-                validCells: cellCount,
-                rawMean: Number(mean.toFixed(4)),
-                rawUnit: '정규화 점수',
-                normalizedMean: mean,
-                sourceResolution: '시연용 대체 패턴'
-            },
-            loadError: `${item.label} 원자료 서버에 연결하지 못해 공개 시연용 대체 패턴을 사용했습니다.`
-        };
     }
 
     function indicatorDataKey(item) {
@@ -1010,11 +1031,50 @@
         ].join('|');
     }
 
+    function mergePreviewInputs(...batches) {
+        const currentById = new Map(indicators.map((item) => [item.id, item]));
+        const merged = new Map(batches.flat().map((item) => [item.id, item]));
+        return [...merged.values()].flatMap((item) => {
+            const current = currentById.get(item.id);
+            if (!current || indicatorDataKey(current) !== indicatorDataKey(item)) return [];
+            return [{ ...item, enabled: current.enabled, weight: current.weight, direction: current.direction }];
+        });
+    }
+
     function initialPreviewTargets(sourceIndicators) {
         return sourceIndicators
             .filter((item) => item.enabled && item.group === '기후위험' && item.dataPath)
             .slice(0, 1)
             .map((item) => ({ ...item }));
+    }
+
+    function cropStaticGridToRegion(item, reference) {
+        if (!item.dataPath?.startsWith('/analysis-data/') || !reference?.gridMeta || !isGridValueCollection(item.gridValues)) return item;
+        const source = item.gridMeta;
+        const target = reference.gridMeta;
+        if (source.crs !== target.crs || ['pixelWidth', 'pixelHeight'].some((key) => Number(source.transform?.[key]) !== Number(target.transform?.[key]))) return item;
+        const colOffset = (target.transform.originX - source.transform.originX) / source.transform.pixelWidth;
+        const rowOffset = (source.transform.originY - target.transform.originY) / source.transform.pixelHeight;
+        if (!Number.isInteger(colOffset) || !Number.isInteger(rowOffset) || colOffset < 0 || rowOffset < 0 ||
+            colOffset + target.columns > source.columns || rowOffset + target.rows > source.rows) return item;
+        if (colOffset === 0 && rowOffset === 0 && source.columns === target.columns && source.rows === target.rows) return item;
+        const count = target.rows * target.columns;
+        const values = new Float32Array(count).fill(Number.NaN);
+        const indices = reference.gridValidIndices || Array.from({ length: count }, (_, index) => index);
+        const validIndices = [];
+        let sum = 0;
+        for (const index of indices) {
+            const sourceIndex = (Math.floor(index / target.columns) + rowOffset) * source.columns + index % target.columns + colOffset;
+            const value = gridValue(item, sourceIndex);
+            if (value === null) continue;
+            values[index] = value;
+            validIndices.push(index);
+            sum += value;
+        }
+        return { ...item, gridValues: values, gridValidIndices: validIndices, gridMeta: { ...target },
+            loadedValue: validIndices.length ? sum / validIndices.length : null,
+            gridSummary: { ...item.gridSummary, columns: target.columns, rows: target.rows, validCells: validIndices.length, rawMean: null, normalizedMean: validIndices.length ? sum / validIndices.length : null },
+            loadError: validIndices.length ? null : `${item.label}: 선택한 지역에 유효한 격자가 없습니다.` };
     }
 
     async function loadIndicatorInputs(sourceIndicators, cachedIndicators = [], { preferDense = false } = {}) {
@@ -1023,7 +1083,7 @@
                 .filter((item) => isGridValueCollection(item.gridValues))
                 .map((item) => [indicatorDataKey(item), item])
         );
-        const loaded = await Promise.all(sourceIndicators.map(async (item) => {
+        let loaded = await Promise.all(sourceIndicators.map(async (item) => {
             if (!usableIndicator(item) || !item.dataPath) return item;
 
             const cached = cachedByKey.get(indicatorDataKey(item));
@@ -1035,7 +1095,8 @@
                     gridValidIndices: cached.gridValidIndices,
                     gridMeta: cached.gridMeta,
                     gridSummary: cached.gridSummary,
-                    loadedValue: cached.loadedValue
+                    loadedValue: cached.loadedValue,
+                    loadError: null
                 };
             }
 
@@ -1045,16 +1106,20 @@
                     : ['/hazard-grid', '/flood-grid', '/analysis-grid'].some((prefix) => item.dataPath.startsWith(prefix))
                         ? item.dataPath
                         : asset(item.dataPath);
-                const response = await fetch(dataUrl);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const response = await fetch(dataUrl, { signal: AbortSignal.timeout(120000) });
+                if (!response.ok) throw new Error(`자료 요청 실패 (HTTP ${response.status})`);
                 const grid = await response.json();
                 const decodedGrid = decodeGridValues(grid, { preferDense });
-                const loadedValue = Number(grid?.stats?.normalizedMean ?? grid?.stats?.mean);
-                if (!Number.isFinite(loadedValue)) throw new Error('normalizedMean is missing');
+                const mean = grid?.stats?.normalizedMean ?? grid?.stats?.mean;
+                const loadedValue = mean == null ? Number.NaN : Number(mean);
+                if (!Number.isFinite(loadedValue) || !(Number(grid?.stats?.validCells) > 0)) {
+                    throw new Error('이 지역에 유효한 원자료가 없습니다');
+                }
 
                 return {
                     ...item,
                     loadedValue,
+                    loadError: null,
                     geojson: grid.pointFeatureCollection || item.geojson,
                     gridValues: decodedGrid.values,
                     gridValidIndices: decodedGrid.validIndices,
@@ -1075,59 +1140,35 @@
                         rawUnit: grid.rawUnit || grid.unit || '',
                         normalizedMean: grid.stats?.normalizedMean ?? grid.stats?.mean,
                         sourceResolution: grid.sourceResolution,
+                        rawMin: grid.stats?.rawMin,
+                        rawMax: grid.stats?.rawMax,
+                        qualityStatus: grid.qualityStatus,
+                        method: grid.method,
+                        assumptions: grid.assumptions,
                         pointFeatureCount: grid.pointFeatureCount || 0
                     }
                 };
             } catch (error) {
-                const serverBackedInput = Boolean(
-                    item.indicatorCode ||
-                    item.floodIndicator ||
-                    item.analysisIndicator ||
-                    item.populationIndicator
-                );
-                if ((nationalLab || base) && serverBackedInput) {
-                    return {
-                        ...item,
-                        publicFallbackPending: true,
-                        loadError: `${item.label} 원자료 서버에 연결하지 못했습니다.`
-                    };
-                }
                 return {
                     ...item,
-                    enabled: false,
-                    dataStatus: 'missing',
-                    loadError: `${item.label} 입력자료를 읽지 못했습니다.`
+                    gridValues: null,
+                    gridValidIndices: null,
+                    loadedValue: null,
+                    loadError: `${item.label}: ${error.name === 'TimeoutError' ? '자료 요청 시간이 초과되었습니다' : error.message}`
                 };
             }
         }));
 
-        const referenceItem = loaded.find((item) =>
-            !item.publicFallbackPending &&
-            isGridValueCollection(item.gridValues) &&
-            item.gridMeta?.columns &&
-            item.gridMeta?.rows
-        );
-        const resolved = loaded.map((item) => {
-            if (!item.publicFallbackPending) return item;
-            const fallback = createPublicDemoFallbackGrid(item, referenceItem);
-            if (fallback) return fallback;
-            return {
-                ...item,
-                enabled: false,
-                dataStatus: 'missing',
-                loadError: `${item.label} 입력자료와 시연용 대체 격자를 준비하지 못했습니다.`
-            };
-        });
+        const reference = [...loaded, ...cachedIndicators].find((item) =>
+            (item.indicatorCode || item.floodIndicator || item.analysisIndicator) && isGridValueCollection(item.gridValues) && item.gridMeta);
+        if (reference) loaded = loaded.map((item) => cropStaticGridToRegion(item, reference));
 
-        const loadedGrid = resolved.find((item) => item.gridSummary);
-        const usesDemoFallback = resolved.some((item) => item.demoFallback && item.enabled);
+        const loadedGrid = loaded.find((item) => item.gridSummary && !item.loadError);
         mapSource = loadedGrid
-            ? usesDemoFallback
-                ? `공개 시연용 100m 대체 패턴 · 실제 Hazard 원자료 서버 연결 전 · ${loadedGrid.gridSummary.columns}×${loadedGrid.gridSummary.rows}`
-                : `${config.rasterReadyPrefix} · ${loadedGrid.gridSummary.columns}×${loadedGrid.gridSummary.rows} · 평균 ${loadedGrid.gridSummary.rawMean}${loadedGrid.gridSummary.rawUnit}`
+            ? `${config.rasterReadyPrefix} · ${loadedGrid.gridSummary.columns}×${loadedGrid.gridSummary.rows} · 평균 ${loadedGrid.gridSummary.rawMean}${loadedGrid.gridSummary.rawUnit}`
             : config.mapSource;
 
-        return resolved;
+        return loaded;
     }
 
     function createIndicatorPreviewGrid(sourceIndicators) {
@@ -1166,6 +1207,7 @@
     }
 
     function indicatorStatusText(item) {
+        if (item.coverageNote) return item.coverageNote;
         if (!['available', 'partial'].includes(item.dataStatus)) return '연결대기';
         if (item.supportedGridUnits && !item.supportedGridUnits.includes(gridUnit)) return '격자미지원';
         return item.dataStatus === 'partial' ? `${item.sourceType} · 일부 보완 필요` : item.sourceType;
@@ -1306,6 +1348,12 @@
             Number(item.gridMeta?.columns) === columns &&
             Number(item.gridMeta?.rows) === rows
         );
+        const sameCoordinates = (item) => ['originX', 'originY', 'pixelWidth', 'pixelHeight'].every((key) =>
+            Number.isFinite(Number(item.gridMeta?.transform?.[key])) &&
+            Math.abs(Number(item.gridMeta.transform[key]) - Number(reference.gridMeta.transform?.[key])) < 0.001
+        ) && item.gridMeta?.crs === reference.gridMeta.crs;
+        const misaligned = availableIndicators.filter((item) => !gridIndicators.includes(item) || !sameCoordinates(item));
+        if (misaligned.length) throw new Error(`공통 격자와 정렬되지 않은 지표: ${misaligned.map((item) => item.label).join(', ')}`);
         const byGroup = (group) => gridIndicators.filter((item) => item.group === group);
         const hItems = byGroup('기후위험');
         const eItems = byGroup('노출');
@@ -1349,10 +1397,10 @@
                 }
             );
 
-            hValues[index] = hScore;
-            eValues[index] = eScore;
-            sensitivityValues[index] = sensitivityScore;
-            adaptiveCapacityValues[index] = adaptiveCapacityForV;
+            hValues[index] = hScore ?? Number.NaN;
+            eValues[index] = eScore ?? Number.NaN;
+            sensitivityValues[index] = sensitivityScore ?? Number.NaN;
+            adaptiveCapacityValues[index] = adaptiveCapacityForV ?? Number.NaN;
 
             if (hazardOnly && Number.isFinite(hScore)) {
                 riskValues[index] = hScore;
@@ -1463,28 +1511,7 @@
             };
         }
 
-        const hScore = weightedMean(selectedIndicatorsFor('기후위험', sourceIndicators));
-        const eScore = weightedMean(selectedIndicatorsFor('노출', sourceIndicators));
-        const sensitivityScore = weightedMean(selectedIndicatorsFor('민감도', sourceIndicators));
-        const adaptiveCapacityForV = weightedMean(
-            selectedIndicatorsFor('적응역량', sourceIndicators),
-            (item) => item.direction === 'negative' ? 1 - indicatorValue(item) : indicatorValue(item)
-        );
-        const vScore = (vLambda * sensitivityScore) + ((1 - vLambda) * adaptiveCapacityForV);
-        const dimensionScores = { H: hScore, E: eScore, V: vScore };
-
-        return {
-            gridUnit,
-            formula: 'Weighted geometric mean: (H^wH × E^wE × V^wV)^(1/Σw)',
-            dimensionScores,
-            sensitivityScore,
-            adaptiveCapacityForV,
-            dimensionWeights: { ...dimensionWeights },
-            riskScore: weightedGeometricMean(dimensionScores, dimensionWeights),
-            gridResult: null,
-            parcelCandidates: [],
-            indicators: sourceIndicators.filter(usableIndicator).map(stripIndicatorForResult)
-        };
+        throw new Error('선택한 H/E/V 지표가 겹치는 유효 격자가 없습니다. 지표의 자료 범위와 결측 셀을 확인하세요.');
     }
 
     function formatScore(value) {
@@ -1521,6 +1548,8 @@
     }
 
     function markAnalysisDirty(message = '설정이 변경되었습니다. Risk 분석을 다시 실행하세요.') {
+        analysisRunId += 1;
+        running = false;
         analysisDone = false;
         analysisResult = null;
         appliedIndicators = [];
@@ -1545,12 +1574,6 @@
         markAnalysisDirty();
     }
 
-    function setGridUnit(value) {
-        gridUnit = value;
-        indicators = indicators.map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
-        markAnalysisDirty('분석 단위 격자가 변경되었습니다. Risk 분석을 다시 실행하세요.');
-    }
-
     async function setHazardDatasetMode(value) {
         hazardDatasetMode = hazard === 'heatwave' && value === 'future' ? 'future' : 'observed';
         await refreshHazardDataset(
@@ -1569,6 +1592,7 @@
     async function refreshHazardDataset(message) {
         indicators = configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
             .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
+        indicators = await applyRegionalAvailability(indicators, regionCode);
         loadedPreviewIndicators = await loadIndicatorInputs(initialPreviewTargets(indicators), [], { preferDense: true });
         indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
         const url = new URL(window.location.href);
@@ -1599,6 +1623,9 @@
         selectedSido = nextRegion.sido;
         indicators = configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
             .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
+        const available = await applyRegionalAvailability(indicators, regionCode);
+        if (runId !== regionChangeRunId) return;
+        indicators = available;
         loadedPreviewIndicators = [];
         indicatorPreviewGrid = null;
         mapSource = `${region} 전국 100m 원본 연결 중`;
@@ -1682,25 +1709,32 @@
             return;
         }
 
+        const runId = ++analysisRunId;
         running = true;
+        analysisDone = false;
+        analysisResult = null;
+        analysisMessage = '선택한 원자료를 불러와 Risk를 계산하고 있습니다.';
         activeStep = 3;
         const analysisAlternativeIndex = activeAlternative;
         const runGridUnit = gridUnit;
         const runDimensionWeights = { ...dimensionWeights };
         const snapshot = indicators.map((item) => ({ ...item }));
-        const enrichedSnapshot = await loadIndicatorInputs(snapshot, loadedPreviewIndicators);
-        loadedPreviewIndicators = enrichedSnapshot.filter((item) => isGridValueCollection(item.gridValues));
-        const missingAfterLoad = analysisRequiredGroups(enrichedSnapshot)
-            .find((group) => selectedIndicatorsFor(group, enrichedSnapshot).length === 0);
-        if (missingAfterLoad) {
-            analysisMessage = `분석을 실행할 수 없습니다. ${missingAfterLoad} 영역의 입력자료를 읽지 못했습니다.`;
-            running = false;
-            activeStep = 2;
-            return;
-        }
+        try {
+            const enrichedSnapshot = await loadIndicatorInputs(snapshot, loadedPreviewIndicators);
+            if (runId !== analysisRunId) return;
+            const failed = enrichedSnapshot.filter((item) => item.enabled && item.loadError);
+            if (failed.length) throw new Error(failed.map((item) => item.loadError).join(' · '));
+            loadedPreviewIndicators = enrichedSnapshot.filter((item) => isGridValueCollection(item.gridValues));
+            const missingAfterLoad = analysisRequiredGroups(enrichedSnapshot)
+                .find((group) => selectedIndicatorsFor(group, enrichedSnapshot).length === 0);
+            if (missingAfterLoad) {
+                analysisMessage = `분석을 실행할 수 없습니다. ${missingAfterLoad} 영역의 입력자료를 읽지 못했습니다.`;
+                running = false;
+                activeStep = 2;
+                return;
+            }
 
-        const result = computeAnalysis(enrichedSnapshot);
-        setTimeout(() => {
+            const result = computeAnalysis(enrichedSnapshot);
             const validCells = result.gridResult?.stats?.validCells;
             const riskModeLabel = result.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk';
             const usesDemoFallback = result.indicators.some((item) => item.demoFallback);
@@ -1746,7 +1780,16 @@
 
             running = false;
             schedulePriorityDraftSave();
-        }, 600);
+        } catch (error) {
+            if (runId !== analysisRunId) return;
+            analysisDone = false;
+            analysisResult = null;
+            loadedPreviewIndicators = [];
+            analysisMessage = `분석을 완료하지 못했습니다. ${error.message}`;
+            activeStep = 2;
+        } finally {
+            if (runId === analysisRunId) running = false;
+        }
     }
 
     function handleParcelCandidates(candidates, message, sourceAlternativeId = activeAlternativeId) {
@@ -1835,7 +1878,7 @@
 
     function buildSupabaseDraftPayload() {
         const fullPayload = buildPriorityDraftPayload();
-        return {
+        return JSON.parse(JSON.stringify({
             ...fullPayload,
             analysisResult: undefined,
             indicators: undefined,
@@ -1849,7 +1892,7 @@
                     indicators: (alternative.settings.indicators || []).map(stripIndicatorForResult)
                 } : null
             }))
-        };
+        }, analysisJsonReplacer));
     }
 
     function createDefaultAlternative(index = 0) {
@@ -2571,6 +2614,7 @@
     }
 
     function addAlternative() {
+        activeComparisonId = null;
         persistAlternative(activeAlternative);
         const nextIndex = alternatives.length;
         const nextOptionNumber = alternatives.reduce((largestNumber, alternative) => {
@@ -2706,7 +2750,7 @@
             alternatives,
             decidedAlternative
         };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify(payload, analysisJsonReplacer, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -2740,7 +2784,7 @@
                     {/each}
                 </span>
             </div>
-            <a class="ghost-link" href={portalToolsUrl}>지원도구 페이지로 돌아가기<svg class="ghost-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5 4 8.5l4 4" /><path d="M4 8.5h9a5.5 5.5 0 0 1 0 11H6" /></svg></a>
+            <a class="ghost-link" href={nationalLab ? portalToolsUrl : `${base}/priority-management-area?regionCode=${encodeURIComponent(regionCode)}`}>{nationalLab ? '지원도구 페이지로 돌아가기' : '지역·재해 선택으로 돌아가기'}<svg class="ghost-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5 4 8.5l4 4" /><path d="M4 8.5h9a5.5 5.5 0 0 1 0 11H6" /></svg></a>
             <button class="ghost-button" onclick={downloadConfig}>설정 내보내기<svg class="ghost-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V7.5L14.5 3Z" /><path d="M14.5 3v3.5a1 1 0 0 0 1 1H19" /><path d="M12 17.5v-7M9.25 13.25 12 10.5l2.75 2.75" /></svg></button>
             <div class="request-manager">
                 <button type="button" class="request-manager-toggle ghost-button" class:open={requestListOpen} aria-expanded={requestListOpen} onclick={() => requestListOpen = !requestListOpen}>보낸 요청 <span class="request-manager-count">{sentRequestCount}</span><span class="request-manager-caret" aria-hidden="true">{requestListOpen ? '▴' : '▾'}</span></button>
@@ -2796,7 +2840,7 @@
                     <div class="lab-analysis-runner-copy">
                         <span>기존 실천권역 분석 기능</span>
                         <strong>{region} · {hazardDatasetMode === 'observed' ? '2021~2025 최근 5년' : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod}`}</strong>
-                        <small>{analysisDone ? analysisMessage : 'H01~H10 기후위험 지표와 기존 노출·취약성·적응역량 지표를 결합해 Risk를 계산합니다.'}</small>
+                        <small>{analysisDone ? analysisMessage : 'H01~H11 기후위험 지표와 기존 노출·취약성·적응역량 지표를 결합해 Risk를 계산합니다.'}</small>
                     </div>
                     <div class="lab-analysis-flow" aria-label="분석 흐름">
                         <span class:active={!analysisDone}><b>1</b> Risk 분석</span>
@@ -2812,7 +2856,7 @@
             {/if}
 
             <section class="workspace-split">
-                <div class="left-panel">
+                <div class="left-panel" inert={Boolean(activeComparison)} style:opacity={activeComparison ? '0.5' : '1'}>
                     <div class="left-panel-tabs" role="tablist" aria-label="좌측 패널 탭">
                         <span class="left-panel-tab-item" class:active={leftPanelTab === '01'}>
                             <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 선택</button>
@@ -2876,13 +2920,6 @@
                                     </select>
                                 </label>
                             {/if}
-                            <label>격자 크기
-                                <select value={gridUnit} onchange={(event) => setGridUnit(event.currentTarget.value)}>
-                                    {#each gridOptions as option}
-                                        <option value={option}>{option}</option>
-                                    {/each}
-                                </select>
-                            </label>
                             </div>
                         </div>
 
@@ -2919,7 +2956,7 @@
                                 </button>
                             </div>
                         </div>
-                        <span class="sr-only" aria-live="polite" data-analysis-message>{analysisMessage}</span>
+                        <span class="analysis-status" role="status" aria-live="polite" data-analysis-message>{analysisMessage}</span>
                     </div>
                     {/if}
                     <div class="left-panel-body">
@@ -3025,7 +3062,7 @@
                                         <span>작업자</span>
                                         <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="저장 기록에 남을 작업자 이름" title="저장할 때 기록에 남는 이름입니다" />
                                     </label>
-                                    <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy}>
+                                    <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy || Boolean(activeComparison)} title={activeComparison ? '겹침 결과는 이 브라우저에 자동 보관됩니다. 파일 보관은 비교 결과 내려받기를 이용하세요.' : '현재 대안 저장'}>
                                         {supabaseBusy ? '처리 중' : '저장'}
                                     </button>
                                     <button class="db-load-action" onclick={toggleSupabaseHistory} disabled={supabaseBusy}>
@@ -3034,7 +3071,7 @@
                                     <span>{supabaseStatus}</span>
                                 </div>
                                 <span class="handoff-request-wrap map-actions-handoff">
-                                    <button class="add-button handoff-request-button" onclick={openHandoffReview} disabled={!handoffCandidateCount}>
+                                    <button class="add-button handoff-request-button" onclick={openHandoffReview} disabled={!handoffCandidateCount || Boolean(activeComparison)}>
                                         <span class="handoff-request-label">주관부서 지원도구로 검토 요청</span>
                                         <svg class="handoff-request-icon" viewBox="0 0 24 24" aria-hidden="true">
                                             <path d="M7 17 17 7M17 7H9M17 7v8" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
@@ -3046,7 +3083,7 @@
                         <div class="map-tabs-row">
                             <div class="alternative-tabs browser-tabs" aria-label="기후적응실천권역 대안">
                                 {#each alternatives as alternative, index}
-                                    <div class="browser-tab" class:active={activeAlternative === index}>
+                                    <div class="browser-tab" class:active={!activeComparison && activeAlternative === index}>
                                         <button class="browser-tab-select" onclick={() => switchAlternative(index)}>
                                             <span class="browser-tab-label">
                                                 <svg class="browser-tab-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -3066,6 +3103,15 @@
                                         >×</button>
                                     </div>
                                 {/each}
+                                {#each visibleComparisonTabs as comparison (comparison.id)}
+                                    <div class="browser-tab overlap-result-tab" class:active={activeComparisonId === comparison.id}>
+                                        <button class="browser-tab-select" onclick={() => activeComparisonId = comparison.id} aria-pressed={activeComparisonId === comparison.id}>
+                                            <span class="browser-tab-label"><span class="browser-tab-name">{comparison.name}</span><span class="browser-tab-desc">{comparison.result.total}개 대안 중첩</span></span>
+                                            <small>비교 결과</small>
+                                        </button>
+                                        <button class="browser-tab-close" onclick={() => closeComparisonTab(comparison.id)} aria-label={`${comparison.name} 탭 닫기`} title="탭 닫기 (원본 저장본은 유지)">×</button>
+                                    </div>
+                                {/each}
                                 <button class="browser-tab-add" onclick={addAlternative} title="대안 추가" aria-label="대안 추가">+</button>
                             </div>
                         </div>
@@ -3081,6 +3127,12 @@
                             </div>
                         {/if}
                         <div class="map-result-wrap">
+                            {#if activeComparison}
+                                <div class="overlap-result-workspace">
+                                    <div class="overlap-result-heading"><div><strong>{activeComparison.name} · {region} · {config.label}</strong><p>{comparisonStorageMessage} · {new Date(activeComparison.createdAt).toLocaleString('ko-KR')}</p><p>저장 대안을 겹친 검토 결과입니다. 지표를 수정하려면 원래 대안 탭을 선택하세요.</p></div></div>
+                                    {#key activeComparison.id}<AlternativeOverlap {regionCode} {hazard} standalone={true} initialResult={activeComparison.result} initialMinimum={activeComparison.minimum} onMinimumChange={(minimum) => updateComparisonMinimum(activeComparison.id, minimum)} />{/key}
+                                </div>
+                            {:else}
                             <SelectedRegionMap
                                 bind:this={selectedRegionMap}
                                 {regionCode}
@@ -3101,6 +3153,7 @@
                                 onParcelCandidateFocus={handleMapParcelCandidateFocus}
                                 onParcelDerivationComplete={handleParcelDerivationComplete}
                             />
+                            {/if}
                         </div>
                     </div>
                 </div>
@@ -3154,7 +3207,7 @@
             <div class="indicator-data-box">
                 {#if indicatorDialog.dataMode === 'demo'}
                     <div class="indicator-data-heading">
-                        <div><strong>임시 공간 패턴</strong><span>현재 수원시 경계 안에서 바로 시각화됩니다.</span></div>
+                        <div><strong>임시 공간 패턴</strong><span>현재 {region} 경계 안에서 바로 시각화됩니다.</span></div>
                         <span class="indicator-demo-badge">DEMO</span>
                     </div>
                     <div class="indicator-pattern-grid">
@@ -3184,7 +3237,7 @@
                             <span>원본 {indicatorDialog.uploadedMeta.sourceProjection}</span>
                             <span>{indicatorDialog.uploadedMeta.sourceSize}px</span>
                             <span>밴드 {indicatorDialog.uploadedMeta.bandCount}개</span>
-                            <span>수원시 유효 셀 {indicatorDialog.uploadedMeta.validCount.toLocaleString()}개</span>
+                            <span>{region} 유효 셀 {indicatorDialog.uploadedMeta.validCount.toLocaleString()}개</span>
                         </div>
                     {/if}
                 {:else}
@@ -3241,15 +3294,27 @@
     <div class="saved-draft-modal-backdrop" role="presentation" onclick={(event) => {
         if (event.currentTarget === event.target) supabaseHistoryOpen = false;
     }}>
-        <div class="saved-draft-modal" role="dialog" aria-modal="true" aria-labelledby="saved-draft-modal-title">
+        <div class="saved-draft-modal saved-draft-workspace" class:comparison-open={supabaseHistoryTab === 'compare'} role="dialog" aria-modal="true" aria-labelledby="saved-draft-modal-title">
             <header>
                 <div>
                     <span>SUPABASE HISTORY</span>
-                    <h2 id="saved-draft-modal-title">저장본 불러오기</h2>
-                    <p>{region} · {config.label} 작업 이력</p>
+                    <h2 id="saved-draft-modal-title">{supabaseHistoryTab === 'compare' ? '대안 겹침 비교' : '저장본 불러오기'}</h2>
+                    <p>{region} · {config.label} · {supabaseBusy ? '저장본 조회 중' : `저장본 ${supabaseDrafts.length}개`}</p>
                 </div>
                 <button type="button" class="saved-draft-close" aria-label="저장 이력 닫기" onclick={() => supabaseHistoryOpen = false}>×</button>
             </header>
+            <div class="saved-draft-tabs" role="tablist" aria-label="저장본 작업">
+                <button type="button" role="tab" aria-selected={supabaseHistoryTab === 'load'} onclick={() => supabaseHistoryTab = 'load'}>불러오기</button>
+                <button type="button" role="tab" aria-selected={supabaseHistoryTab === 'compare'} onclick={() => supabaseHistoryTab = 'compare'}>대안 겹침 비교</button>
+            </div>
+            <div class="saved-draft-content">
+            {#if supabaseHistoryTab === 'compare'}
+                {#if supabaseBusy}<p class="saved-draft-empty">저장 이력을 불러오는 중입니다.</p>{:else}
+                    <div class="saved-draft-comparison">
+                        {#key regionCode}<AlternativeOverlap rows={supabaseDrafts} {regionCode} {hazard} onOpenResult={openComparisonResult} />{/key}
+                    </div>
+                {/if}
+            {:else}
             <div class="saved-draft-table-head" aria-hidden="true">
                 <span>제목</span>
                 <span>작성자</span>
@@ -3259,19 +3324,30 @@
                 {#if supabaseBusy}
                     <p class="saved-draft-empty">저장 이력을 불러오는 중입니다.</p>
                 {:else if supabaseDrafts.length}
-                    {#each supabaseDrafts as savedDraft}
+                    {#each savedRegionGroups as group}
+                        <h3 style="margin:16px 20px 8px;color:#165e4e">{group.name}</h3>
+                        {#each group.regions as item}
+                        <details open={savedRegionCount === 1} style="margin:8px 12px;border:1px solid #dce5e2;border-radius:8px">
+                            <summary style="cursor:pointer;padding:12px;font-weight:600">{item.name} · 저장본 {item.rows.length}개 · 분석 대안 {item.analyzed}개 {item.code === regionCode ? '· 현재 지역' : ''}</summary>
+                            {#each item.rows as savedDraft}
                         <button type="button" class="saved-draft-row" onclick={() => loadSupabaseDraft(savedDraft)}>
                             <span>
                                 <strong>{savedDraft.set_name || savedDraft.analysis_version || '제목 없는 저장본'}</strong>
                                 <small>{savedDraft.analysis_version || '버전 미기록'}</small>
+                                {#if item.code !== regionCode}<small>이 지역으로 이동하여 불러오기</small>{/if}
                             </span>
                             <span>{savedDraft.created_by_user || '작업자 미기록'}</span>
                             <time>{new Date(savedDraft.created_at).toLocaleString('ko-KR')}</time>
                         </button>
                     {/each}
+                        </details>
+                        {/each}
+                    {/each}
                 {:else}
                     <p class="saved-draft-empty">불러올 저장본이 없습니다.</p>
                 {/if}
+            </div>
+            {/if}
             </div>
             <footer>
                 <span>{supabaseStatus}</span>

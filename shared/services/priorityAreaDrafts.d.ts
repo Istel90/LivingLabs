@@ -1,5 +1,6 @@
 export interface PriorityAreaDraftRow {
   id: string;
+  region_code: string;
   set_name: string;
   hazard_type: string;
   analysis_version: string | null;
@@ -11,10 +12,14 @@ export interface PriorityAreaDraftRow {
 }
 
 export function listPriorityAreaDrafts(options: {
-  regionCode: string;
+  regionCode?: string;
   hazardType: string;
   limit?: number;
+  offset?: number;
+  draftId?: string;
 }): Promise<PriorityAreaDraftRow[]>;
+
+export function listRegionalPriorityAreaDrafts(hazardType: string, regionCode?: string): Promise<PriorityAreaDraftRow[]>;
 
 export function savePriorityAreaDraft(options: {
   regionCode: string;

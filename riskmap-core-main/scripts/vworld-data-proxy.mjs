@@ -345,6 +345,11 @@ async function fetchHazardGrid(searchParams) {
   if (!/^\d{5}$/.test(regionCode)) throw new Error('regionCode must be exactly 5 digits');
 
   const indicator = (searchParams.get('indicator') || '').trim().toUpperCase();
+  if (indicator === 'H11') {
+    const gridMeta = await fetchRegionalGridMeta(regionCode);
+    if (!gridMeta) throw new Error(`region grid metadata is not available: ${regionCode}`);
+    return buildNationalHazardGrid(searchParams, { gridMeta });
+  }
   if (!/^H(0[1-9]|10)$/.test(indicator)) throw new Error('indicator must be H01 through H10');
   const mode = (searchParams.get('mode') || 'observed').trim().toLowerCase();
   if (mode !== 'observed') throw new Error('future hazard grid is not loaded in this endpoint');
@@ -648,6 +653,7 @@ async function fetchRegionalAnalysisGrid(searchParams) {
   }
 
   const rowsWithValues = result.rows
+    .filter((row) => row.value !== null && row.value !== undefined)
     .map((row) => ({ index: Number(row.cell_index), value: Number(row.value) }))
     .filter((row) => Number.isInteger(row.index) && row.index >= 0 && row.index < valueCount && Number.isFinite(row.value));
   if (!rowsWithValues.length) throw new Error(`analysis grid is not available: ${regionCode} ${indicator}`);
@@ -1490,7 +1496,9 @@ const server = createServer(async (request, response) => {
       try {
         payload = await fetchHazardGrid(url.searchParams);
       } catch (databaseError) {
-        payload = await buildNationalHazardGrid(url.searchParams).catch(() => {
+        if ((url.searchParams.get('indicator') || '').toUpperCase() === 'H11') throw databaseError;
+        const gridMeta = await fetchRegionalGridMeta((url.searchParams.get('regionCode') || '').trim());
+        payload = await buildNationalHazardGrid(url.searchParams, { gridMeta }).catch(() => {
           throw databaseError;
         });
       }
@@ -1501,6 +1509,30 @@ const server = createServer(async (request, response) => {
         ok: false,
         error: error?.message || 'Hazard grid lookup failed',
       }));
+    }
+    return;
+  }
+
+  if (routePath === '/indicator-availability') {
+    const regionCode = (url.searchParams.get('regionCode') || '').trim();
+    if (!/^\d{5}$/.test(regionCode)) {
+      send(response, 400, JSON.stringify({ error: 'regionCode must be exactly 5 digits' }));
+      return;
+    }
+    try {
+      const result = await cadastrePool.query({
+        text: `SELECT DISTINCT ON (s.indicator_code) s.indicator_code, s.payload->'stats' AS stats
+               FROM analysis.flood_region_indicator_stats s
+               JOIN analysis.flood_dataset_versions v ON v.version_id=s.version_id AND v.active
+               WHERE s.region_code=$1 ORDER BY s.indicator_code,s.updated_at DESC`,
+        values: [regionCode],
+      });
+      send(response, 200, JSON.stringify({ regionCode, flood: Object.fromEntries(result.rows.map((row) => [row.indicator_code, {
+        available: Number(row.stats?.validCells) > 0,
+        validCells: Number(row.stats?.validCells) || 0,
+      }])) }));
+    } catch (error) {
+      send(response, 503, JSON.stringify({ error: '지역별 자료 범위를 조회하지 못했습니다.' }));
     }
     return;
   }

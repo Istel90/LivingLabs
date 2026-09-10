@@ -1,0 +1,10 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/ecmwf/thermofeel/main/tests/thermofeel_testcases.csv",
+    "sha256": "25628c4771b2a6ee80e2b9a15cfed9e3628cdf13a6d8ec52a6c52bb243bd4b0b"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/ecmwf/thermofeel/main/tests/wbgt_liljegren.csv",
+    "sha256": "b06f4f3d0b9fd05f28934553a52e9e9f9601621d0c655fd56f69d558f6001188"
+  }
+]

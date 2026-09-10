@@ -45,16 +45,18 @@ async function ensureRegion(regionCode, regionName) {
   }
 }
 
-export async function listPriorityAreaDrafts({ regionCode, hazardType, limit = 30 }) {
+export async function listPriorityAreaDrafts({ regionCode, hazardType, limit = 30, offset = 0, draftId }) {
   const { enabled } = getPlatformHandoffConfig();
   if (!enabled) return [];
 
   const params = {
-    select: 'id,set_name,hazard_type,analysis_version,analysis_conditions,created_by_user,created_at,updated_at,status',
-    region_code: `eq.${regionCode}`,
+    select: 'id,region_code,set_name,hazard_type,analysis_version,analysis_conditions,created_by_user,created_at,updated_at,status',
+    region_code: regionCode ? `eq.${regionCode}` : undefined,
+    id: draftId ? `eq.${draftId}` : undefined,
     hazard_type: `eq.${hazardType}`,
     status: 'eq.draft',
-    order: 'created_at.desc',
+    order: 'created_at.desc,id.desc',
+    offset: String(offset),
     limit: String(limit)
   };
   const response = await fetch(endpoint(AREA_SET_TABLE, params), {
@@ -66,6 +68,15 @@ export async function listPriorityAreaDrafts({ regionCode, hazardType, limit = 3
   }
   const rows = await response.json();
   return Array.isArray(rows) ? rows : [];
+}
+
+export async function listRegionalPriorityAreaDrafts(hazardType, regionCode) {
+  const rows = [];
+  for (let offset = 0; ; offset += 100) {
+    const page = await listPriorityAreaDrafts({ hazardType, regionCode, offset, limit: 100 });
+    rows.push(...page);
+    if (page.length < 100) return rows;
+  }
 }
 
 export async function savePriorityAreaDraft({

@@ -1,4 +1,5 @@
 <script>
+    import { onMount } from 'svelte';
     import { base } from '$app/paths';
     import { portalToolsUrl } from '$lib/portalLinks.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
@@ -18,6 +19,13 @@
         getRegionByCode(selectedRegionCode) || availableRegions[0] || regionOptions[0]
     );
 
+    onMount(() => {
+        const region = getRegionByCode(new URLSearchParams(window.location.search).get('regionCode'));
+        if (region) {
+            selectedSido = region.sido;
+            selectedRegionCode = region.code;
+        }
+    });
     function changeSido(event) {
         selectedSido = event.currentTarget.value;
         selectedRegionCode = getRegionOptionsBySido(selectedSido)[0]?.code || '';

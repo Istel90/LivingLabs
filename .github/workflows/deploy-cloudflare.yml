@@ -57,6 +57,13 @@ jobs:
           npm ci --prefix "Survey platform for collaboration"
           npm ci --prefix riskmap-core-main
 
+      - name: Verify saved alternative comparisons
+        if: steps.cloudflare-config.outputs.ready == 'true'
+        run: |
+          node scripts/test-alternative-overlap.mjs
+          node scripts/test-regional-drafts.mjs
+          node scripts/wbgt/test-analysis-serialization.mjs
+
       - name: Build unified platform
         if: steps.cloudflare-config.outputs.ready == 'true'
         run: npm run build:cloudflare

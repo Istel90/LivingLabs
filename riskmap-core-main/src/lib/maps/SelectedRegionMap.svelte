@@ -1,6 +1,8 @@
 <script>
     import { onDestroy, onMount, untrack } from 'svelte';
     import html2canvas from 'html2canvas-pro';
+    import 'leaflet/dist/leaflet.css';
+    import 'maplibre-gl/dist/maplibre-gl.css';
     import {
         getBoundaryFeaturesForRegionCode,
         getRegionByCode,
@@ -28,9 +30,7 @@
             maxZoom: 19
         },
         grayscale: {
-            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            attribution: '&copy; OpenStreetMap contributors',
-            maxZoom: 19
+            style: 'https://tiles.openfreemap.org/styles/positron'
         }
     };
 
@@ -83,7 +83,9 @@
     let mapElement;
     let map;
     let mapLoading = $state(true);
+    let mapError = $state('');
     let baseLayer;
+    let baseMapRequest = 0;
     let baseMapStyle = $state('default');
     let legendInfoOpen = $state(false);
     let locateButtonOffset = $state(72);
@@ -117,6 +119,12 @@
     let exportBusy = $state(false);
     let exportStatus = $state('');
     let exportStatusTimer;
+    let displayedCellCount = $state(0);
+    const wbgtLegend = $derived.by(() => {
+        if (selectedGridLayer !== 'H') return null;
+        const visible = visibleGridIndicatorsForLayer('H');
+        return visible.length === 1 && visible[0].indicatorCode === 'H11' ? visible[0].gridSummary : null;
+    });
 
     const exportHazardLabels = {
         heatwave: '폭염',
@@ -916,7 +924,7 @@
             const topY = originY - (row * cellHeight);
             const bottomY = topY - cellHeight;
             const point = toLngLat(leftX + (cellWidth / 2), topY - (cellHeight / 2));
-            if (!pointInBoundary(point, boundaryFeatures)) continue;
+            if (!Array.isArray(grid.validIndices) && !pointInBoundary(point, boundaryFeatures)) continue;
 
             const corners = [
                 toLngLat(leftX, topY),
@@ -1909,7 +1917,9 @@
                 const weight = Math.max(0, Number(item.weight) || 0);
                 if (weight <= 0) return;
 
-                const rawValue = Number(gridValueAt(item.gridValues, index));
+                const raw = gridValueAt(item.gridValues, index);
+                if (raw === null || raw === undefined || raw === '') return;
+                const rawValue = Number(raw);
                 if (!Number.isFinite(rawValue)) return;
 
                 const value = layer === 'V' && item.direction === 'negative'
@@ -1933,6 +1943,11 @@
     function gridValuesForLayer(grid, layer) {
         if (!grid) return [];
         if (grid.preview && ['Risk', 'Hotspot'].includes(layer)) return [];
+        // With every selected indicator visible, show the actual calculated V
+        // (0.5 sensitivity + 0.5 inverse adaptive capacity), not a flat average.
+        if (layer === 'V' && !grid.preview && grid.vValues && analysisIndicators
+            .filter((item) => item.enabled && item.dimension === 'V')
+            .every((item) => visibleAnalysisLayerIds.includes(String(item.id)))) return grid.vValues;
         if (['H', 'E', 'V'].includes(layer)) {
             const values = gridValuesFromVisibleIndicators(grid, layer);
             if (values) return values;
@@ -1995,14 +2010,27 @@
 
         const boundaryFeatures = getBoundaryFeaturesForRegionCode(regionCode);
         const drawableCells = [];
+        const layerIndicators = visibleGridIndicatorsForLayer(layer);
+        const displayIndices = ['H', 'E', 'V'].includes(layer)
+            ? layerIndicators.length && layerIndicators.every((item) => Array.isArray(item.gridValidIndices))
+                ? [...new Set(layerIndicators.flatMap((item) => item.gridValidIndices))]
+                : null
+            : grid.validIndices;
         const addDrawableCell = (index) => {
+            const raw = gridValueAt(values, index);
+            if (raw === null || raw === undefined || !Number.isFinite(Number(raw))) return;
+            if (Number.isFinite(hotspotThreshold) && Number(raw) < hotspotThreshold) return;
             const row = Math.floor(index / columns);
             const column = index % columns;
             if (row < 0 || row >= rows || column < 0 || column >= columns) return;
-            const centerX = originX + (column * cellWidth) + (cellWidth / 2);
-            const centerY = originY - (row * cellHeight) - (cellHeight / 2);
-            const [centerLat, centerLng] = epsg5179ToLatLng(centerX, centerY);
-            if (!pointInBoundary([centerLng, centerLat], boundaryFeatures)) return;
+            // Server/analysis validIndices already carry the regional cell mask.
+            // Repeating point-in-polygon for every masked cell stalls large coastal regions.
+            if (!Array.isArray(grid.validIndices)) {
+                const centerX = originX + (column * cellWidth) + (cellWidth / 2);
+                const centerY = originY - (row * cellHeight) - (cellHeight / 2);
+                const [centerLat, centerLng] = epsg5179ToLatLng(centerX, centerY);
+                if (!pointInBoundary([centerLng, centerLat], boundaryFeatures)) return;
+            }
 
             const left = originX + (column * cellWidth);
             const right = left + cellWidth;
@@ -2016,11 +2044,12 @@
             });
         };
 
-        if (Array.isArray(grid.validIndices) && grid.validIndices.length) {
-            grid.validIndices.forEach(addDrawableCell);
+        if (Array.isArray(displayIndices) && displayIndices.length) {
+            displayIndices.forEach(addDrawableCell);
         } else {
             for (let index = 0; index < rows * columns; index += 1) addDrawableCell(index);
         }
+        displayedCellCount = drawableCells.length;
 
         const RiskCanvasLayer = L.Layer.extend({
             onAdd(mapInstance) {
@@ -2051,7 +2080,6 @@
                 const context = this._context;
                 context.clearRect(0, 0, this._canvas.width, this._canvas.height);
                 context.save();
-                this._clipToBoundary(context);
                 context.globalAlpha = 0.58;
 
                 for (const cell of drawableCells) {
@@ -2061,6 +2089,8 @@
 
                     const topLeft = this._map.latLngToContainerPoint(cell.northwest);
                     const bottomRight = this._map.latLngToContainerPoint(cell.southeast);
+                    if (bottomRight.x < 0 || bottomRight.y < 0 ||
+                        topLeft.x > this._canvas.width || topLeft.y > this._canvas.height) continue;
 
                     context.fillStyle = gridColor(value, layer);
                     context.fillRect(
@@ -2071,10 +2101,13 @@
                     );
                 }
 
-                context.restore();
                 context.globalAlpha = 1;
+                // Apply the complex administrative boundary once, after drawing.
+                // Clipping each of tens of thousands of cells blocks the UI for seconds.
+                this._maskToBoundary(context);
+                context.restore();
             },
-            _clipToBoundary(context) {
+            _maskToBoundary(context) {
                 if (!boundaryFeatures.length) return;
 
                 context.beginPath();
@@ -2101,7 +2134,9 @@
                     }
                 });
 
-                context.clip('evenodd');
+                context.globalCompositeOperation = 'destination-in';
+                context.fillStyle = '#000';
+                context.fill('evenodd');
             }
         });
 
@@ -2116,6 +2151,7 @@
     function renderRiskGridLayer() {
         if (!map || !window.L) return;
         removeRiskGridLayer();
+        displayedCellCount = 0;
         if (!showAnalysisLegend || !riskGridVisible || !riskGrid?.values?.length) return;
 
         riskGridLayer = createRiskGridLayer(window.L, riskGrid);
@@ -2177,6 +2213,9 @@
                 { type: 'FeatureCollection', features },
                 {
                     pane: 'selectedBoundaryPane',
+                    attributionControl: {
+                        customAttribution: '<a href="https://openfreemap.org/">OpenFreeMap</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    },
                     interactive: false,
                     style: {
                         color: '#2563eb',
@@ -2224,42 +2263,52 @@
         }
     }
 
-    function waitForLeaflet() {
-        if (window.L) return Promise.resolve(window.L);
-
-        return new Promise((resolve, reject) => {
-            let attempts = 0;
-            const timer = window.setInterval(() => {
-                attempts += 1;
-                if (window.L) {
-                    window.clearInterval(timer);
-                    resolve(window.L);
-                } else if (attempts > 80) {
-                    window.clearInterval(timer);
-                    reject(new Error('Leaflet failed to load'));
-                }
-            }, 50);
-        });
+    async function waitForLeaflet() {
+        if (window.L) return window.L;
+        const module = await import('leaflet');
+        window.L = module.default || module;
+        return window.L;
     }
 
-    function createBaseLayer(L, style) {
-        const config = BASE_TILE_STYLES[style] || BASE_TILE_STYLES.default;
-        const layer = L.tileLayer(config.url, {
+    function createBaseLayer(L) {
+        const config = BASE_TILE_STYLES.default;
+        return L.tileLayer(config.url, {
             attribution: config.attribution,
             crossOrigin: true,
             maxZoom: config.maxZoom
         });
-        layer.on('add', () => {
-            layer.getContainer()?.classList.toggle('grayscale-basemap', baseMapStyle === 'grayscale');
-        });
-        return layer;
     }
 
-    function setBaseMapStyle(style) {
-        if (style === baseMapStyle || !BASE_TILE_STYLES[style]) return;
+    async function setBaseMapStyle(style) {
+        if (style === baseMapStyle || !BASE_TILE_STYLES[style] || !map) return;
+        const request = ++baseMapRequest;
+        const previousStyle = baseMapStyle;
         baseMapStyle = style;
-        if (!map || !window.L) return;
-        baseLayer?.getContainer()?.classList.toggle('grayscale-basemap', style === 'grayscale');
+        let nextLayer;
+        try {
+            if (style === 'grayscale') {
+                const { maplibreGL } = await import('@maplibre/maplibre-gl-leaflet');
+                if (request !== baseMapRequest || !map) return;
+                nextLayer = maplibreGL({
+                    style: BASE_TILE_STYLES.grayscale.style,
+                    attributionControl: {
+                        customAttribution: '<a href="https://openfreemap.org/">OpenFreeMap</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    },
+                    interactive: false,
+                    pane: 'tilePane',
+                    canvasContextAttributes: { preserveDrawingBuffer: true }
+                });
+            } else {
+                nextLayer = createBaseLayer(window.L);
+            }
+            nextLayer.addTo(map);
+            baseLayer?.remove();
+            baseLayer = nextLayer;
+        } catch (error) {
+            nextLayer?.remove();
+            if (request === baseMapRequest) baseMapStyle = previousStyle;
+            console.error('Background map could not be loaded', error);
+        }
     }
 
     function initializeMap(L) {
@@ -2367,13 +2416,20 @@
             .then((L) => {
                 if (!disposed) initializeMap(L);
             })
-            .catch((error) => console.error(error));
+            .catch((error) => {
+                console.error(error);
+                if (!disposed) {
+                    mapLoading = false;
+                    mapError = '지도를 불러오지 못했습니다. 페이지를 새로고침해 다시 시도하세요.';
+                }
+            });
 
         const resizeObserver = new ResizeObserver(() => map?.invalidateSize?.({ pan: false }));
         if (mapElement) resizeObserver.observe(mapElement);
 
         return () => {
             disposed = true;
+            baseMapRequest += 1;
             resizeObserver.disconnect();
             removeRiskGridLayer();
             parcelCandidateLayer?.remove();
@@ -2452,12 +2508,11 @@
 </script>
 
 <svelte:head>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </svelte:head>
 
 <div class={`region-map-wrap${exportBusy ? ' map-exporting' : ''}`}>
     <div class:locked-map={locked} class:tabbed-map={showAnalysisLegend} class="region-map" bind:this={mapElement} style={`height:${height}`}></div>
+    {#if mapError}<p role="alert" class="map-error-message">{mapError}</p>{/if}
     {#if mapLoading}
         <div class="map-refresh-loading" role="status" aria-live="polite" data-map-export-ignore>
             <span></span>
@@ -2491,10 +2546,13 @@
                             onchange={(event) => { riskGridVisible = event.currentTarget.checked; renderRiskGridLayer(); }}
                         />
                         <b>100m {gridLayerLabels[selectedGridLayer] || selectedGridLayer} 격자</b>
-                        <span>{riskGridVisible ? `${riskGrid.stats.validCells?.toLocaleString()}셀 표시 중` : '숨김'}</span>
+                        <span>{riskGridVisible ? `${displayedCellCount.toLocaleString()}셀 표시 중` : '숨김'}</span>
                         <div class="risk-ramp" aria-hidden="true"></div>
                         <small>낮음 → 높음</small>
                     </label>
+                {/if}
+                {#if wbgtLegend && Number.isFinite(wbgtLegend.rawMin) && Number.isFinite(wbgtLegend.rawMax)}
+                    <p data-wbgt-range>WBGT {wbgtLegend.rawMin.toFixed(2)}–{wbgtLegend.rawMax.toFixed(2)} ℃<br /><small>색상은 전국 공통 기준 · 같은 색이어도 값은 다를 수 있습니다.</small></p>
                 {/if}
                 <div class="analysis-grid-tabs" aria-label="분석 격자 레이어">
                     {#each gridLayers as layer}
@@ -2631,10 +2689,6 @@
 </div>
 
 <style>
-    .region-map :global(.grayscale-basemap) {
-        filter: grayscale(1);
-    }
-
     .region-map-wrap {
         position: relative;
     }

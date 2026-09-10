@@ -34,6 +34,7 @@ const indicators = {
   H07: { name: '연최고기온(TXx)', variable: 'txx', unit: '℃', observedSource: 'Point (ASOS)', futureSource: '500m' },
   H08: { name: '고온일 비율(TX90p)', variable: 'tx90p', unit: '일', observedSource: 'Point (ASOS, 1991~2020 기준)', futureSource: '500m' },
   H09: { name: '최대 온난일 지속기간(WSDIx)', variable: 'wsdix', unit: '일', observedSource: 'Point (ASOS, 1991~2020 기준)', futureSource: '500m' },
+  H11: { name: '폭염 대표조건 추정 WBGT (시험)', variable: 'wbgt_representative_hot', unit: '℃', observedSource: 'KMAP 100m solar, NGII 90m DEM, nationwide buildings, ASOS meteorology' },
   H10: { name: '여름철 지표면온도 상위 10%(LST P90)', variable: 'lst_summer_p90', unit: '℃', observedSource: '30m' },
 };
 
@@ -47,8 +48,11 @@ const observedFiles = {
   H07: 'H07/observed/2021-2025/h07_txx_2021_2025_mean_100m_national.tif',
   H08: 'H08/observed/2021-2025/h08_tx90p_2021_2025_mean_100m_national.tif',
   H09: 'H09/observed/2021-2025/h09_wsdix_2021_2025_mean_100m_national.tif',
+  H11: 'H11/observed/2021-2025/h11_wbgt_spatial_reference_national_100m.tif',
   H10: 'H10/observed/2021-2025/h10_lst_summer_p90_2021_2025_mean_100m_national.tif',
 };
+
+const regionalObservedFiles = {};
 
 const futureScenarios = new Set(['ssp126', 'ssp245', 'ssp370', 'ssp585']);
 const futurePeriods = new Set(['2026', '2027', '2028', '2029', '2030', '2040', '2050', '2060', '2070', '2080', '2090', '2100']);
@@ -180,7 +184,7 @@ async function openRaster(filePath) {
   return rasterCache.get(filePath);
 }
 
-function createRegionContext(regionCode, raster) {
+function createRegionContext(regionCode, raster, gridMeta = null) {
   const entries = featureEntriesForRegion(regionCode);
   if (!entries.length) throw new Error(`행정경계를 찾지 못했습니다: ${regionCode}`);
 
@@ -197,7 +201,19 @@ function createRegionContext(regionCode, raster) {
     ],
     [Infinity, Infinity, -Infinity, -Infinity],
   );
-  const window = alignedWindow(bounds, raster);
+  let window = alignedWindow(bounds, raster);
+  if (gridMeta) {
+    const transform = gridMeta.transform;
+    const left = (Number(transform?.originX) - raster.originX) / cellSize;
+    const top = (raster.originY - Number(transform?.originY)) / cellSize;
+    const columns = Number(gridMeta.columns);
+    const rows = Number(gridMeta.rows);
+    if (gridMeta.crs !== 'EPSG:5179' || Number(transform?.pixelWidth) !== cellSize || Number(transform?.pixelHeight) !== cellSize ||
+        ![left, top, columns, rows].every(Number.isSafeInteger) || columns <= 0 || rows <= 0) {
+      throw new Error(`${regionCode} 공통 분석격자와 WBGT 좌표계가 일치하지 않습니다.`);
+    }
+    window = [left, top, left + columns, top + rows];
+  }
   const columns = window[2] - window[0];
   const rows = window[3] - window[1];
   const originX = raster.originX + window[0] * cellSize;
@@ -222,11 +238,12 @@ function createRegionContext(regionCode, raster) {
   };
 }
 
-function sourceFileFor(mode, indicatorCode, scenario, period) {
+function sourceFileFor(mode, indicatorCode, scenario, period, regionCode) {
   const indicator = indicators[indicatorCode];
-  const relativePath = mode === 'future'
+  const regionalPath = mode === 'observed' ? regionalObservedFiles[indicatorCode]?.[regionCode] : null;
+  const relativePath = regionalPath || (mode === 'future'
     ? `${indicatorCode}/scenario/${scenario}/national/${indicatorCode.toLowerCase()}_${indicator.futureVariable || indicator.variable}_${scenario}_${period}_100m_national.tif`
-    : observedFiles[indicatorCode];
+    : observedFiles[indicatorCode]);
   if (!relativePath) {
     throw new Error(`${indicatorCode}는 ${mode === 'future' ? '미래 SSP245' : '최근 5년 관측'} 자료가 아직 없습니다.`);
   }
@@ -241,13 +258,14 @@ function readMetadata(filePath) {
   return JSON.parse(readFileSync(metadataPath, 'utf8'));
 }
 
-export async function buildNationalHazardGrid(searchParams) {
+export async function buildNationalHazardGrid(searchParams, { gridMeta = null } = {}) {
   const regionCode = String(searchParams.get('regionCode') || '').trim();
   const indicatorCode = String(searchParams.get('indicator') || '').trim().toUpperCase();
   const mode = searchParams.get('mode') === 'future' ? 'future' : 'observed';
   const scenario = String(searchParams.get('scenario') || 'ssp245').toLowerCase();
   const period = String(searchParams.get('period') || '2050');
-  const cacheKey = `${regionCode}:${mode}:${scenario}:${period}:${indicatorCode}`;
+  const targetKey = gridMeta ? `${gridMeta.transform?.originX},${gridMeta.transform?.originY},${gridMeta.columns},${gridMeta.rows}` : 'boundary';
+  const cacheKey = `${regionCode}:${mode}:${scenario}:${period}:${indicatorCode}:${targetKey}`;
   const cached = gridCache.get(cacheKey);
   if (cached) {
     gridCache.delete(cacheKey);
@@ -257,18 +275,30 @@ export async function buildNationalHazardGrid(searchParams) {
 
   if (!/^\d{5}$/.test(regionCode)) throw new Error('올바른 5자리 행정구역 코드가 필요합니다.');
   if (!indicators[indicatorCode]) throw new Error(`지원하지 않는 지표입니다: ${indicatorCode}`);
+  if (indicatorCode === 'H11' && mode === 'future') throw new Error('H11 WBGT 미래 자료는 아직 없습니다.');
   if (mode === 'future' && !futureScenarios.has(scenario)) throw new Error(`지원하지 않는 SSP 시나리오입니다: ${scenario}`);
   if (mode === 'future' && !futurePeriods.has(period)) throw new Error(`지원하지 않는 미래 기간입니다: ${period}`);
 
-  const filePath = sourceFileFor(mode, indicatorCode, scenario, period);
+  const filePath = sourceFileFor(mode, indicatorCode, scenario, period, regionCode);
   const metadata = readMetadata(filePath);
   const raster = await openRaster(filePath);
   if (raster.pixelWidth !== cellSize || raster.pixelHeight !== cellSize) {
     throw new Error(`${indicatorCode} 원본이 표준 100m 분석격자와 일치하지 않습니다.`);
   }
 
-  const context = createRegionContext(regionCode, raster);
-  const rasterValues = await raster.image.readRasters({ window: context.window, interleave: true });
+  const context = createRegionContext(regionCode, raster, gridMeta);
+  const [left, top, right, bottom] = context.window;
+  const sourceWindow = [Math.max(0, left), Math.max(0, top), Math.min(raster.width, right), Math.min(raster.height, bottom)];
+  const rasterValues = new Float32Array(context.rows * context.columns).fill(Number.NaN);
+  const sourceWidth = sourceWindow[2] - sourceWindow[0];
+  const sourceHeight = sourceWindow[3] - sourceWindow[1];
+  if (sourceWidth > 0 && sourceHeight > 0) {
+    const sourceValues = await raster.image.readRasters({ window: sourceWindow, interleave: true });
+    for (let row = 0; row < sourceHeight; row += 1) {
+      rasterValues.set(sourceValues.subarray(row * sourceWidth, (row + 1) * sourceWidth),
+        (row + sourceWindow[1] - top) * context.columns + sourceWindow[0] - left);
+    }
+  }
   const sourceMin = Number(metadata.min ?? metadata.statistics?.min);
   const sourceMax = Number(metadata.max ?? metadata.statistics?.max);
   if (!Number.isFinite(sourceMin) || !Number.isFinite(sourceMax) || sourceMax <= sourceMin) {
@@ -306,11 +336,11 @@ export async function buildNationalHazardGrid(searchParams) {
     datasetType: mode === 'future' ? 'scenario' : 'observed',
     scenario: mode === 'future' ? scenario : null,
     period: mode === 'future' ? period : '2021-2025',
-    periodStart: mode === 'future' ? `${metadata.period_start || period}-01-01` : '2021-01-01',
-    periodEnd: mode === 'future' ? `${metadata.period_end || period}-12-31` : '2025-12-31',
+    periodStart: mode === 'future' ? `${metadata.period_start || period}-01-01` : (indicatorCode === 'H11' ? '2021-06-01' : '2021-01-01'),
+    periodEnd: mode === 'future' ? `${metadata.period_end || period}-12-31` : (indicatorCode === 'H11' ? '2025-09-30' : '2025-12-31'),
     gridUnit: '100m',
     analysisResolution: '100m',
-    sourceResolution: mode === 'future' ? indicator.futureSource : indicator.observedSource,
+    sourceResolution: metadata.source_resolution || (mode === 'future' ? indicator.futureSource : indicator.observedSource),
     crs: 'EPSG:5179',
     columns: context.columns,
     rows: context.rows,
@@ -330,9 +360,16 @@ export async function buildNationalHazardGrid(searchParams) {
     valueEncoding: 'sparse-index-value',
     valueCount: context.columns * context.rows,
     sparseValues,
-    normalizationMethod: 'national-minmax',
+    normalizationMethod: metadata.region_code ? 'regional-minmax' : 'national-minmax',
     normalizationSourceRange: { min: sourceMin, max: sourceMax },
     qualityStatus: metadata.quality_status || 'NATIONAL_100M_GRID',
+    assumptions: metadata.assumptions || null,
+    seasonMonths: metadata.season_months || null,
+    sourceQc: metadata.source_qc || null,
+    spatialDetailNote: metadata.spatial_detail_note || null,
+    stationCount: metadata.station_count || null,
+    method: metadata.method || null,
+    inputCounts: metadata.input_counts || null,
     stats: {
       validCells,
       boundaryCells: context.validIndices.length,
