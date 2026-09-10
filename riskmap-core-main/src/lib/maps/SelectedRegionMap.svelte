@@ -1,5 +1,6 @@
 <script>
     import { onDestroy, onMount, untrack } from 'svelte';
+    import { displayScale, displayColor, MAP_RAMP } from '$lib/data/mapColorScale.js';
     import html2canvas from 'html2canvas-pro';
     import 'leaflet/dist/leaflet.css';
     import 'maplibre-gl/dist/maplibre-gl.css';
@@ -120,6 +121,15 @@
     let exportStatus = $state('');
     let exportStatusTimer;
     let displayedCellCount = $state(0);
+    let colorMode = $state('detail');
+    let colorRange = $state(null);
+    let colorUnit = $state('정규화 점수');
+    let colorConversion = $state(null);
+    function colorLabel(value) {
+        const range = colorConversion;
+        const result = range ? range.min + value * (range.max - range.min) : value;
+        return Number.isFinite(result) ? result.toFixed(3) : '—';
+    }
     const wbgtLegend = $derived.by(() => {
         if (selectedGridLayer !== 'H') return null;
         const visible = visibleGridIndicatorsForLayer('H');
@@ -2050,6 +2060,13 @@
             for (let index = 0; index < rows * columns; index += 1) addDrawableCell(index);
         }
         displayedCellCount = drawableCells.length;
+        const scale = displayScale(drawableCells.map(cell => Number(gridValueAt(values, cell.index))), colorMode);
+        colorRange = scale;
+        const single = layerIndicators.length === 1 ? layerIndicators[0].gridSummary : null;
+        const sourceRange = single?.normalizationSourceRange;
+        colorConversion = single?.normalizationMethod === 'national-minmax' &&
+            Number.isFinite(sourceRange?.min) && Number.isFinite(sourceRange?.max) ? sourceRange : null;
+        colorUnit = colorConversion ? (single.rawUnit || '원자료 값') : '정규화 점수';
 
         const RiskCanvasLayer = L.Layer.extend({
             onAdd(mapInstance) {
@@ -2092,7 +2109,7 @@
                     if (bottomRight.x < 0 || bottomRight.y < 0 ||
                         topLeft.x > this._canvas.width || topLeft.y > this._canvas.height) continue;
 
-                    context.fillStyle = gridColor(value, layer);
+                    context.fillStyle = scale ? displayColor(value, scale) : gridColor(value, layer);
                     context.fillRect(
                         Math.floor(topLeft.x),
                         Math.floor(topLeft.y),
@@ -2152,6 +2169,7 @@
         if (!map || !window.L) return;
         removeRiskGridLayer();
         displayedCellCount = 0;
+        colorRange = null;
         if (!showAnalysisLegend || !riskGridVisible || !riskGrid?.values?.length) return;
 
         riskGridLayer = createRiskGridLayer(window.L, riskGrid);
@@ -2547,13 +2565,30 @@
                         />
                         <b>100m {gridLayerLabels[selectedGridLayer] || selectedGridLayer} 격자</b>
                         <span>{riskGridVisible ? `${displayedCellCount.toLocaleString()}셀 표시 중` : '숨김'}</span>
-                        <div class="risk-ramp" aria-hidden="true"></div>
-                        <small>낮음 → 높음</small>
                     </label>
                 {/if}
                 {#if wbgtLegend && Number.isFinite(wbgtLegend.rawMin) && Number.isFinite(wbgtLegend.rawMax)}
-                    <p data-wbgt-range>WBGT {wbgtLegend.rawMin.toFixed(2)}–{wbgtLegend.rawMax.toFixed(2)} ℃<br /><small>색상은 전국 공통 기준 · 같은 색이어도 값은 다를 수 있습니다.</small></p>
+                    <p data-wbgt-range>WBGT {wbgtLegend.rawMin.toFixed(2)}–{wbgtLegend.rawMax.toFixed(2)} ℃</p>
                 {/if}
+                <div class="color-scale-controls">
+                    <label>지도 색상
+                        <select aria-label="지도 색상 기준" value={colorMode} onchange={(event) => { colorMode = event.currentTarget.value; renderRiskGridLayer(); }}>
+                            <option value="detail">지역 내 차이 강조</option>
+                            <option value="range">지역 전체 범위</option>
+                            <option value="common">공통 점수 0–1</option>
+                        </select>
+                    </label>
+                    {#if colorRange}
+                        <div class="risk-ramp" style={`background:${MAP_RAMP}`} aria-hidden="true"></div>
+                        <div class="color-scale-values"><span>{colorLabel(colorRange.low)}</span><span>{colorLabel(colorRange.high)}</span></div>
+                        <small>{colorUnit} · 낮음 → 높음</small>
+                        <small>전체 {colorLabel(colorRange.min)}–{colorLabel(colorRange.max)}</small>
+                        {#if colorRange.constant}<small>모든 표시 격자의 값이 같습니다.</small>
+                        {:else if colorRange.clipped}<small>하위·상위 5%는 양 끝 색으로 표시합니다.</small>{/if}
+                    {/if}
+                    <small>색상만 변경 · 분석값·선정 결과 유지</small>
+                    {#if colorMode !== 'common'}<small>지역마다 색상 범위가 다릅니다.</small>{/if}
+                </div>
                 <div class="analysis-grid-tabs" aria-label="분석 격자 레이어">
                     {#each gridLayers as layer}
                         <button
@@ -3105,6 +3140,12 @@
         border-radius: 999px;
         background: linear-gradient(90deg, #22c55e, #84cc16, #facc15, #f97316, #dc2626, #b91c1c);
     }
+    .color-scale-controls { display: grid; gap: 5px; margin: 8px 0; padding: 8px; background: #f8fafc; border-radius: 8px; }
+    .color-scale-controls label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; }
+    .color-scale-controls select { width: 100%; min-width: 0; padding: 5px; border: 1px solid #cbd5e1; border-radius: 5px; background: white; color: #0f172a; }
+    .color-scale-controls .risk-ramp { grid-column: auto; }
+    .color-scale-values { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; }
+    .color-scale-controls small { font-size: 10px; color: #475569; }
 
     .analysis-grid-tabs {
         display: flex;

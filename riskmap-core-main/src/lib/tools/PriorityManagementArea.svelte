@@ -1138,6 +1138,8 @@
                         validCells: grid.stats?.validCells,
                         rawMean: grid.stats?.rawMean,
                         rawUnit: grid.rawUnit || grid.unit || '',
+                        normalizationSourceRange: grid.normalizationSourceRange,
+                        normalizationMethod: grid.normalizationMethod,
                         normalizedMean: grid.stats?.normalizedMean ?? grid.stats?.mean,
                         sourceResolution: grid.sourceResolution,
                         rawMin: grid.stats?.rawMin,
