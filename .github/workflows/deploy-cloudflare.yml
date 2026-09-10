@@ -62,6 +62,7 @@ jobs:
         run: |
           node scripts/test-alternative-overlap.mjs
           node scripts/test-regional-drafts.mjs
+          node scripts/test-map-color-scale.mjs
           node scripts/wbgt/test-analysis-serialization.mjs
 
       - name: Build unified platform
