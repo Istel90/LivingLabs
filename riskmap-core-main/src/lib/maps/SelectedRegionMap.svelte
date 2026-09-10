@@ -2064,9 +2064,10 @@
         colorRange = scale;
         const single = layerIndicators.length === 1 ? layerIndicators[0].gridSummary : null;
         const sourceRange = single?.normalizationSourceRange;
-        colorConversion = single?.normalizationMethod === 'national-minmax' &&
+        const conversion = single?.normalizationMethod === 'national-minmax' &&
             Number.isFinite(sourceRange?.min) && Number.isFinite(sourceRange?.max) ? sourceRange : null;
-        colorUnit = colorConversion ? (single.rawUnit || '원자료 값') : '정규화 점수';
+        colorConversion = conversion;
+        colorUnit = conversion ? (single.rawUnit || '원자료 값') : '정규화 점수';
 
         const RiskCanvasLayer = L.Layer.extend({
             onAdd(mapInstance) {
