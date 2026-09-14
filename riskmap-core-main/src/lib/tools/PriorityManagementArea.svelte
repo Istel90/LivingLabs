@@ -466,7 +466,7 @@
         '적응역량': { english: 'Adaptive Capacity', dimension: 'V', direction: 'negative', color: '#2f9b73', icon: '✚' }
     };
     const dimensionColorVars = { H: '--color-hazard', E: '--color-exposure', V: '--color-vulnerability' };
-    let groupExpanded = Object.fromEntries(Object.keys(indicatorGroupMeta).map((group) => [group, true]));
+    let groupExpanded = Object.fromEntries(Object.keys(indicatorGroupMeta).map((group) => [group, false]));
     let expandedDescriptions = {};
     function groupDimensionColorVar(group) {
         return `var(${dimensionColorVars[indicatorGroupMeta[group].dimension]})`;
