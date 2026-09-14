@@ -3123,7 +3123,7 @@
                                 </div>
                             {:else if !alternatives.length}
                                 <div class="empty-alternative-start">
-                                    <button class="empty-alternative-arrow" onclick={addAlternative} aria-label="첫 대안 탭 만들기">↗</button>
+                                    <button class="empty-alternative-arrow" onclick={addAlternative} aria-label="첫 대안 탭 만들기">↖</button>
                                     <h2>화살표를 눌러 대안 탭을 만들어 주세요.</h2>
                                     <p>{region} · {config.label} 분석을 새 대안에서 시작합니다.</p>
                                     <button class="secondary-action" onclick={toggleSupabaseHistory} disabled={supabaseBusy}>저장된 대안 불러오기</button>
