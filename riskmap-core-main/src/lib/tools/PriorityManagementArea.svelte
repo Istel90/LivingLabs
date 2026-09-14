@@ -812,8 +812,13 @@
     }
 
     async function toggleSupabaseHistory() {
-        supabaseHistoryOpen = !supabaseHistoryOpen;
-        if (supabaseHistoryOpen) await refreshSupabaseDrafts();
+        await openSavedDraftAction('load');
+    }
+
+    async function openSavedDraftAction(action) {
+        supabaseHistoryTab = action;
+        supabaseHistoryOpen = true;
+        await refreshSupabaseDrafts();
     }
 
     async function readDevelopmentResetSignal() {
@@ -3056,8 +3061,9 @@
                                         {supabaseBusy ? '처리 중' : '저장'}
                                     </button>
                                     <button class="db-load-action" onclick={toggleSupabaseHistory} disabled={supabaseBusy}>
-                                        {supabaseHistoryOpen ? '목록닫기' : '불러오기'}
+                                        불러오기
                                     </button>
+                                    <button class="db-load-action" onclick={() => openSavedDraftAction('compare')} disabled={supabaseBusy}>대안 겹침 비교</button>
                                     <span>{supabaseStatus}</span>
                                 </div>
                                 <span class="handoff-request-wrap map-actions-handoff">
@@ -3293,16 +3299,12 @@
         <div class="saved-draft-modal saved-draft-workspace" class:comparison-open={supabaseHistoryTab === 'compare'} role="dialog" aria-modal="true" aria-labelledby="saved-draft-modal-title">
             <header>
                 <div>
-                    <span>SUPABASE HISTORY</span>
+                    <span>{supabaseHistoryTab === 'compare' ? 'ALTERNATIVE COMPARISON' : 'SAVED ALTERNATIVES'}</span>
                     <h2 id="saved-draft-modal-title">{supabaseHistoryTab === 'compare' ? '대안 겹침 비교' : '저장본 불러오기'}</h2>
                     <p>{region} · {config.label} · {supabaseBusy ? '저장본 조회 중' : `저장본 ${supabaseDrafts.length}개`}</p>
                 </div>
-                <button type="button" class="saved-draft-close" aria-label="저장 이력 닫기" onclick={() => supabaseHistoryOpen = false}>×</button>
+                <button type="button" class="saved-draft-close" aria-label={supabaseHistoryTab === 'compare' ? '대안 겹침 비교 닫기' : '불러오기 닫기'} onclick={() => supabaseHistoryOpen = false}>×</button>
             </header>
-            <div class="saved-draft-tabs" role="tablist" aria-label="저장본 작업">
-                <button type="button" role="tab" aria-selected={supabaseHistoryTab === 'load'} onclick={() => supabaseHistoryTab = 'load'}>불러오기</button>
-                <button type="button" role="tab" aria-selected={supabaseHistoryTab === 'compare'} onclick={() => supabaseHistoryTab = 'compare'}>대안 겹침 비교</button>
-            </div>
             <div class="saved-draft-content">
             {#if supabaseHistoryTab === 'compare'}
                 {#if supabaseBusy}<p class="saved-draft-empty">저장 이력을 불러오는 중입니다.</p>{:else}
