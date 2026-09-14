@@ -89,6 +89,8 @@
     let baseMapRequest = 0;
     let baseMapStyle = $state('default');
     let legendInfoOpen = $state(false);
+    let colorPanelOpen = $state(false);
+    let indicatorListOpen = $state(false);
     let locateButtonOffset = $state(72);
     let scaleBottomOffset = $state(28);
     let scaleControlEl;
@@ -2461,6 +2463,8 @@
         regionCode;
         regionName;
         untrack(() => {
+            colorPanelOpen = false;
+            indicatorListOpen = false;
             locateRegion();
             if (showAnalysisLegend) renderAnalysisLayers();
             renderRiskGridLayer();
@@ -2544,30 +2548,11 @@
     {/if}
     <div class="map-scale-control" data-map-export-ignore style={`bottom:${scaleBottomOffset}px`} bind:this={scaleControlEl}></div>
     {#if showAnalysisLegend}
-        <div class="analysis-overlay-stack" data-map-export-ignore>
-            <div class="analysis-legend" aria-label="표시 레이어">
-                <div class="legend-head">
-                    <strong>표시 레이어</strong>
-                    <button
-                        type="button"
-                        class="legend-info-toggle"
-                        class:active={legendInfoOpen}
-                        aria-expanded={legendInfoOpen}
-                        aria-label={`표시 레이어 안내 ${legendInfoOpen ? '닫기' : '보기'}`}
-                        onclick={() => (legendInfoOpen = !legendInfoOpen)}
-                    >ⓘ</button>
-                </div>
-                {#if riskGrid?.stats}
-                    <label class="risk-surface-summary">
-                        <input
-                            type="checkbox"
-                            checked={riskGridVisible}
-                            onchange={(event) => { riskGridVisible = event.currentTarget.checked; renderRiskGridLayer(); }}
-                        />
-                        <b>100m {gridLayerLabels[selectedGridLayer] || selectedGridLayer} 격자</b>
-                        <span>{riskGridVisible ? `${displayedCellCount.toLocaleString()}셀 표시 중` : '숨김'}</span>
-                    </label>
-                {/if}
+        <div class="map-color-drawer" data-map-export-ignore>
+            <button type="button" class="map-color-toggle" aria-expanded={colorPanelOpen} aria-controls="map-color-panel" onclick={() => colorPanelOpen = !colorPanelOpen}>지도 색상 <span aria-hidden="true">{colorPanelOpen ? '›' : '‹'}</span></button>
+            {#if colorPanelOpen}
+                <section id="map-color-panel" class="map-color-panel" aria-label="지도 색상 설정">
+                    <div class="legend-head"><strong>지도 색상</strong><button type="button" aria-label="지도 색상 닫기" onclick={() => colorPanelOpen = false}>×</button></div>
                 {#if wbgtLegend && Number.isFinite(wbgtLegend.rawMin) && Number.isFinite(wbgtLegend.rawMax)}
                     <p data-wbgt-range>WBGT {wbgtLegend.rawMin.toFixed(2)}–{wbgtLegend.rawMax.toFixed(2)} ℃</p>
                 {/if}
@@ -2590,6 +2575,33 @@
                     <small>색상만 변경 · 분석값·선정 결과 유지</small>
                     {#if colorMode !== 'common'}<small>지역마다 색상 범위가 다릅니다.</small>{/if}
                 </div>
+                </section>
+            {/if}
+        </div>
+        <div class="analysis-overlay-stack" data-map-export-ignore>
+            <div class="analysis-legend" aria-label="표시 레이어">
+                <div class="legend-head">
+                    <strong>표시 레이어</strong>
+                    <button
+                        type="button"
+                        class="legend-info-toggle"
+                        class:active={legendInfoOpen}
+                        aria-expanded={legendInfoOpen}
+                        aria-label={`표시 레이어 안내 ${legendInfoOpen ? '닫기' : '보기'}`}
+                        onclick={() => (legendInfoOpen = !legendInfoOpen)}
+                    >ⓘ</button>
+                </div>
+                {#if indicatorListOpen && riskGrid?.stats}
+                    <label class="risk-surface-summary">
+                        <input
+                            type="checkbox"
+                            checked={riskGridVisible}
+                            onchange={(event) => { riskGridVisible = event.currentTarget.checked; renderRiskGridLayer(); }}
+                        />
+                        <b>100m {gridLayerLabels[selectedGridLayer] || selectedGridLayer} 격자</b>
+                        <span>{riskGridVisible ? `${displayedCellCount.toLocaleString()}셀 표시 중` : '숨김'}</span>
+                    </label>
+                {/if}
                 <div class="analysis-grid-tabs" aria-label="분석 격자 레이어">
                     {#each gridLayers as layer}
                         <button
@@ -2604,6 +2616,9 @@
                         </button>
                     {/each}
                 </div>
+                <button type="button" class="indicator-list-toggle" aria-expanded={indicatorListOpen} aria-controls="map-indicator-list" onclick={() => indicatorListOpen = !indicatorListOpen}>사용된 지표 목록 <span aria-hidden="true">{indicatorListOpen ? '▴' : '▾'}</span></button>
+                {#if indicatorListOpen}
+                <div id="map-indicator-list">
                 {#each analysisGroups.filter((group) => groupsForGridLayer(selectedGridLayer).includes(group)) as group}
                     {@const items = analysisIndicators.filter((item) => item.enabled && item.group === group)}
                     {#if items.length}
@@ -2630,6 +2645,8 @@
                     <p>{gridLayerLabels[selectedGridLayer]} 결과 레이어만 표시 중입니다.</p>
                 {:else if !enabledAnalysisIndicators().length}
                     <p>선택된 분석 지표가 없습니다.</p>
+                {/if}
+                </div>
                 {/if}
             </div>
             {#if legendInfoOpen}
@@ -2725,6 +2742,14 @@
 </div>
 
 <style>
+    .map-color-drawer { position:absolute; right:0; top:.85rem; z-index:650; max-width:calc(100% - 20px); }
+    .map-color-toggle { display:flex; align-items:center; gap:12px; margin-left:auto; padding:10px 12px; border:1px solid #cbd8d2; border-right:0; border-radius:8px 0 0 8px; background:#fff; color:#164e45; font-size:12px; font-weight:700; box-shadow:0 3px 12px #102f2d15; }
+    .map-color-panel { width:270px; max-width:100%; max-height: min(460px,calc(100dvh - 300px)); overflow:auto; margin-top:6px; padding:14px; background:#fff; border:1px solid #d6e3dd; border-radius:10px 0 0 10px; box-shadow:0 8px 24px #102f2d25; }
+    .map-color-panel .legend-head { justify-content:space-between; }
+    .map-color-panel .legend-head button { border:0; background:#f1f5f3; border-radius:50%; width:28px; height:28px; color:#164e45; font-size:20px; }
+    .map-color-panel p { margin:10px 0; font-size:12px; font-weight:700; color:#164e45; }
+    .indicator-list-toggle { display:flex; justify-content:space-between; width:100%; margin-top:10px; padding:7px 0; border:0; border-top:1px solid #e2e8f0; background:transparent; color:#334155; font-size:11px; font-weight:700; }
+    .map-color-toggle:focus-visible,.indicator-list-toggle:focus-visible { outline:3px solid #88c9b6; outline-offset:2px; }
     .region-map-wrap {
         position: relative;
     }
@@ -2980,6 +3005,7 @@
     }
 
     .analysis-overlay-stack {
+        max-width: calc(100% - 110px);
         position: absolute;
         left: .85rem;
         top: .85rem;
