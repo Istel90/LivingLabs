@@ -450,19 +450,7 @@
     let devResetPollTimer = null;
     let lastDevResetAt = '';
 
-    let alternatives = config.alternatives.map((item, index) => ({
-        ...item,
-        id: item.id || `alternative-${index + 1}`,
-        settings: null,
-        analysisResult: null,
-        appliedIndicators: [],
-        analysisDone: false,
-        analysisMessage: null,
-        parcelCandidateMessage: null,
-        selectedCandidate: 0,
-        detailCandidateKey: null,
-        activeLayer: 'Risk'
-    }));
+    let alternatives = [];
     $: decidedAlternative = alternatives.find((item) => item.status === '선정');
     $: activeAlternativeId = alternatives[activeAlternative]?.id || `alternative-${activeAlternative + 1}`;
 
@@ -682,7 +670,7 @@
     function restorePriorityDraftPayload(draft) {
         if (!draft || draft.schemaVersion !== PRIORITY_DRAFT_SCHEMA_VERSION) return false;
         if (draft.hazard !== hazard || draft.regionCode !== regionCode) return false;
-        if (!Array.isArray(draft.alternatives) || !draft.alternatives.length) return false;
+        if (!Array.isArray(draft.alternatives)) return false;
 
         draft = restoreAnalysisPayload(draft);
 
@@ -748,6 +736,7 @@
     }
 
     async function saveCurrentDraftToSupabase() {
+        if (!alternatives.length) return;
         const actorUser = operatorName.trim();
         if (!actorUser) {
             supabaseStatus = '작업자 이름을 먼저 입력하세요.';
@@ -1704,6 +1693,7 @@
     }
 
     async function runAnalysis() {
+        if (!alternatives.length) return;
         const validationMessage = validateAnalysis();
         if (validationMessage) {
             analysisMessage = validationMessage;
@@ -2654,19 +2644,17 @@
 
     function deleteAlternativeAt(index) {
         if (alternatives.length <= 1) {
-            const replacementAlternative = {
-                ...createDefaultAlternative(0),
-                settings: {
-                    gridUnit,
-                    dimensionWeights: { ...dimensionWeights },
-                    indicators: cloneIndicatorsForAlternative(indicators)
-                },
-                analysisMessage: '마지막 대안을 삭제하고 새로운 대안 1을 만들었습니다.'
-            };
-            alternatives = [replacementAlternative];
+            analysisRunId += 1;
+            running = false;
+            alternatives = [];
             activeAlternative = 0;
-            loadAlternative(0);
-            handoffMessage = '마지막 대안을 삭제하고 새로운 대안 1을 만들었습니다.';
+            analysisResult = null;
+            appliedIndicators = [];
+            analysisDone = false;
+            focusedCandidate = null;
+            activeLayer = 'Risk';
+            activeStep = 0;
+            handoffMessage = '대안을 삭제했습니다. 화살표를 눌러 새 대안 탭을 만들어 주세요.';
             schedulePriorityDraftSave();
             return;
         }
@@ -2689,7 +2677,7 @@
     }
 
     function requestDeleteAlternative(index) {
-        if (alternatives.length <= 1) return;
+        if (!alternatives[index]) return;
         pendingDeleteIndex = index;
     }
 
@@ -2858,7 +2846,7 @@
             {/if}
 
             <section class="workspace-split">
-                <div class="left-panel" inert={Boolean(activeComparison)} style:opacity={activeComparison ? '0.5' : '1'}>
+                <div class="left-panel" inert={Boolean(activeComparison) || !alternatives.length} style:opacity={activeComparison || !alternatives.length ? '0.5' : '1'}>
                     <div class="left-panel-tabs" role="tablist" aria-label="좌측 패널 탭">
                         <span class="left-panel-tab-item" class:active={leftPanelTab === '01'}>
                             <button type="button" role="tab" class:active={leftPanelTab === '01'} aria-selected={leftPanelTab === '01'} onclick={() => (leftPanelTab = '01')}>01 분석 지표 선택</button>
@@ -2950,7 +2938,7 @@
                                         <span class="hev-cell hev-cell--v"><span class="hev-label">V</span><span class="hev-badge">{dimensionSelectedCounts.V}</span></span>
                                     </div>
                                 </div>
-                                <button class="cta run-analysis-button" onclick={runAnalysis} disabled={running}>
+                                <button class="cta run-analysis-button" onclick={runAnalysis} disabled={running || !alternatives.length}>
                                     <span class="run-analysis-label">{running ? '계산 중...' : 'Risk 분석 실행'}</span>
                                     <svg class="run-analysis-icon" viewBox="0 0 24 24" aria-hidden="true">
                                         <path d="M7 17 17 7M17 7H9M17 7v8" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
@@ -3064,7 +3052,7 @@
                                         <span>작업자</span>
                                         <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="저장 기록에 남을 작업자 이름" title="저장할 때 기록에 남는 이름입니다" />
                                     </label>
-                                    <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy || Boolean(activeComparison)} title={activeComparison ? '겹침 결과는 이 브라우저에 자동 보관됩니다. 파일 보관은 비교 결과 내려받기를 이용하세요.' : '현재 대안 저장'}>
+                                    <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy || Boolean(activeComparison) || !alternatives.length} title={activeComparison ? '겹침 결과는 이 브라우저에 자동 보관됩니다. 파일 보관은 비교 결과 내려받기를 이용하세요.' : '현재 대안 저장'}>
                                         {supabaseBusy ? '처리 중' : '저장'}
                                     </button>
                                     <button class="db-load-action" onclick={toggleSupabaseHistory} disabled={supabaseBusy}>
@@ -3099,7 +3087,6 @@
                                         <button
                                             class="browser-tab-close"
                                             onclick={(event) => { event.stopPropagation(); requestDeleteAlternative(index); }}
-                                            disabled={alternatives.length <= 1}
                                             title="{alternative.name} 삭제"
                                             aria-label="{alternative.name} 삭제"
                                         >×</button>
@@ -3133,6 +3120,13 @@
                                 <div class="overlap-result-workspace">
                                     <div class="overlap-result-heading"><div><strong>{activeComparison.name} · {region} · {config.label}</strong><p>{comparisonStorageMessage} · {new Date(activeComparison.createdAt).toLocaleString('ko-KR')}</p><p>저장 대안을 겹친 검토 결과입니다. 지표를 수정하려면 원래 대안 탭을 선택하세요.</p></div></div>
                                     {#key activeComparison.id}<AlternativeOverlap {regionCode} {hazard} standalone={true} initialResult={activeComparison.result} initialMinimum={activeComparison.minimum} onMinimumChange={(minimum) => updateComparisonMinimum(activeComparison.id, minimum)} />{/key}
+                                </div>
+                            {:else if !alternatives.length}
+                                <div class="empty-alternative-start">
+                                    <button class="empty-alternative-arrow" onclick={addAlternative} aria-label="첫 대안 탭 만들기">↗</button>
+                                    <h2>화살표를 눌러 대안 탭을 만들어 주세요.</h2>
+                                    <p>{region} · {config.label} 분석을 새 대안에서 시작합니다.</p>
+                                    <button class="secondary-action" onclick={toggleSupabaseHistory} disabled={supabaseBusy}>저장된 대안 불러오기</button>
                                 </div>
                             {:else}
                             <SelectedRegionMap

@@ -1934,3 +1934,10 @@ button { cursor: pointer; }
     .lab-analysis-runner { grid-template-columns: minmax(240px, 1fr) auto; }
     .lab-analysis-flow { display: none; }
 }
+/* Empty workspace before the user creates or loads an alternative. */
+.empty-alternative-start { height: 100%; min-height: 320px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 32px; text-align: center; background: #f7faf9; border: 1px dashed #b9cec8; border-radius: 12px; }
+.empty-alternative-arrow { width: 80px; height: 80px; border: 0; border-radius: 50%; background: #0f766e; color: white; font-size: 44px; cursor: pointer; box-shadow: 0 6px 20px #0f766e20; }
+.empty-alternative-arrow:hover { background: #115e59; }
+.empty-alternative-arrow:focus-visible { outline: 3px solid #f59e0b; outline-offset: 5px; }
+.empty-alternative-start h2 { margin: 0; font-size: 21px; color: #153b35; }
+.empty-alternative-start p { margin: 0; color: #526e66; }
