@@ -18,3 +18,12 @@ outputs/
 /data/
 *.dump
 *.dump.manifest.json
+# Local backups, analytical outputs and temporary screenshots stay off GitHub.
+/output/
+/pages-dist.previous/
+/riskmap-core-main/data/
+/.tmp/
+/tmp/
+/workspace/
+/tmp_ngii_*.jpg
+/tmp_ngii_*.png

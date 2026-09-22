@@ -5,7 +5,7 @@ export function comparisonAlternatives(rows, regionCode, hazard) {
         const payload = row.analysis_conditions?.draftPayload;
         if (!payload || String(payload.regionCode) !== String(regionCode) || payload.hazard !== hazard) return [];
         return (payload.alternatives || []).map((alternative, index) => ({
-            key: `${row.id}:${index}`, rowId: row.id, version: row.analysis_version,
+            key: `${row.id}:${index}`, rowId: row.id, version: row.analysis_version, lineageId: row.lineage_id,
             date: row.created_at, author: row.created_by_user || '작업자 미기록',
             project: payload.projectName || payload.id, name: alternative.name || `대안 ${index + 1}`,
             regionCode: String(payload.regionCode), hazard: payload.hazard,
@@ -17,7 +17,7 @@ export function comparisonAlternatives(rows, regionCode, hazard) {
 export function latestComparisonRows(items) {
     const latest = new Map();
     for (const item of items) {
-        const key = JSON.stringify([item.author, item.project]);
+        const key = item.lineageId || JSON.stringify([item.author, item.project]);
         const previous = latest.get(key);
         if (!previous || String(item.date) > String(previous.date)) latest.set(key, item);
     }

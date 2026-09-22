@@ -201,6 +201,12 @@ button { cursor: pointer; }
 .saved-draft-rows { overflow:auto; }
 .saved-draft-row { width:100%;border:0;border-bottom:1px solid #eef2f1;background:#fff;padding:13px 22px;color:#334155;text-align:left;cursor:pointer; }
 .saved-draft-row:hover { background:#f0fdfa; }
+.saved-draft-row:disabled { cursor:default;opacity:.7; }
+.draft-management-toolbar,.draft-management-editor { margin:12px 20px;padding:12px;border:1px solid #dce5e2;border-radius:8px;background:#f8fafc;font-size:12px; }
+.draft-management-editor label { display:grid;gap:6px;margin:12px 0; }
+.draft-management-editor input { padding:8px;border:1px solid #cbd5e1;border-radius:6px; }
+.draft-management-toolbar button,.draft-management-editor button,.draft-row-actions button { padding:7px 12px;margin:4px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#165e4e;cursor:pointer; }
+.draft-row-actions { display:flex;justify-content:flex-end;padding:0 18px 8px;border-bottom:1px solid #eef2f1; }
 .saved-draft-row > span:first-child { display:grid;gap:3px; }
 .saved-draft-row strong { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#173d38;font-size:11px; }
 .saved-draft-row small { color:#94a3b8;font-size:9px; }

@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {savePriorityAreaDraft,managePriorityAreaDraft,listPriorityAreaDrafts} from '../shared/services/priorityAreaDrafts.js';
+const calls=[];
+const row={id:'same-request',status:'draft',management_version:1};
+globalThis.fetch=async(url,init={})=>{
+ calls.push({url:new URL(url),...init});
+ return {ok:true,json:async()=>[row]};
+};
+const args={regionCode:'41110',regionName:'수원',hazardType:'flood',draftPayload:{alternatives:[]},requestId:row.id};
+await savePriorityAreaDraft(args);
+assert.equal(calls.length,3);
+assert.equal(calls[1].url.searchParams.get('on_conflict'),'id');
+assert.equal(JSON.parse(calls[1].body).analysis_version,undefined);
+assert.equal(JSON.parse(calls[1].body).id,row.id);
+assert.match(calls[1].headers.Prefer,/ignore-duplicates/);
+await listPriorityAreaDrafts({hazardType:'flood',deleted:true});
+assert.equal(calls.at(-1).url.searchParams.get('or'),'(deleted_at.not.is.null,status.eq.archived)');
+await managePriorityAreaDraft(row,'rename',' 새 제목 ');
+assert.equal(calls.at(-1).url.searchParams.get('management_version'),'eq.1');
+assert.deepEqual(JSON.parse(calls.at(-1).body),{set_name:'새 제목'});
+await managePriorityAreaDraft({...row,status:'archived'},'restore');
+assert.deepEqual(JSON.parse(calls.at(-1).body),{deleted_at:null,status:'draft'});
+globalThis.fetch=async()=>({ok:true,json:async()=>[]});
+await assert.rejects(managePriorityAreaDraft(row,'delete'),/다른 곳/);
+globalThis.fetch=async(url)=>String(url).includes('/regions')?{ok:true}:{ok:false,status:409};
+await assert.rejects(savePriorityAreaDraft(args),e=>e.code==='DRAFT_CONFLICT');
+console.log('PASS: idempotency request, server version ownership, trash filtering, metadata CAS, archived restore, conflicts');

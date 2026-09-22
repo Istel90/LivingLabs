@@ -24,7 +24,8 @@
         draftPayloadFromRow,
         listPriorityAreaDrafts,
         listRegionalPriorityAreaDrafts,
-        savePriorityAreaDraft
+        savePriorityAreaDraft,
+        managePriorityAreaDraft
     } from '../../../../shared/services/priorityAreaDrafts.js';
 
     export let hazard = 'heatwave';
@@ -446,6 +447,12 @@
     let supabaseBusy = false;
     let supabaseStatus = '저장 준비됨';
     let supabaseSaveDialog = null;
+    let loadedDraftId = null;
+    let pendingDraftSave = null;
+    let showDeletedDrafts = false;
+    let draftManagement = null;
+    let draftManagementName = '';
+    let draftManagementError = '';
     let indicatorDialog = null;
     let devResetPollTimer = null;
     let lastDevResetAt = '';
@@ -611,6 +618,7 @@
     function buildPriorityDraftPayload() {
         return {
             id: priorityDraftKey(),
+            loadedDraftId,
             schemaVersion: PRIORITY_DRAFT_SCHEMA_VERSION,
             savedAt: new Date().toISOString(),
             hazard,
@@ -673,6 +681,8 @@
         if (!Array.isArray(draft.alternatives)) return false;
 
         draft = restoreAnalysisPayload(draft);
+        loadedDraftId = draft.loadedDraftId || null;
+        pendingDraftSave = null;
 
         region = getRegionByCode(regionCode)?.fullName || draft.region || region;
         gridUnit = draft.gridUnit || gridUnit;
@@ -722,7 +732,7 @@
     async function refreshSupabaseDrafts() {
         supabaseBusy = true;
         try {
-            supabaseDrafts = await listRegionalPriorityAreaDrafts(hazard, regionCode);
+            supabaseDrafts = await listRegionalPriorityAreaDrafts(hazard, regionCode, showDeletedDrafts);
             supabaseStatus = supabaseDrafts.length
                 ? `저장 이력 ${supabaseDrafts.length}건`
                 : '저장 이력이 없습니다.';
@@ -735,8 +745,8 @@
         }
     }
 
-    async function saveCurrentDraftToSupabase() {
-        if (!alternatives.length) return;
+    async function saveCurrentDraftToSupabase(asCopy = false) {
+        if (!alternatives.length || supabaseBusy) return;
         const actorUser = operatorName.trim();
         if (!actorUser) {
             supabaseStatus = '작업자 이름을 먼저 입력하세요.';
@@ -752,20 +762,23 @@
         supabaseSaveDialog = {
             state: 'saving',
             title: '대안 저장 중',
-            message: '분석 결과를 정리해 새 버전으로 저장하고 있습니다.'
+            message: pendingDraftSave && !asCopy
+                ? '앞선 저장 요청의 결과를 확인하고 있습니다. 그 이후 수정한 내용은 완료 후 다시 저장해 주세요.'
+                : '분석 결과를 정리해 새 버전으로 저장하고 있습니다.'
         };
         persistAlternative(activeAlternative);
-        const payload = buildSupabaseDraftPayload();
+        if (asCopy) pendingDraftSave = null;
+        pendingDraftSave ||= {
+            regionCode, regionName: region, hazardType: hazard, projectName, actorUser,
+            draftPayload: buildSupabaseDraftPayload(), parentId: asCopy ? null : loadedDraftId,
+            requestId: crypto.randomUUID()
+        };
         try {
             window.localStorage.setItem('livinglabs.priorityAreaOperator', actorUser);
-            const saved = await savePriorityAreaDraft({
-                regionCode,
-                regionName: region,
-                hazardType: hazard,
-                projectName,
-                actorUser,
-                draftPayload: payload
-            });
+            const saved = await savePriorityAreaDraft(pendingDraftSave);
+            loadedDraftId = saved.id;
+            pendingDraftSave = null;
+            schedulePriorityDraftSave();
             supabaseStatus = `${saved?.analysis_version || '새 버전'} 저장 완료 · ${actorUser}`;
             supabaseSaveDialog = {
                 state: 'success',
@@ -784,6 +797,7 @@
             supabaseSaveDialog = {
                 state: 'error',
                 title: '대안 저장 실패',
+                conflict: error?.code === 'DRAFT_CONFLICT',
                 message: timedOut
                     ? '저장할 데이터 처리 시간이 초과되었습니다. 데이터 크기를 줄인 저장 방식으로 다시 시도해 주세요.'
                     : supabaseStatus
@@ -806,6 +820,8 @@
             supabaseStatus = '현재 지역·재해유형과 맞지 않는 저장본입니다.';
             return;
         }
+        loadedDraftId = row.id;
+        pendingDraftSave = null;
         supabaseStatus = `${row.analysis_version || '저장본'} 불러오기 완료 · ${row.created_by_user || '작업자 미기록'}`;
         supabaseHistoryOpen = false;
         schedulePriorityDraftSave();
@@ -817,7 +833,41 @@
 
     async function openSavedDraftAction(action) {
         supabaseHistoryTab = action;
+        showDeletedDrafts = false;
+        draftManagement = null;
         supabaseHistoryOpen = true;
+        await refreshSupabaseDrafts();
+    }
+
+    function openDraftManagement(row, action) {
+        draftManagement = { row, action };
+        draftManagementName = row.set_name || '';
+        draftManagementError = '';
+    }
+
+    async function confirmDraftManagement() {
+        if (!draftManagement || supabaseBusy) return;
+        supabaseBusy = true;
+        draftManagementError = '';
+        try {
+            await managePriorityAreaDraft(draftManagement.row, draftManagement.action, draftManagementName);
+            if (draftManagement.action === 'delete' && draftManagement.row.id === loadedDraftId) {
+                loadedDraftId = null;
+                pendingDraftSave = null;
+                schedulePriorityDraftSave();
+            }
+            draftManagement = null;
+            await refreshSupabaseDrafts();
+        } catch (error) {
+            draftManagementError = error.message;
+        } finally {
+            supabaseBusy = false;
+        }
+    }
+
+    async function toggleDraftTrash() {
+        showDeletedDrafts = !showDeletedDrafts;
+        draftManagement = null;
         await refreshSupabaseDrafts();
     }
 
@@ -889,6 +939,7 @@
             try {
                 const matches = await listPriorityAreaDrafts({ regionCode, hazardType: hazard, draftId: params.get('savedDraft'), limit: 1 });
                 if (!matches.length || !restorePriorityDraftPayload(draftPayloadFromRow(matches[0]))) throw new Error('해당 지역의 저장본을 불러오지 못했습니다.');
+                loadedDraftId = matches[0].id;
                 supabaseStatus = `${matches[0].analysis_version} 불러오기 완료 · ${region}`;
                 schedulePriorityDraftSave();
                 const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete('savedDraft');
@@ -3057,12 +3108,13 @@
                                         <span>작업자</span>
                                         <input bind:value={operatorName} placeholder="이름 또는 부서" aria-label="저장 기록에 남을 작업자 이름" title="저장할 때 기록에 남는 이름입니다" />
                                     </label>
-                                    <button class="db-save-action" onclick={saveCurrentDraftToSupabase} disabled={supabaseBusy || Boolean(activeComparison) || !alternatives.length} title={activeComparison ? '겹침 결과는 이 브라우저에 자동 보관됩니다. 파일 보관은 비교 결과 내려받기를 이용하세요.' : '현재 대안 저장'}>
+                                    <button class="db-save-action" onclick={() => saveCurrentDraftToSupabase()} disabled={supabaseBusy || Boolean(activeComparison) || !alternatives.length} title={activeComparison ? '겹침 결과는 이 브라우저에 자동 보관됩니다. 파일 보관은 비교 결과 내려받기를 이용하세요.' : '현재 대안 저장'}>
                                         {supabaseBusy ? '처리 중' : '저장'}
                                     </button>
                                     <button class="db-load-action" onclick={toggleSupabaseHistory} disabled={supabaseBusy}>
                                         불러오기
                                     </button>
+                                    <button class="db-load-action" onclick={() => openSavedDraftAction('manage')} disabled={supabaseBusy}>저장본 관리</button>
                                     <button class="db-load-action" onclick={() => openSavedDraftAction('compare')} disabled={supabaseBusy}>대안 겹침 비교</button>
                                     <span>{supabaseStatus}</span>
                                 </div>
@@ -3286,6 +3338,9 @@
                 <div class="save-progress-bar"><i></i></div>
                 <small>창을 닫지 말고 잠시 기다려 주세요.</small>
             {:else}
+                {#if supabaseSaveDialog.conflict}
+                    <button type="button" onclick={() => saveCurrentDraftToSupabase(true)}>내 작업을 별도 대안으로 저장</button>
+                {/if}
                 <button type="button" onclick={() => supabaseSaveDialog = null}>확인</button>
             {/if}
         </div>
@@ -3300,7 +3355,7 @@
             <header>
                 <div>
                     <span>{supabaseHistoryTab === 'compare' ? 'ALTERNATIVE COMPARISON' : 'SAVED ALTERNATIVES'}</span>
-                    <h2 id="saved-draft-modal-title">{supabaseHistoryTab === 'compare' ? '대안 겹침 비교' : '저장본 불러오기'}</h2>
+                    <h2 id="saved-draft-modal-title">{supabaseHistoryTab === 'compare' ? '대안 겹침 비교' : supabaseHistoryTab === 'manage' ? '저장본 관리' : '저장본 불러오기'}</h2>
                     <p>{region} · {config.label} · {supabaseBusy ? '저장본 조회 중' : `저장본 ${supabaseDrafts.length}개`}</p>
                 </div>
                 <button type="button" class="saved-draft-close" aria-label={supabaseHistoryTab === 'compare' ? '대안 겹침 비교 닫기' : '불러오기 닫기'} onclick={() => supabaseHistoryOpen = false}>×</button>
@@ -3313,6 +3368,25 @@
                     </div>
                 {/if}
             {:else}
+            {#if supabaseHistoryTab === 'manage'}
+                <div class="draft-management-toolbar">
+                    <p>현재 지역·재해의 저장본입니다. 삭제하면 휴지통으로 이동하며 복원할 수 있습니다.</p>
+                    <button type="button" onclick={toggleDraftTrash} disabled={supabaseBusy}>{showDeletedDrafts ? '저장본 목록 보기' : '휴지통 보기'}</button>
+                </div>
+                {#if draftManagement}
+                    <form class="draft-management-editor" onsubmit={(event) => { event.preventDefault(); confirmDraftManagement(); }}>
+                        <strong>{draftManagement.row.set_name}</strong>
+                        {#if draftManagement.action === 'rename'}
+                            <label>저장본 제목 <input aria-label="새 저장본 제목" bind:value={draftManagementName} maxlength="120" required /></label>
+                        {:else}
+                            <p>{draftManagement.action === 'delete' ? '이 저장본을 휴지통으로 이동할까요? 다른 수정 이력은 유지됩니다.' : '이 저장본을 복원할까요?'}</p>
+                        {/if}
+                        {#if draftManagementError}<p role="alert">{draftManagementError}</p>{/if}
+                        <button type="submit" disabled={supabaseBusy}>{draftManagement.action === 'rename' ? '제목 저장' : draftManagement.action === 'delete' ? '휴지통으로 이동' : '복원 확인'}</button>
+                        <button type="button" disabled={supabaseBusy} onclick={() => draftManagement = null}>취소</button>
+                    </form>
+                {/if}
+            {/if}
             <div class="saved-draft-table-head" aria-hidden="true">
                 <span>제목</span>
                 <span>작성자</span>
@@ -3328,21 +3402,32 @@
                         <details open={savedRegionCount === 1} style="margin:8px 12px;border:1px solid #dce5e2;border-radius:8px">
                             <summary style="cursor:pointer;padding:12px;font-weight:600">{item.name} · 저장본 {item.rows.length}개 · 분석 대안 {item.analyzed}개 {item.code === regionCode ? '· 현재 지역' : ''}</summary>
                             {#each item.rows as savedDraft}
-                        <button type="button" class="saved-draft-row" onclick={() => loadSupabaseDraft(savedDraft)}>
+                        <button type="button" class="saved-draft-row" disabled={showDeletedDrafts} onclick={() => loadSupabaseDraft(savedDraft)}>
                             <span>
                                 <strong>{savedDraft.set_name || savedDraft.analysis_version || '제목 없는 저장본'}</strong>
                                 <small>{savedDraft.analysis_version || '버전 미기록'}</small>
+                                {#if savedDraft.parent_id}<small>이전 저장본의 수정 이력 · {savedDraft.lineage_id?.slice(0, 8)}</small>{/if}
                                 {#if item.code !== regionCode}<small>이 지역으로 이동하여 불러오기</small>{/if}
                             </span>
                             <span>{savedDraft.created_by_user || '작업자 미기록'}</span>
                             <time>{new Date(savedDraft.created_at).toLocaleString('ko-KR')}</time>
                         </button>
+                        {#if supabaseHistoryTab === 'manage'}
+                            <div class="draft-row-actions">
+                                {#if showDeletedDrafts}
+                                    <button type="button" onclick={() => openDraftManagement(savedDraft, 'restore')}>복원</button>
+                                {:else}
+                                    <button type="button" onclick={() => openDraftManagement(savedDraft, 'rename')}>이름 변경</button>
+                                    <button type="button" onclick={() => openDraftManagement(savedDraft, 'delete')}>삭제</button>
+                                {/if}
+                            </div>
+                        {/if}
                     {/each}
                         </details>
                         {/each}
                     {/each}
                 {:else}
-                    <p class="saved-draft-empty">불러올 저장본이 없습니다.</p>
+                    <p class="saved-draft-empty">{showDeletedDrafts ? '휴지통이 비어 있습니다.' : '불러올 저장본이 없습니다.'}</p>
                 {/if}
             </div>
             {/if}

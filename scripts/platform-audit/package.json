@@ -1,0 +1,7 @@
+{
+  "name": "livinglabs-platform-audit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node run.mjs", "test": "node --test run.test.mjs" }
+}

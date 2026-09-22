@@ -9,7 +9,11 @@ function normalizeSupabaseUrl(rawUrl) {
 
 function getEnvValue(key) {
   try {
-    return import.meta?.env?.[key] || '';
+    // Static references are required for Vite's build-time substitution.
+    if (key === 'VITE_SUPABASE_URL') return import.meta.env.VITE_SUPABASE_URL || '';
+    if (key === 'VITE_SUPABASE_ANON_KEY') return import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+    if (key === 'VITE_SUPABASE_PUBLISHABLE_KEY') return import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+    return '';
   } catch {
     return '';
   }

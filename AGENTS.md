@@ -25,3 +25,11 @@ Before modifying or reverting the saved-alternative comparison, read `docs/ALTER
 The pre-change source, served internal-tools build, and 11 Supabase draft rows are preserved in
 `output/alternative-overlap-backup-20260910-140005/`, with SHA-256 hashes and targeted restore instructions.
 Preserve earlier uncommitted work; do not use a repository-wide hard reset for this feature.
+
+## Daily platform audit package
+
+The recurring 06:00–07:00 Asia/Seoul review is maintained in `scripts/platform-audit/`.
+When adding or changing a user-facing feature, update `scripts/platform-audit/checks.json`
+with its acceptance criteria and relevant environment. Follow the package README for
+evidence, read-only production checks, and reporting untested coverage. Preserve the
+existing daily automation; it reads the latest package instead of a frozen checklist.

@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "origins": {
+    "local": "http://127.0.0.1:4173",
+    "external": "https://livinglabs-platform.pages.dev"
+  },
+  "http": [
+    {
+      "id": "flood-page",
+      "path": "/internal-tools/priority-management-area/flood?regionCode=41110",
+      "kind": "html"
+    },
+    {
+      "id": "portal",
+      "path": "/",
+      "kind": "html"
+    },
+    {
+      "id": "region-selection",
+      "path": "/internal-tools/priority-management-area?regionCode=41110",
+      "kind": "html"
+    },
+    {
+      "id": "heatwave-page",
+      "path": "/internal-tools/priority-management-area/heatwave?regionCode=41110",
+      "kind": "html"
+    },
+    {
+      "id": "database",
+      "path": "/cadastre/health",
+      "kind": "health"
+    },
+    {
+      "id": "indicators",
+      "path": "/indicator-availability?regionCode=41110",
+      "kind": "json"
+    },
+    {
+      "id": "served-build",
+      "path": "/internal-tools/_app/version.json",
+      "kind": "version"
+    }
+  ],
+  "browser": [
+    {
+      "id": "baseline",
+      "criteria": "최신 침수 기준 화면의 레이아웃·지역·재해명과 콘솔 오류 확인. 실험실/데모는 제외."
+    },
+    {
+      "id": "flood-risk",
+      "criteria": "수원 침수 새 대안에서 기본 지표 로딩, Risk 완료, 유효 격자와 결과 지도 확인. 8개 지표·4857셀은 과거 참고값이며 변경 시 근거 확인."
+    },
+    {
+      "id": "layers",
+      "criteria": "H/E/V/Risk/Hotspot 전환, 범례, 확대·축소, 지역 복귀와 경계 표시 확인."
+    },
+    {
+      "id": "indicators-and-retry",
+      "criteria": "지표 선택 변경 후 재분석. 데이터 오류 발생 시 명확한 오류와 재시도 가능 여부 확인. 장애 주입은 격리된 테스트에서만 수행."
+    },
+    {
+      "id": "alternative-isolation",
+      "criteria": "저장하지 않은 대안 2개에서 서로 다른 선택과 결과를 유지하는지 전환 확인."
+    },
+    {
+      "id": "practice-area",
+      "criteria": "분석 완료 후 실천권역 도출, 후보와 필지 결과·지도 확인. 검토 요청은 보내지 않음."
+    },
+    {
+      "id": "exports",
+      "criteria": "설정 JSON 및 지도 PNG 다운로드 후 지역·재해·분석 결과와 파일 유효성 확인."
+    },
+    {
+      "id": "saved-alternatives",
+      "criteria": "불러오기 목록과 비교 화면의 읽기 전용 동작 확인. 기존 대안 수정·저장·삭제 금지. 쓰기 검증은 격리 환경 없으면 BLOCKED."
+    },
+    {
+      "id": "heatwave-wbgt",
+      "criteria": "침수 기준 확인 후 폭염 기본 및 WBGT 지표 분석. 실제 지표 응답·결측·기준기간·결과 확인."
+    },
+    {
+      "id": "regional-rotation",
+      "criteria": "가용 목록에서 수원 이외 지역을 날짜별 순환 선택해 분석. 모든 지역 검증으로 일반화하지 않음."
+    },
+    {
+      "id": "new-features",
+      "criteria": "마지막 점검 이후 git 변경 및 새 라우트·지표·버튼을 검토. 사용자 기능 변경마다 목록에 수용 기준 추가. 미등록 기능은 커버리지 누락으로 보고."
+    },
+    {
+      "id": "draft-preview-analysis-data",
+      "criteria": "4181 미리보기를 제공할 때 홍수 기준 화면에서 Risk 분석이 실제 자료로 완료되는지 확인. 분석 조회 경로는 기존 4173 서버로 GET/HEAD만 전달하고 저장 요청은 검증용 저장소에 격리. 403 또는 자료 요청 실패가 있으면 FAIL. 미리보기 미실행 시 NOT_APPLICABLE.",
+      "environment": "local preview 4181",
+      "writes": false
+    },
+    {
+      "id": "draft-management-concurrency",
+      "criteria": "2026-09-22 공동 DB 및 로컬 4173에 적용됨. 홍수·폭염에서 저장본 관리 진입, 이름 변경, 휴지통 이동/복원, 같은 부모의 병렬 저장 충돌 및 별도 대안 보존, 동일 요청 재시도 중복 없음 확인. 지정된 테스트 데이터만 쓰며 운영 기존 자료는 변경하지 않음. 별도 쓰기 승인 없는 정기 점검에서는 읽기/UI만 확인하고 쓰기 검증은 BLOCKED로 보고. 외부 화면 적용 여부는 별도로 확인.",
+      "environment": "local and external after database deployment",
+      "writes": true
+    }
+  ]
+}
