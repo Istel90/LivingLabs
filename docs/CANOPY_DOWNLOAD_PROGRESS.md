@@ -1,5 +1,73 @@
 # Canopy download handoff — 2026-09-12
 
+## September 28 priority change — Seoul first
+
+User requested capital-region-first downloads and continuous administrative
+list updates. New submissions now follow Seoul (16 intersecting national tiles),
+then remaining Gyeonggi (138 additional tiles), then the rest of Korea (1,148).
+Tiles touching both Seoul and Gyeonggi belong to the Seoul priority group.
+Suwon/Incheon remain completed; existing noncapital remote jobs are preserved.
+Original national names, geometries and identifiers remain intact. Queue selection
+waits for the earlier group's file recovery before advancing; region completion
+still requires independent boundary QA. Offline checks confirmed the 16-tile
+Seoul selection, Gyeonggi transition and unchanged existing tile records.
+
+Reconciliation recovered two more previously submitted files (0067,0068), both
+zero missingInside. National audit now covers 69 files: 1,998,255,824 target
+pixels, the same unresolved single missing pixel in 0058, zero value255Inside,
+492,825 exterior edge pixels; total files 490,706,882 bytes.
+
+Seoul exports 1072 and 1073 successfully submitted: 2 READY / 14 PENDING of 16.
+Overall: 67 VERIFIED, 2 EMPTY_BOUNDARY, 10 READY (8 existing + 2 Seoul),
+1,223 PENDING; no unresolved FAILED/UNKNOWN/SUBMITTING/EMPTY_SOURCE.
+Drive free 85.81 GiB; D free 869.35 GiB; restricted compute warning persists.
+An initial custom GEE task-priority attempt was rejected with HTTP 400 because
+custom priority requires a commercial project. Remote status UNKNOWN and zero
+matching tasks confirmed no export was created; the rejected request was logged
+in submissionRecovery and safely restored to PENDING before normal submission.
+The final implementation changes local selection order only, without custom
+remote priority or billing changes. Existing queued tasks may run before Seoul.
+
+Queue runs now regenerate output/canopy-admin-progress/administrative-progress.md,
+.csv and .json on exit, including partial failure, and before priority selection.
+The report includes all 255 stored administrative features and a priority column.
+Separate QA/state edits should be followed by scripts/canopy_admin_progress.py.
+Automation 1m-gee was updated and confirmed ACTIVE, retaining daily 09:00 and
+the same thread. Its prompt now explicitly requires Seoul → Gyeonggi → rest,
+report regeneration each run, and tracking the existing single-pixel discrepancy.
+
+## September 28 run
+
+Reconciled existing exports and downloaded six outputs (0061–0066) today.
+Four others (0057–0060) had been downloaded on September 23 according to
+verifiedAt; they are not counted as today's downloads. Existing queue was
+empty after recovery, so submitted ten new exports (0067–0076).
+Final national snapshot: 65 VERIFIED, 2 EMPTY_BOUNDARY, 10 READY, 1,225 PENDING
+out of 1,302 cells; no FAILED/UNKNOWN/SUBMITTING or EMPTY_SOURCE. File-level
+VERIFIED does not imply complete boundary coverage. Suwon 6/6 and Incheon
+62 valid + 1 zero-target-boundary cell of 63 remain QA-approved and packaged.
+
+Audited all 67 downloaded national files: 1,991,759,117 target pixels,
+**1 missingInside**, zero value255Inside, 468,742 exterior edge pixels.
+Missing pixel belongs to previously downloaded 0058 at EPSG:5179
+(919975.5, 1573657.5), longitude/latitude (126.6318965285, 34.1531049228).
+Its 3x3 target mask is a one-pixel-wide horizontal boundary strip; neighboring
+inside pixels are height zero, but this pixel is NoData. Boundary projection
+versus original source masking remains unresolved: never fill it with zero
+or declare nationwide QA complete. Details and neighborhood are preserved in
+`.runtime-logs/canopy-national-missing-review.json`. All six files recovered
+today have zero missingInside. Review this discrepancy on subsequent runs.
+
+National downloads total 485,648,435 bytes. Drive free 85.81 GiB; D free
+869.36 GiB. Restricted-mode compute warning persists; no billing/tier changes
+or Drive deletions. Remote completion timestamps show 25 outputs over
+September 17–24 (8 days), approximately 3.1/day while work was queued.
+The 1,235 unfinished cells would take roughly 395 days at that sustained
+rate (around late October 2027), strictly a throughput scenario, not a promised
+date. The queue ran out after September 24, so September 25–27 zero outputs
+must not be interpreted as pure compute speed. Actual finish remains uncertain
+and should be recalculated after quota conditions and observed throughput change.
+
 ## September 22 run
 
 Restricted-mode warning persists. Collected six additional national outputs

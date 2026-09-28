@@ -3,6 +3,8 @@ import argparse
 import hashlib
 import json
 import shutil
+import subprocess
+import sys
 from collections import Counter
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -20,6 +22,30 @@ OUT = Path('D:/LivingLabsData/canopy-height')
 STATE = ROOT / '.runtime-logs/canopy-queue.json'
 SOURCE = 'projects/sat-io/open-datasets/facebook/meta-canopy-height'
 FOLDER = 'LivingLabs_Canopy_1m'
+
+
+def refresh_admin_report():
+    subprocess.run([sys.executable, str(ROOT / 'scripts/canopy_admin_progress.py')], check=True, stdout=subprocess.DEVNULL)
+
+
+def prioritize_national(s):
+    # Rebuild the polygon intersection inventory from the current queue.
+    save(s)
+    refresh_admin_report()
+    rows = json.loads((ROOT / 'output/canopy-admin-progress/administrative-progress.json').read_text(encoding='utf-8'))
+    ranks = {}
+    for row in rows:
+        rank = 1 if row['코드'].startswith('11') else 2 if row['코드'].startswith('41') else 3
+        for name in row['타일'].split(','):
+            ranks[name] = min(rank, ranks.get(name, 3))
+    for item in s['stages']['national']:
+        item['priorityGroup'] = ranks.get(item['name'], 3)
+    s['submissionPolicy'] = {'updatedOn':'2026-09-28','order':['seoul','gyeonggi_remaining','rest_of_korea'], 'existingTasks':'preserve', 'report':'output/canopy-admin-progress/administrative-progress.md'}
+    ordered = sorted(s['stages']['national'], key=lambda i: (i['priorityGroup'],i['name']))
+    unfinished = [i for i in ordered if i['status'] not in ('VERIFIED','EMPTY_BOUNDARY')]
+    # Wait for the higher-priority region's files before submitting the next tier.
+    tier = unfinished[0]['priorityGroup'] if unfinished else 3
+    return [i for i in ordered if i['priorityGroup'] == tier]
 
 
 def save(s):
@@ -157,7 +183,8 @@ def run(limit):
         bool(i.get('submittedAt')) and datetime.fromisoformat(i['submittedAt']).astimezone(korea_tz).date() == today
         for entries in s['stages'].values() for i in entries)
     capacity = min(limit, available, max(0, 50-active), max(0, 50-submitted_today))
-    for item in s['stages'][stage]:
+    submission_items = prioritize_national(s) if stage == 'national' else s['stages'][stage]
+    for item in submission_items:
         if capacity <= 0:
             break
         if item['status'] != 'PENDING':
@@ -190,4 +217,8 @@ if __name__ == '__main__':
     with STATE.with_suffix('.lock').open('a+b') as lock:
         lock.seek(0)
         msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
-        run(args.limit)
+        try:
+            run(args.limit)
+        finally:
+            if STATE.exists():
+                refresh_admin_report()

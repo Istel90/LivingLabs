@@ -5,6 +5,7 @@
     import 'leaflet/dist/leaflet.css';
     import 'maplibre-gl/dist/maplibre-gl.css';
     import {
+        boundaryFeaturesByCode,
         getBoundaryFeaturesForRegionCode,
         getRegionByCode,
         getRegionCenter,
@@ -95,6 +96,8 @@
     let scaleBottomOffset = $state(28);
     let scaleControlEl;
     let selectedBoundaryLayer;
+    let administrativeBoundaryLayer;
+    let administrativeBoundaryVisible = $state(false);
     let regionViewBounds;
     let sidoLayer;
     let sggLayer;
@@ -2397,6 +2400,19 @@
 
         baseLayer = createBaseLayer(L, baseMapStyle).addTo(map);
 
+        map.createPane('administrativeBoundaryPane');
+        map.getPane('administrativeBoundaryPane').style.zIndex = 605;
+        map.getPane('administrativeBoundaryPane').style.pointerEvents = 'none';
+        administrativeBoundaryLayer = L.geoJSON(
+            { type: 'FeatureCollection', features: Object.values(boundaryFeaturesByCode) },
+            {
+                pane: 'administrativeBoundaryPane',
+                interactive: false,
+                style: { color: '#475569', weight: 1.5, opacity: 0.85, fill: false }
+            }
+        );
+        toggleLayer(administrativeBoundaryLayer, administrativeBoundaryVisible);
+
         if (hasVWorldApiKey()) {
             sidoLayer = L.tileLayer
                 .wms(VWORLD_WMS_URL, createVWorldWmsOptions(VWORLD_WMS_LAYERS.sidoBoundary, { opacity: 0.35 }));
@@ -2680,6 +2696,20 @@
         </div>
     {/if}
     <div class="display-settings-panel" data-map-export-ignore aria-label="표시 설정">
+        <label class="display-toggle-row" title="시군구 행정경계 표시">
+            <span class="display-toggle-label">행정경계</span>
+            <span class="switch">
+                <input
+                    type="checkbox"
+                    checked={administrativeBoundaryVisible}
+                    onchange={(event) => {
+                        administrativeBoundaryVisible = event.currentTarget.checked;
+                        toggleLayer(administrativeBoundaryLayer, administrativeBoundaryVisible);
+                    }}
+                />
+                <span class="switch-track" aria-hidden="true"></span>
+            </span>
+        </label>
         <label class="display-toggle-row">
             <span class="display-toggle-label">흑백 지도</span>
             <span class="switch">

@@ -22,6 +22,8 @@ Windows 작업 루트에서 `powershell -NoProfile -ExecutionPolicy Bypass -File
 
 ## 복구 범위
 
+2026-09-28 사용자 요청으로 `LivingLabs Local Recovery` 매분 작업을 비활성화했다. 기존 하루 한 번 자동화만 유지하며 매분 작업을 자동 재활성화하지 않는다. `docs/LOCAL_PLATFORM_RECOVERY.md` 참조. `.runtime-logs/platform-autostart.paused`가 있으면 정기 점검에서 자동 재개하지 않는다. 로그인 전 부팅 실행과 실제 재부팅 시험은 미완료이다.
+
 서버/터널 중단은 프로세스·4173 소유자·로그를 확인하고 기존 start-platform.ps1/start-remote-platform.ps1 절차를 검토해 복구할 수 있다. 터널 주소 변경이 필요하면 현재 원격 배포와 대조한다. 진행 중인 배포나 다른 작업과 충돌하지 않게 한다. 기존 접근 제어를 유지하고 비밀값은 보고서에 기록하지 않는다. 승인 실패는 BLOCKED로 보고한다.
 
 데이터 삭제·운영 대안 덮어쓰기·검토 요청 전송·새 공개 경로·무관한 서비스 중단·자동 기능 수정은 하지 않는다. 저장/삭제/요청 등 쓰기 기능은 별도 테스트 환경과 명시적 범위가 없으면 BLOCKED로 기록한다. 서비스 재시작은 영향받는 프로세스만 대상으로 하고 복구 후 외부 분석을 다시 실행한다.

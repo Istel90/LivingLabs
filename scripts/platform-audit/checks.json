@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "origins": {
     "local": "http://127.0.0.1:4173",
     "external": "https://livinglabs-platform.pages.dev"
@@ -42,6 +42,18 @@
     }
   ],
   "browser": [
+    {
+      "id": "administrative-boundary-toggle",
+      "environment": "local flood baseline and heatwave, regionCode=41110",
+      "writes": false,
+      "criteria": "지도 표시 설정의 행정경계 토글은 기본 OFF이며 로컬 시군구 경계선을 ON/OFF한다. 분석지역 경계 및 흑백 지도와 독립적으로 작동하고 지도 위치·분석 결과는 유지한다. 홍수와 폭염에서 동일하게 확인한다. 배경지도 자체에 포함된 경계선은 토글 대상이 아니다."
+    },
+    {
+      "id": "local-runtime-recovery",
+      "environment": "local Windows",
+      "writes": false,
+      "criteria": "2026-09-28 사용자 요청으로 LivingLabs Local Recovery 매분 작업 비활성화. 작업 Disabled를 정상 정책으로 취급하고 자동 재활성화·매분 감시 추가 금지. 기존 하루 한 번 점검에서 4173 소유 프로세스 및 55432 DB 준비 상태 확인. watchdog 기록의 오래된 시각만으로 장애 판정하지 않는다. 실제 홍수 화면·지표 응답은 기존 검사로 검증. 의도적 중지 표시가 있으면 자동 재개 금지."
+    },
     {
       "id": "baseline",
       "criteria": "최신 침수 기준 화면의 레이아웃·지역·재해명과 콘솔 오류 확인. 실험실/데모는 제외."

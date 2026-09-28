@@ -60,6 +60,14 @@ $rows = foreach ($app in $apps) {
 
 $rows | Format-Table -AutoSize
 
+$recoveryTask = Get-ScheduledTask -TaskName 'LivingLabs Local Recovery' -ErrorAction SilentlyContinue
+if ($recoveryTask) {
+  $recoveryTask | Get-ScheduledTaskInfo | Select-Object LastRunTime, LastTaskResult, NextRunTime | Format-List
+}
+$watchdogStatus = Join-Path $runtimeDir 'platform-watchdog-status.json'
+if (Test-Path $watchdogStatus) { Get-Content $watchdogStatus }
+Write-Host "Automatic recovery paused: $(Test-Path (Join-Path $runtimeDir 'platform-autostart.paused'))"
+
 $postgisStatusScript = Join-Path $PSScriptRoot "status-vworld-postgis.ps1"
 if (Test-Path -LiteralPath $postgisStatusScript) {
   Write-Host ""

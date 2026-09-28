@@ -1,57 +1,32 @@
-$ErrorActionPreference = "Continue"
-
-$root = Split-Path -Parent $PSScriptRoot
-$runtimeDir = Join-Path $root ".runtime-logs"
-$processFile = Join-Path $runtimeDir "platform-processes.json"
-$ports = @(5173, 5174, 5175, 5176, 4173, 4174, 4175, 4176)
-
-function Stop-ProcessId($targetPid, $reason) {
-  if (-not $targetPid) {
-    return
+param([switch]$IncludeDatabase)
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'platform-runtime.ps1')
+New-Item -ItemType Directory -Path $PlatformRuntime -Force | Out-Null
+# Written before waiting for the lock so an in-flight recovery stops starting services.
+Set-Content -LiteralPath $PlatformPause -Value (Get-Date -Format o)
+$lock = $null
+try {
+  for ($attempt = 0; $attempt -lt 150; $attempt++) {
+    try {
+      $lock = [IO.File]::Open((Join-Path $PlatformRuntime 'platform-runtime.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+      break
+    } catch [IO.IOException] { Start-Sleep -Seconds 1 }
   }
-
-  $process = Get-Process -Id $targetPid -ErrorAction SilentlyContinue
-  if ($process) {
-    Write-Host "Stopping PID $targetPid ($reason)"
-    Stop-Process -Id $targetPid -Force -ErrorAction SilentlyContinue
+  if (-not $lock) { throw 'Recovery is busy. Automatic recovery is paused; retry stop later.' }
+  foreach ($owner in @(Get-PlatformListener 4173)) {
+    $process = Assert-PlatformOwner $owner
+    # Recheck identity immediately before the targeted stop.
+    $null = Assert-PlatformOwner $process.ProcessId
+    Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
   }
-}
-
-if (Test-Path $processFile) {
-  try {
-    $records = Get-Content $processFile -Raw | ConvertFrom-Json
-    foreach ($record in $records) {
-      Stop-ProcessId $record.pid "$($record.label)"
+  if ($IncludeDatabase) {
+    & (Join-Path $PlatformPgHome 'bin\pg_ctl.exe') -D $PlatformPgData status | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      & (Join-Path $PlatformPgHome 'bin\pg_ctl.exe') -D $PlatformPgData -w -t 120 stop -m fast
+      if ($LASTEXITCODE -ne 0) { throw 'Database did not stop cleanly.' }
     }
-  } catch {
-    Write-Host "Could not read saved process file. Falling back to port cleanup."
   }
+  Write-Output 'Local platform stopped; automatic recovery paused. Resume with npm run platform:start.'
+} finally {
+  if ($lock) { $lock.Dispose() }
 }
-
-foreach ($port in $ports) {
-  $connections = netstat -ano | Select-String -Pattern "LISTENING" | Where-Object {
-    $parts = ($_.Line -replace "\s+", " ").Trim().Split(" ")
-    $parts.Length -ge 5 -and $parts[1] -match ":$port$"
-  }
-  foreach ($connection in $connections) {
-    $parts = ($connection.Line -replace "\s+", " ").Trim().Split(" ")
-    Stop-ProcessId ([int]$parts[4]) "port $port"
-  }
-}
-
-if (Test-Path $processFile) {
-  Remove-Item -LiteralPath $processFile -Force -ErrorAction SilentlyContinue
-}
-
-$postgisStopScript = Join-Path $PSScriptRoot "stop-vworld-postgis.ps1"
-$pgIsReady = "D:\90_Data\VWORLD\tools\pgsql-17.11\pgsql\bin\pg_isready.exe"
-if ((Test-Path -LiteralPath $postgisStopScript) -and (Test-Path -LiteralPath $pgIsReady)) {
-  & $pgIsReady -h 127.0.0.1 -p 55432 -U postgres | Out-Null
-  if ($LASTEXITCODE -eq 0) {
-    & $postgisStopScript
-  }
-}
-
-Write-Host ""
-Write-Host "Stop request completed."
-Write-Host "Check status: npm run platform:status"
