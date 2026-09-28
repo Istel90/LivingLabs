@@ -1,5 +1,6 @@
 <script>
     import { onDestroy, onMount, untrack } from 'svelte';
+    import { MAP_DISPLAY_CONTROLS, validateDisplayControls } from '$lib/priority/mapDisplayControls.js';
     import { displayScale, displayColor, MAP_RAMP } from '$lib/data/mapColorScale.js';
     import html2canvas from 'html2canvas-pro';
     import 'leaflet/dist/leaflet.css';
@@ -111,6 +112,29 @@
     let selectedGridLayer = $state(activeGridLayer);
     let visibleLayerScopeKey = $state('');
     let selectedBoundaryVisible = $state(true);
+    const displayActions = {
+        administrativeBoundary: {
+            get: () => administrativeBoundaryVisible,
+            set: value => {
+                administrativeBoundaryVisible = value;
+                toggleLayer(administrativeBoundaryLayer, value);
+            }
+        },
+        grayscaleMap: {
+            get: () => baseMapStyle === 'grayscale',
+            set: value => setBaseMapStyle(value ? 'grayscale' : 'default')
+        },
+        analysisBoundary: {
+            get: () => forceSelectedBoundary || selectedBoundaryVisible,
+            disabled: () => forceSelectedBoundary,
+            set: value => {
+                if (forceSelectedBoundary) return;
+                selectedBoundaryVisible = value;
+                toggleLayer(selectedBoundaryLayer, value);
+            }
+        }
+    };
+    validateDisplayControls(MAP_DISPLAY_CONTROLS, displayActions);
     let sidoBoundaryVisible = $state(showSidoBoundary);
     let sigunguBoundaryVisible = $state(showSigunguBoundary);
     let cadastralVisible = $state(false);
@@ -2696,47 +2720,20 @@
         </div>
     {/if}
     <div class="display-settings-panel" data-map-export-ignore aria-label="표시 설정">
-        <label class="display-toggle-row" title="시군구 행정경계 표시">
-            <span class="display-toggle-label">행정경계</span>
-            <span class="switch">
-                <input
-                    type="checkbox"
-                    checked={administrativeBoundaryVisible}
-                    onchange={(event) => {
-                        administrativeBoundaryVisible = event.currentTarget.checked;
-                        toggleLayer(administrativeBoundaryLayer, administrativeBoundaryVisible);
-                    }}
-                />
-                <span class="switch-track" aria-hidden="true"></span>
-            </span>
-        </label>
-        <label class="display-toggle-row">
-            <span class="display-toggle-label">흑백 지도</span>
-            <span class="switch">
-                <input
-                    type="checkbox"
-                    checked={baseMapStyle === 'grayscale'}
-                    onchange={(event) => setBaseMapStyle(event.currentTarget.checked ? 'grayscale' : 'default')}
-                />
-                <span class="switch-track" aria-hidden="true"></span>
-            </span>
-        </label>
-        <label class="display-toggle-row">
-            <span class="display-toggle-label">분석지역 경계</span>
-            <span class="switch">
-                <input
-                    type="checkbox"
-                    checked={forceSelectedBoundary ? true : selectedBoundaryVisible}
-                    disabled={forceSelectedBoundary}
-                    onchange={(event) => {
-                        if (forceSelectedBoundary) return;
-                        selectedBoundaryVisible = event.currentTarget.checked;
-                        toggleLayer(selectedBoundaryLayer, selectedBoundaryVisible);
-                    }}
-                />
-                <span class="switch-track" aria-hidden="true"></span>
-            </span>
-        </label>
+        {#each MAP_DISPLAY_CONTROLS as control (control.id)}
+            <label class="display-toggle-row" title={control.title}>
+                <span class="display-toggle-label">{control.label}</span>
+                <span class="switch">
+                    <input
+                        type="checkbox"
+                        checked={displayActions[control.action].get()}
+                        disabled={displayActions[control.action].disabled?.() || false}
+                        onchange={(event) => displayActions[control.action].set(event.currentTarget.checked)}
+                    />
+                    <span class="switch-track" aria-hidden="true"></span>
+                </span>
+            </label>
+        {/each}
     </div>
     <div class="map-control-column" data-map-export-ignore style={`bottom:${locateButtonOffset}px`}>
         <button

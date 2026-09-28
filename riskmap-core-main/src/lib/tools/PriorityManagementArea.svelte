@@ -3,6 +3,8 @@
     import { base } from '$app/paths';
     import proj4 from 'proj4';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
+    import { createSectorConfigs, INDICATOR_GROUPS } from '$lib/priority/registry.js';
+    import { configureRegisteredIndicators, indicatorRequestUrl } from '$lib/priority/indicatorData.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
     import AlternativeOverlap from './AlternativeOverlap.svelte';
     import { groupRegionalDrafts } from '$lib/data/regionalDraftGroups.js';
@@ -39,7 +41,7 @@
     const steps = ['프로젝트 설정', '입력자료', '가중치 설정', '분석 실행', '결과 지도', '의사결정 지원'];
     const hazardScenarios = ['ssp126', 'ssp245', 'ssp370', 'ssp585'];
     const hazardFuturePeriods = ['2026', '2027', '2028', '2029', '2030', '2040', '2050', '2060', '2070', '2080', '2090', '2100'];
-    const requiredGroups = ['기후위험', '노출', '민감도', '적응역량'];
+    const requiredGroups = INDICATOR_GROUPS.map(group => group.label);
     const vLambda = 0.5;
     const asset = (path) => `${base}${path}`;
     const DEPARTMENT_HANDOFF_KEY = 'livinglabs.priorityManagementHandoff';
@@ -52,257 +54,11 @@
     const PRIORITY_DRAFT_STORE_NAME = 'priority-management-sessions';
     const PRIORITY_DRAFT_SCHEMA_VERSION = 'priority-management-draft/v2';
 
-    const hazardConfigs = {
-        heatwave: {
-            label: '폭염',
-            projectSuffix: '폭염 위험지역 분석',
-            heroEmphasis: '우선 대응지를 찾습니다.',
-            heroDescription: '기후위험(H), 노출(E), 취약성(V) 지표를 직접 구성하고 공간 분석 결과를 의사결정으로 연결하세요.',
-            sampleNotice: '전국 행정구역별 H01~H11 100m 분석격자를 확인할 수 있습니다.',
-            mapSource: '전국 최근 5년 H01~H05·H07·H10 / SSP245 H01~H09 100m 격자',
-            rasterPath: null,
-            dataSummaryPath: '/analysis-data/suwon-heatwave-data-summary.json',
-            rasterReadyPrefix: '선택 행정구역 100m Hazard 격자',
-            rasterError: '선택 행정구역 Hazard 격자 연결 실패',
-            actionTitle: '이동형 쉼터와 그늘막 우선 배치',
-            brief: {
-                driverTitle: '65세 이상 고령층',
-                driverText: '지역 평균 대비',
-                driverValue: '1.8배 높음',
-                gapTitle: '무더위쉼터 접근성',
-                gapText: '도보 10분 내 접근 가능',
-                gapValue: '32%'
-            },
-            commonDataItems: [
-                { label: '기온', source: 'LST·폭염일수·태양고도' },
-                { label: '그늘막 현황', source: '사업/시설 현황 데이터' },
-                { label: '취약계층', source: '고령·유소년·기저질환자' },
-                { label: '관련 현황 데이터', source: '인구·녹지·무더위쉼터·표준격자' }
-            ],
-            alternatives: [
-                { name: '대안 1', status: '검토중', description: '취약계층 밀집지역 중심 그늘·쉼터 보강안' },
-                { name: '대안 2', status: '검토중', description: '보행축과 대중교통 결절점 중심 대응안' },
-                { name: '대안 3', status: '검토중', description: '공공시설·녹지 연계 복합 대응안' }
-            ],
-            indicators: [
-                { id: 101, indicatorCode: 'H01', icon: '🌡', label: 'H01 · 평균기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#f59e0b' },
-                { id: 102, indicatorCode: 'H02', icon: '↗', label: 'H02 · 평균최고기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#ef4444' },
-                { id: 103, indicatorCode: 'H03', icon: '↘', label: 'H03 · 평균최저기온', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#3b82f6' },
-                { id: 104, indicatorCode: 'H04', icon: '☀', label: 'H04 · 폭염일수', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#dc2626' },
-                { id: 105, indicatorCode: 'H05', icon: '🌙', label: 'H05 · 열대야일수', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#be123c' },
-                { id: 106, indicatorCode: 'H06', icon: '↗', label: 'H06 · 온난일 계속기간 WSDI', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#ea580c' },
-                { id: 107, indicatorCode: 'H07', icon: '🔺', label: 'H07 · 일최고기온 연최대 TXx', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#991b1b' },
-                { id: 108, indicatorCode: 'H08', icon: '📈', label: 'H08 · 온난일 TX90P', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#f97316' },
-                { id: 109, indicatorCode: 'H09', icon: '⏱', label: 'H09 · 최대 온난일 계속기간 WSDIx', description: 'SSP245 2050(2041~2050 평균) 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-AR6-region-100m', supportedGridUnits: ['100m'], color: '#c2410c' },
-                { id: 110, indicatorCode: 'H10', icon: '🛰', label: 'H10 · 여름철 지표면온도 P90', description: '2021~2025 Landsat 30m 원자료를 집계한 지역 100m 격자', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'Landsat-LST-100m', supportedGridUnits: ['100m'], color: '#b45309' },
-                { id: 111, indicatorCode: 'H11', icon: '☀', label: 'H11 · 추정 WBGT (시험)', description: '폭염 대표조건에서 계산한 100m 공간 비교용 WBGT', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'KMA-KMAP-ASOS-building-DEM-100m', supportedGridUnits: ['100m'], color: '#be123c' },
-                { id: 3, iconPath: asset('/indicator-icons/보행자.png'), label: '유동인구 노출량', description: 'Pop_Grid_100m Day_Total을 EPSG:5179 표준 100m 격자에 연결한 유동인구 노출량', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'population-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/population/E_population_floating_count_100m.json', value: 0.01259, color: '#db9d3e' },
-                { id: 4, floodIndicator: 'FE01', icon: '♟', label: '상주인구 노출량', description: '2024 전국 총인구 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], color: '#d4af42' },
-                { id: 5, iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 수', description: '국토정보플랫폼 2024년 10월 고령인구 수를 공통 EPSG:5179 100m 셀에 연결', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', populationIndicator: 'elderly', value: 0.06127, color: '#e45662' },
-                { id: 6, iconPath: asset('/indicator-icons/유소년인구비율.png'), label: '유아인구 수', description: '국토정보플랫폼 2024년 10월 유아인구 수를 공통 EPSG:5179 100m 셀에 연결', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', populationIndicator: 'infant', value: 0.02439, color: '#d96b72' },
-                { id: 7, iconPath: asset('/indicator-icons/1인가구.png'), label: '1인 가구', description: '행정동 1인가구 비율을 EPSG:5179 표준 100m 격자에 할당한 정규화 지표', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_sensitivity_single_household_ratio_100m_z.json', value: 0.50044, color: '#cf6576' },
-                { id: 8, iconPath: asset('/indicator-icons/기저질환자.png'), label: '건강 취약 참고', description: '2021-2023 순환기·호흡기 진료인원 기반 구 단위 건강취약 proxy', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_sensitivity_chronic_disease_ratio_proxy_100m_z.json', value: 0.50816, color: '#b86c82' },
-                { id: 9, iconPath: asset('/indicator-icons/저소득층.png'), label: '저소득층', description: '2026 기초생활보장 수급자 현황 기반 행정동 저소득층 비율 proxy', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_adaptive_low_income_ratio_proxy_100m_z.json', value: 0.26613, color: '#a56d83' },
-                { id: 10, iconPath: asset('/indicator-icons/노후주택비율.png'), label: '30년 이상 건축물 비율', description: '전국 GIS 건물통합정보 사용승인일 확인 건축물 기준 100m 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], analysisIndicator: 'building-old-30y-ratio', color: '#a77a72' },
-                { id: 11, iconPath: asset('/indicator-icons/무더위쉼터접근성.png'), label: '무더위쉼터 접근성', description: '379개 무더위쉼터 최근접 거리 기반 EPSG:5179 100m 접근성 점수', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'cooling-shelter-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/cooling-shelter/V_adaptive_cooling_shelter_accessibility_100m_z.json', value: 0.87419, color: '#3f9b80' },
-                { id: 12, iconPath: asset('/indicator-icons/녹지비율.png'), label: '녹지 비율', description: '세분류토지피복도 산림·초지·수역 기반 100m 녹지/자연자원 면적 비율', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'admin-physical-100m', supportedGridUnits: ['100m'], dataPath: '/analysis-data/admin-physical/V_adaptive_green_natural_ratio_100m_z.json', value: 0.38105, color: '#57a66c' },
-                { id: 13, iconPath: asset('/indicator-icons/그늘면적.png'), label: '그늘 면적', description: '그늘/수목 공간데이터 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'file', value: 0.51, color: '#61958b' },
-                { id: 14, icon: '🚏', label: '버스정류장 노출 proxy', description: '전국 버스정류장 100m 셀 밀도 · 실제 이용량이 아닌 정류장 위치 기반 노출 참고지표', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-bus-stop', color: '#ca8a04' },
-                { id: 15, icon: '🚇', label: '도시철도 결절점', description: '전국 도시철도 역사 851개를 100m 셀에 집계한 대중교통 결절점 노출 proxy', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-rail-station', color: '#a16207' },
-                { id: 16, icon: '⌂', label: '주거용 건축물 밀도', description: '전국 GIS 건물통합정보의 주거용 건축물 수를 100m 셀에 집계', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], analysisIndicator: 'building-residential-count', color: '#b7791f' },
-                { id: 17, icon: '▰', label: '횡단보도 노출 proxy', description: '전국횡단보도 표준자료의 100m 셀 밀도 · 부산·대구·세종 보완 필요', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-crosswalk', color: '#d97706' },
-                { id: 18, icon: '⇄', label: '대중교통 접근성 proxy', description: '전국 버스정류장 100m 셀 밀도를 쉼터·공공시설 이동 접근성 참고지표로 사용 · 실제 이동시간은 아님', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], analysisIndicator: 'facility-bus-stop', color: '#358b78' }
-            ],
-            candidates: [
-                { name: '후보지 03', area: '팔달구 인계동', risk: 0.82, h: 0.76, e: 0.91, v: 0.81, rank: 1, reason: '고령층·유동인구 집중, 쉼터 접근성 부족' },
-                { name: '후보지 07', area: '권선구 세류동', risk: 0.78, h: 0.83, e: 0.74, v: 0.76, rank: 2, reason: '높은 지표면 온도와 녹지 면적 부족' },
-                { name: '후보지 11', area: '장안구 영화동', risk: 0.73, h: 0.69, e: 0.77, v: 0.79, rank: 3, reason: '1인 가구 비율과 노후주택 밀집' }
-            ]
-        },
-        flood: {
-            label: '홍수',
-            projectSuffix: '홍수 위험지역 분석',
-            heroEmphasis: '우선 대응 침수권역을 찾습니다.',
-            heroDescription: '침수위험(H), 노출(E), 취약성(V) 지표를 구성하고 배수·저류·대피 대안을 공간적으로 비교하세요.',
-            sampleNotice: '전국 침수위험·강우·DEM·인구·건축물·교통시설 100m PostGIS 격자를 연결했습니다.',
-            mapSource: '전국 홍수 H/E/V PostGIS 100m 서비스 격자',
-            rasterPath: null,
-            dataSummaryPath: null,
-            rasterReadyPrefix: '선택 행정구역 홍수 100m 격자',
-            rasterError: '선택 행정구역 홍수 격자 연결 실패',
-            actionTitle: '배수개선·저류공간·대피동선 우선 정비',
-            brief: {
-                driverTitle: '반지하·저지대 주거',
-                driverText: '침수흔적 중첩 비율',
-                driverValue: '높음',
-                gapTitle: '배수·저류 인프라',
-                gapText: '우수시설 보강 필요 권역',
-                gapValue: '우선'
-            },
-            commonDataItems: [
-                { label: '침수구역', source: '침수흔적도·하천범람·저지대' },
-                { label: '강우/배수', source: '강우강도·우수관로·빗물받이' },
-                { label: '취약시설', source: '반지하·노후건축물·취약시설' },
-                { label: '관련 현황 데이터', source: '인구·도로·대피시설·표준격자' }
-            ],
-            alternatives: [
-                { name: '대안 1', status: '검토중', description: '상습 침수구역과 저지대 중심 우선 관리안' },
-                { name: '대안 2', status: '검토중', description: '하천·우수관로 연결축 중심 배수 개선안' },
-                { name: '대안 3', status: '검토중', description: '반지하·취약시설 보호 중심 대응안' }
-            ],
-            indicators: [
-                { id: 201, floodIndicator: 'FH01', icon: '≈', label: 'H01 · 도시침수 30년', description: '도시침수 30년 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#2563eb' },
-                { id: 209, floodIndicator: 'UF50', icon: '≈', label: '도시침수 50년', description: '50년 빈도 도시침수지도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#1e40af' },
-                { id: 210, floodIndicator: 'UF80', icon: '≈', label: '도시침수 80년', description: '80년 빈도 도시침수지도 5m 원자료 · 전국 묶음 중 2개 지역 원본 누락', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#3730a3' },
-                { id: 219, floodIndicator: 'UF100', icon: '≈', label: '도시침수 100년', description: '100년 빈도 도시침수지도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#312e81' },
-                { id: 202, floodIndicator: 'FH02', icon: '≋', label: 'H02 · 국가하천 100년', description: '국가하천 범람 100년 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#1d4ed8' },
-                { id: 203, floodIndicator: 'FH03', icon: '≋', label: 'H03 · 지방하천 50년', description: '지방하천 범람 50년 위험도 5m 원자료를 전국 100m 셀로 정렬한 침수심', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#0369a1' },
-                { id: 204, analysisIndicator: 'rain-max-1h', icon: '☔', label: '1시간 최대강우량', description: '2016~2025년 4~10월 ASOS 관측 극값을 최근접 관측소 기준으로 연결', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-KMA-100m', supportedGridUnits: ['100m'], color: '#0284c7' },
-                { id: 205, analysisIndicator: 'terrain-low-elevation', icon: '▾', label: '저지대 지형', description: '전국 DEM 100m 표고 · 대상지 내 낮은 표고일수록 위험 점수 증가', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#0891b2' },
-                { id: 206, analysisIndicator: 'terrain-twi', icon: '◒', label: '지형습윤지수 TWI', description: '전국 DEM 기반 100m 지형습윤지수', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#0e7490' },
-                { id: 207, analysisIndicator: 'terrain-flow-accumulation', icon: '⇣', label: '유로 누적량', description: '전국 DEM 기반 100m 유로 누적량', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#155e75' },
-                { id: 208, analysisIndicator: 'terrain-depression-depth', icon: '⌄', label: '지형 함몰 깊이', description: '전국 DEM 기반 100m 함몰 깊이', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-terrain-100m', supportedGridUnits: ['100m'], color: '#164e63' },
-                { id: 211, floodIndicator: 'FE01', icon: '♟', label: 'FE01 · 상주인구', description: '2024 전국 총인구 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#d4af42' },
-                { id: 212, floodIndicator: 'FE02', icon: '⌂', label: 'FE02 · 주택 수', description: '2024 전국 주택 EPSG:5179 100m 통계격자', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#c58b2a' },
-                { id: 213, floodIndicator: 'FE03', coveragePrefix: '4111', icon: '🚶', label: 'FE03 · 유동인구', description: '2021 수원시 일평균 유동인구 100m · 현재 수원시만 제공', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-flood-100m', supportedGridUnits: ['100m'], color: '#db9d3e' },
-                { id: 214, analysisIndicator: 'facility-bus-stop', icon: '🚏', label: '버스정류장 노출 proxy', description: '전국 정류장 위치의 100m 셀 밀도 · 실제 이용량은 아님', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#b7791f' },
-                { id: 215, analysisIndicator: 'facility-rail-station', icon: '🚇', label: '도시철도 결절점', description: '전국 도시철도 역사 851개의 100m 셀 밀도', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#a16207' },
-                { id: 216, analysisIndicator: 'facility-crosswalk', icon: '▰', label: '횡단보도 노출 proxy', description: '전국횡단보도 표준자료 100m 셀 밀도 · 부산·대구·세종 보완 필요', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#92400e' },
-                { id: 221, analysisIndicator: 'building-basement-count', icon: '⌂', label: '지하층 보유 건축물', description: '전국 GIS 건물통합정보의 지하층 보유 건축물 100m 셀 밀도', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], color: '#e45662' },
-                { id: 222, analysisIndicator: 'building-old-30y-ratio', icon: '🏚', label: '30년 이상 건축물 비율', description: '사용승인일 확인 건축물 중 30년 이상 건축물의 100m 셀 비율', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-building-100m', supportedGridUnits: ['100m'], color: '#cf6576' },
-                { id: 223, populationIndicator: 'elderly', iconPath: asset('/indicator-icons/고령인구비율.png'), label: '고령인구 수', description: '국토정보플랫폼 2024년 10월 전국 100m 고령인구', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', color: '#b86c82' },
-                { id: 224, populationIndicator: 'infant', iconPath: asset('/indicator-icons/유소년인구비율.png'), label: '유아인구 수', description: '국토정보플랫폼 2024년 10월 전국 100m 유아인구', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'available', sourceType: 'PostGIS-population-100m', supportedGridUnits: ['100m'], dataPath: '/population/grid', color: '#a56d83' },
-                { id: 225, icon: '🏫', label: '어린이집·복지시설', description: '어린이집은 주소만 적재되어 좌표 원자료 보완 후 연결 예정', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'source-address-only', supportedGridUnits: ['100m'], color: '#9333ea' },
-                { id: 231, analysisIndicator: 'facility-bus-stop', icon: '⇄', label: '대중교통 대피 접근성 proxy', description: '전국 버스정류장 100m 셀 밀도를 대피 이동 접근성 참고지표로 사용 · 실제 대피경로·운행정보는 아님', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'partial', sourceType: 'PostGIS-facility-100m', supportedGridUnits: ['100m'], color: '#358b78' },
-                { id: 234, analysisIndicator: 'facility-shelter', icon: '↗', label: '민방위 대피시설 접근성 proxy', description: '행정안전부 전국 현행 원본의 사용 중 시설 17,228개 실제 위치를 표시하고 400m 커널밀도를 계산 · 값이 높을수록 대피시설 접근성·적응역량이 높음', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: true, dataStatus: 'available', sourceType: 'PostGIS-shelter-points-KDE-400m', supportedGridUnits: ['100m'], color: '#0f766e' },
-                { id: 232, icon: '◉', label: '빗물받이 밀도', description: '전국 빗물받이 원자료 보완 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'source-required', color: '#3f9b80' },
-                { id: 233, icon: '▤', label: '배수펌프장 접근성', description: '전국 배수펌프장·저류시설 원자료 보완 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'source-required', color: '#57a66c' }
-            ],
-            candidates: [
-                { name: '후보지 02', area: '저지대 주거밀집지', risk: 0.84, h: 0.88, e: 0.79, v: 0.82, rank: 1, reason: '침수흔적과 반지하 주거가 중첩된 구역' },
-                { name: '후보지 05', area: '하천변 상업·주거 혼재지', risk: 0.79, h: 0.81, e: 0.83, v: 0.73, rank: 2, reason: '하천 범람 영향권과 유동인구 집중' },
-                { name: '후보지 09', area: '노후 배수시설 영향권', risk: 0.74, h: 0.75, e: 0.72, v: 0.78, rank: 3, reason: '배수시설 부족과 노후 건축물 밀집' }
-            ]
-        },
-        ecosystem: {
-            label: '생태계',
-            projectSuffix: '생태계 위험지역 분석',
-            heroEmphasis: '생태 취약 우선 복원지를 찾습니다.',
-            heroDescription: '기후위험(H), 노출(E), 취약성(V) 지표를 구성하고 녹지·서식지·생태축 대안을 공간적으로 비교하세요.',
-            sampleNotice: '현재 생태계 분석 데이터는 연결 전이며, 폭염·홍수와 같은 구조로 확장 준비 중입니다.',
-            mapSource: '생태축·토지피복·서식지 데이터 연결 준비',
-            rasterPath: null,
-            dataSummaryPath: null,
-            rasterReadyPrefix: '생태계 위험 래스터',
-            rasterError: '생태계 위험 래스터 연결 전 · 예시 격자 표시',
-            actionTitle: '생태축 복원·녹지 연결·서식지 보호 우선 정비',
-            brief: {
-                driverTitle: '생태 민감지역',
-                driverText: '훼손·단절 영향',
-                driverValue: '검토 필요',
-                gapTitle: '녹지 연결성',
-                gapText: '복원 후보지 자료',
-                gapValue: '연결 전'
-            },
-            commonDataItems: [
-                { label: '생태축', source: '광역/도시 생태축 및 단절 지점' },
-                { label: '토지피복', source: '세분류 토지피복·불투수면·녹지율' },
-                { label: '서식지', source: '보호종·습지·하천변 생태 민감도' },
-                { label: '관련 현황 데이터', source: '개발압력·인구·공원녹지·표준격자' }
-            ],
-            alternatives: [
-                { name: '대안 1', status: '검토중', description: '생태축 단절구간 중심 복원안' },
-                { name: '대안 2', status: '검토중', description: '도시녹지와 하천변 연결성 강화안' },
-                { name: '대안 3', status: '검토중', description: '서식지 민감지역 보호 중심 대응안' }
-            ],
-            indicators: [
-                { id: 1, icon: '◇', label: '생태축 단절도', description: '생태축 단절·훼손 구간 데이터 연결 필요', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'ecosystem-grid', value: 0.5, color: '#2f9e44' },
-                { id: 2, icon: '☀', label: '건조·열 스트레스', description: '고온·건조 스트레스 지표 연결 필요', dimension: 'H', group: '기후위험', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'climate-grid', value: 0.5, color: '#d97706' },
-                { id: 3, icon: '▦', label: '개발압력 노출', description: '개발사업·토지이용 변화 압력 자료 연결 필요', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'landuse-grid', value: 0.5, color: '#a16207' },
-                { id: 4, icon: '♟', label: '이용인구 노출', description: '공원·하천변 이용 인구 자료 연결 필요', dimension: 'E', group: '노출', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'population-grid', value: 0.5, color: '#ca8a04' },
-                { id: 5, icon: '🌿', label: '녹지 파편화', description: '녹지 패치 크기·연결성 지표 연결 필요', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'green-grid', value: 0.5, color: '#16a34a' },
-                { id: 6, icon: '≋', label: '수변 민감도', description: '습지·하천변 생태 민감도 자료 연결 필요', dimension: 'V', group: '민감도', weight: 1, direction: 'positive', enabled: false, dataStatus: 'missing', sourceType: 'habitat-grid', value: 0.5, color: '#0891b2' },
-                { id: 7, icon: '◉', label: '보호지역 접근성', description: '보호지역·공원녹지 관리 영향권 연결 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'adaptive-grid', value: 0.5, color: '#15803d' },
-                { id: 8, icon: '↗', label: '복원 가능지', description: '유휴지·공공부지·연결녹지 후보 자료 연결 필요', dimension: 'V', group: '적응역량', weight: 1, direction: 'negative', enabled: false, dataStatus: 'missing', sourceType: 'adaptive-grid', value: 0.5, color: '#65a30d' }
-            ],
-            candidates: []
-        }
-    };
+    const hazardConfigs = createSectorConfigs(asset);
 
     const config = hazardConfigs[hazard] || hazardConfigs.heatwave;
     function configureIndicatorsForRegion(sourceIndicators, code, datasetMode = hazardDatasetMode) {
-        const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09', 'H10', 'H11']);
-        return sourceIndicators.map((item) => {
-            if (item.indicatorCode) {
-                const observed = datasetMode === 'observed';
-                const availableForDataset = observed
-                    ? observedCodes.has(item.indicatorCode)
-                    : !['H10', 'H11'].includes(item.indicatorCode);
-                const available = Boolean(code) && availableForDataset;
-                const dataQuery = new URLSearchParams({
-                    regionCode: code,
-                    mode: observed ? 'observed' : 'future',
-                    indicator: item.indicatorCode,
-                    scenario: hazardScenario,
-                    period: hazardFuturePeriod
-                });
-                return {
-                    ...item,
-                    description: observed
-                        ? item.indicatorCode === 'H11'
-                            ? '전국 시험 자료 · ASOS 폭염 대표조건·KMAP 100m 일사량·NGII DEM·건물 높이와 그림자를 결합한 09·12·15시 최대 추정 WBGT. 수목·건물 주변 국지풍·상세 장파복사는 미반영. 실제 관측값이나 5년 평균 WBGT는 아님.'
-                            : item.indicatorCode === 'H01'
-                            ? '2021~2025 평균 · 500m 원자료를 정렬한 지역 100m 분석격자'
-                            : item.indicatorCode === 'H10'
-                                ? '2021~2025 여름철 P90 평균 · Landsat 30m를 집계한 지역 100m 격자'
-                                : observedCodes.has(item.indicatorCode)
-                                    ? '2021~2025 ASOS 95개소 지표를 IDW 공간화한 지역 100m 분석격자'
-                                    : '1991~2020 기준자료 수집 후 100m 공간모델 구축 예정'
-                        : ['H10', 'H11'].includes(item.indicatorCode)
-                            ? 'SSP 기반 직접 미래 전망자료 없음'
-                            : `${hazardScenario.toUpperCase()} ${hazardFuturePeriod} 지역 100m 분석격자`,
-                    sourceType: observed
-                        ? item.indicatorCode === 'H11'
-                            ? 'KMA-KMAP-ASOS-building-DEM-100m'
-                            : item.indicatorCode === 'H10'
-                            ? 'Landsat-LST-100m'
-                            : item.indicatorCode === 'H01'
-                                ? 'KMA-observed-100m'
-                                : 'KMA-ASOS-IDW-100m'
-                        : 'KMA-AR6-region-100m',
-                    dataPath: available ? `/hazard-grid?${dataQuery.toString()}` : null,
-                    dataStatus: available ? 'available' : 'missing',
-                    enabled: available && item.indicatorCode === (observed ? 'H01' : 'H04')
-                };
-            }
-            const covered = Boolean(code) && (!item.coveragePrefix || code.startsWith(item.coveragePrefix));
-            if (item.floodIndicator) {
-                const dataQuery = new URLSearchParams({ regionCode: code, indicator: item.floodIndicator });
-                return {
-                    ...item,
-                    dataPath: covered ? `/flood-grid?${dataQuery.toString()}` : null,
-                    dataStatus: covered ? (item.dataStatus || 'available') : 'missing',
-                    enabled: covered && item.enabled
-                };
-            }
-            if (item.analysisIndicator) {
-                const dataQuery = new URLSearchParams({ regionCode: code, indicator: item.analysisIndicator });
-                return {
-                    ...item,
-                    dataPath: covered ? `/analysis-grid?${dataQuery.toString()}` : null,
-                    dataStatus: covered ? (item.dataStatus || 'available') : 'missing',
-                    enabled: covered && item.enabled
-                };
-            }
-            if (item.populationIndicator) {
-                return { ...item, dataStatus: 'available' };
-            }
-            if (item.dataStatus === 'missing') return item;
-            if (!code.startsWith('4111')) {
-                return { ...item, enabled: false, dataStatus: 'missing' };
-            }
-            return { ...item };
-        });
+        return configureRegisteredIndicators(sourceIndicators, code, { datasetMode, scenario: hazardScenario, period: hazardFuturePeriod });
     }
 
     function isGridValueCollection(values) {
@@ -1146,11 +902,7 @@
             }
 
             try {
-                const dataUrl = item.populationIndicator
-                    ? `/population/grid?regionCode=${encodeURIComponent(regionCode)}&indicator=${encodeURIComponent(item.populationIndicator)}`
-                    : ['/hazard-grid', '/flood-grid', '/analysis-grid'].some((prefix) => item.dataPath.startsWith(prefix))
-                        ? item.dataPath
-                        : asset(item.dataPath);
+                const dataUrl = indicatorRequestUrl(item, { regionCode, asset });
                 const response = await fetch(dataUrl, { signal: AbortSignal.timeout(120000) });
                 if (!response.ok) throw new Error(`자료 요청 실패 (HTTP ${response.status})`);
                 const grid = await response.json();

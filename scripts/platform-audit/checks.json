@@ -43,6 +43,12 @@
   ],
   "browser": [
     {
+      "id": "registry-driven-ui-compatibility",
+      "environment": "local exact flood baseline, heatwave and existing ecosystem route",
+      "writes": false,
+      "criteria": "지표 레지스트리 전환 후 기존 화면 디자인·지표 순서·기본 선택·가중치·숫자 ID 유지. 홍수/폭염의 지역·관측/미래 조건 전환과 기존 저장본 읽기 확인. 공통 표시 설정 3개 토글이 독립 동작. 생태계 미연결 항목은 미연결 유지하며 임의 자료로 분석하지 않음. npm run test:priority-registry로 등록 참조 및 변경 전 설정·요청 주소 일치 검증. 화면 미검증은 NOT_RUN으로 별도 보고."
+    },
+    {
       "id": "administrative-boundary-toggle",
       "environment": "local flood baseline and heatwave, regionCode=41110",
       "writes": false,
