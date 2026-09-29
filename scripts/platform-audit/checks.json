@@ -43,6 +43,12 @@
   ],
   "browser": [
     {
+      "id": "ecosystem-empty-indicators",
+      "environment": "local ecosystem route; shared flood baseline preserved",
+      "writes": false,
+      "criteria": "생태계 새 대안은 공통 지도·표시 설정·기후위험/노출/민감도/적응역량 틀을 유지하며 기본 지표 목록은 비어 있다. 임시 8개 지표를 노출하지 않고 입력 없는 Risk 결과를 만들지 않는다. 기존 저장본은 삭제하지 않는다."
+    },
+    {
       "id": "server-risk-calculation",
       "environment": "local flood baseline and heatwave (including H11); external after separate deployment",
       "writes": false,

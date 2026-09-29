@@ -600,55 +600,6 @@ export const SECTOR_PROFILES = {
       }
     ],
     "candidates": [],
-    "indicators": [
-      {
-        "indicatorId": "ecosystem.pending-1",
-        "id": 1,
-        "enabled": false,
-        "weight": 1
-      },
-      {
-        "indicatorId": "ecosystem.pending-2",
-        "id": 2,
-        "enabled": false,
-        "weight": 1
-      },
-      {
-        "indicatorId": "ecosystem.pending-3",
-        "id": 3,
-        "enabled": false,
-        "weight": 1
-      },
-      {
-        "indicatorId": "ecosystem.pending-4",
-        "id": 4,
-        "enabled": false,
-        "weight": 1
-      },
-      {
-        "indicatorId": "ecosystem.pending-5",
-        "id": 5,
-        "enabled": false,
-        "weight": 1
-      },
-      {
-        "indicatorId": "ecosystem.pending-6",
-        "id": 6,
-        "enabled": false,
-        "weight": 1
-      },
-      {
-        "indicatorId": "ecosystem.pending-7",
-        "id": 7,
-        "enabled": false,
-        "weight": 1
-      },
-      {
-        "indicatorId": "ecosystem.pending-8",
-        "id": 8,
-        "enabled": false,
-        "weight": 1
-      }
-    ]
+    "indicators": []
   }
 };

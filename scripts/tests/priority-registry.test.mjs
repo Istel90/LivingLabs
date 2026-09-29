@@ -12,6 +12,8 @@ import { MAP_DISPLAY_CONTROLS, validateDisplayControls } from '../../riskmap-cor
 import { resolveIndicatorRequest } from '../../riskmap-core-main/scripts/indicator-index.mjs';
 
 const baseline = JSON.parse(readFileSync(new URL('./fixtures/priority-configs-before-registry.json', import.meta.url)));
+// User requested an empty ecosystem list while retaining the shared UI.
+baseline.ecosystem.indicators = [];
 const legacySource = execFileSync('git', ['show', '79338ed:riskmap-core-main/src/lib/tools/PriorityManagementArea.svelte'], { encoding: 'utf8' });
 const legacyFunction = legacySource.slice(legacySource.indexOf('    function configureIndicatorsForRegion('), legacySource.indexOf('    function isGridValueCollection('));
 const plain = value => JSON.parse(JSON.stringify(value, (key, entry) => ['registryId', 'dataSourceId'].includes(key) ? undefined : entry));
@@ -81,7 +83,7 @@ test('bad references and duplicate saved IDs are rejected before rendering', () 
 });
 
 test('ecosystem remains unavailable until real connections are registered', () => {
-    assert.equal(createSectorConfigs().ecosystem.indicators.every(i => i.dataStatus === 'missing' && !i.enabled && !i.dataSourceId), true);
+    assert.deepEqual(createSectorConfigs().ecosystem.indicators, []);
 });
 
 test('display controls require registered behavior and preserve order', () => {
