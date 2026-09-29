@@ -20,9 +20,9 @@ test('all sector labels, defaults, legacy IDs, order and metadata match checkpoi
     assert.deepEqual(plain(createSectorConfigs()), baseline);
 });
 
-test('main screen markup and styles remain exactly as checkpoint', () => {
+test('main screen markup preserves checkpoint layout with requested sector back-link wording', () => {
     const current = readFileSync(new URL('../../riskmap-core-main/src/lib/tools/PriorityManagementArea.svelte', import.meta.url), 'utf8');
-    assert.equal(current.split('</script>')[1].replaceAll('\r\n', '\n'), legacySource.split('</script>')[1].replaceAll('\r\n', '\n'));
+    assert.equal(current.split('</script>')[1].replaceAll('\r\n', '\n'), legacySource.split('</script>')[1].replaceAll('\r\n', '\n').replace('지역·재해 선택으로 돌아가기', '부문선택으로 돌아가기'));
 });
 
 test('regional, temporal and saved-draft configurations match previous behavior', () => {

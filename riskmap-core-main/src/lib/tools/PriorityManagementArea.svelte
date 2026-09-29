@@ -4,6 +4,7 @@
     import proj4 from 'proj4';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
     import { createSectorConfigs, INDICATOR_GROUPS } from '$lib/priority/registry.js';
+    import { requestRiskAnalysis } from '$lib/priority/riskClient.js';
     import { configureRegisteredIndicators, indicatorRequestUrl } from '$lib/priority/indicatorData.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
     import AlternativeOverlap from './AlternativeOverlap.svelte';
@@ -42,7 +43,6 @@
     const hazardScenarios = ['ssp126', 'ssp245', 'ssp370', 'ssp585'];
     const hazardFuturePeriods = ['2026', '2027', '2028', '2029', '2030', '2040', '2050', '2060', '2070', '2080', '2090', '2100'];
     const requiredGroups = INDICATOR_GROUPS.map(group => group.label);
-    const vLambda = 0.5;
     const asset = (path) => `${base}${path}`;
     const DEPARTMENT_HANDOFF_KEY = 'livinglabs.priorityManagementHandoff';
     const priorityHandoffInboxUrl = import.meta.env.VITE_PRIORITY_HANDOFF_INBOX_URL || '/priority-handoff';
@@ -784,16 +784,6 @@
         indicators = cloneIndicatorsForAlternative(alternative.settings?.indicators || config.indicators)
             .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
         analysisResult = alternative.analysisResult || null;
-        // Compact server drafts omit derived H/E/V arrays. Rebuild them from
-        // preserved input grids using the saved alternative's weights.
-        if (analysisResult?.gridResult && !analysisResult.gridResult.vValues && analysisResult.indicators?.length) {
-            try {
-                const rebuilt = computeGridAnalysis(analysisResult.indicators);
-                if (rebuilt) analysisResult = { ...analysisResult, ...rebuilt };
-            } catch (error) {
-                console.warn('저장된 구성요소 격자 복원 실패', error);
-            }
-        }
         appliedIndicators = (alternative.appliedIndicators || []).map((item) => ({ ...item }));
         analysisDone = Boolean(alternative.analysisDone && analysisResult);
         analysisMessage = alternative.analysisMessage || '설정값을 확인한 뒤 Risk 분석을 실행하세요.';
@@ -810,6 +800,32 @@
         mapResetKey += 1;
         activeLayer = alternative.activeLayer || 'Risk';
         activeStep = analysisDone ? 4 : Math.min(activeStep, 2);
+        if (analysisResult?.gridResult && !analysisResult.gridResult.vValues && analysisResult.indicators?.length) {
+            void restoreAlternativeComponents(index, analysisRunId, analysisResult);
+        }
+    }
+
+    async function restoreAlternativeComponents(index, runId, savedResult) {
+        running = true;
+        const previousMessage = analysisMessage;
+        analysisMessage = '저장된 H/E/V 레이어를 서버에서 복원하고 있습니다.';
+        try {
+            const rebuilt = await requestRiskAnalysis(savedResult.indicators.filter(usableIndicator), {
+                gridUnit, dimensionWeights: { ...dimensionWeights }, nationalLab
+            });
+            if (runId !== analysisRunId || index !== activeAlternative) return;
+            // Keep saved Risk, parcel candidates, and all saved statistics unchanged.
+            const { hValues, eValues, sensitivityValues, adaptiveCapacityValues, vValues } = rebuilt.gridResult;
+            analysisResult = { ...savedResult, gridResult: { ...savedResult.gridResult,
+                hValues, eValues, sensitivityValues, adaptiveCapacityValues, vValues } };
+            alternatives = alternatives.map((item, i) => i === index ? { ...item, analysisResult } : item);
+            analysisMessage = previousMessage;
+        } catch (error) {
+            if (runId !== analysisRunId || index !== activeAlternative) return;
+            analysisMessage = `저장된 Risk는 유지했지만 H/E/V 레이어를 복원하지 못했습니다. ${error.message}`;
+        } finally {
+            if (runId === analysisRunId && index === activeAlternative) running = false;
+        }
     }
 
     function switchAlternative(index) {
@@ -1037,22 +1053,7 @@
         return items.reduce((sum, item) => sum + Math.max(0, Number(item.weight) || 0) * valueGetter(item), 0) / totalWeight;
     }
 
-    function weightedGeometricMean(scores, weights) {
-        const safeWeights = {
-            H: Math.max(0, Number(weights.H) || 0),
-            E: Math.max(0, Number(weights.E) || 0),
-            V: Math.max(0, Number(weights.V) || 0)
-        };
-        const totalWeight = safeWeights.H + safeWeights.E + safeWeights.V;
-        if (totalWeight <= 0) return 0;
 
-        return Math.pow(
-            Math.pow(Math.max(scores.H, 0.0001), safeWeights.H) *
-            Math.pow(Math.max(scores.E, 0.0001), safeWeights.E) *
-            Math.pow(Math.max(scores.V, 0.0001), safeWeights.V),
-            1 / totalWeight
-        );
-    }
 
     function finiteGridValue(value) {
         if (value === null || value === undefined || value === '') return null;
@@ -1065,59 +1066,9 @@
         return finiteGridValue(item.gridValues instanceof Map ? item.gridValues.get(index) : item.gridValues[index]);
     }
 
-    function weightedCellMean(items, index, valueGetter = gridValue) {
-        let weightedSum = 0;
-        let totalWeight = 0;
 
-        items.forEach((item) => {
-            const weight = Math.max(0, Number(item.weight) || 0);
-            if (weight <= 0) return;
 
-            const value = valueGetter(item, index);
-            if (value === null) return;
 
-            weightedSum += weight * value;
-            totalWeight += weight;
-        });
-
-        return totalWeight > 0 ? weightedSum / totalWeight : null;
-    }
-
-    function summarizeGridValues(values) {
-        const validValues = [];
-        let min = Infinity;
-        let max = -Infinity;
-        let sum = 0;
-        for (const value of values) {
-            if (!Number.isFinite(value)) continue;
-            validValues.push(value);
-            min = Math.min(min, value);
-            max = Math.max(max, value);
-            sum += value;
-        }
-        if (!validValues.length) {
-            return {
-                validCells: 0,
-                min: null,
-                max: null,
-                mean: null,
-                topCount: 0,
-                topThreshold: null
-            };
-        }
-
-        const sorted = [...validValues].sort((left, right) => right - left);
-        const topCount = Math.max(1, Math.ceil(sorted.length * 0.1));
-
-        return {
-            validCells: validValues.length,
-            min,
-            max,
-            mean: sum / validValues.length,
-            topCount,
-            topThreshold: sorted[topCount - 1]
-        };
-    }
 
     function stripIndicatorForResult(item) {
         const { gridValues, ...resultItem } = item;
@@ -1127,145 +1078,7 @@
         };
     }
 
-    function computeGridAnalysis(sourceIndicators) {
-        const availableIndicators = sourceIndicators.filter(usableIndicator);
-        const reference = availableIndicators.find((item) =>
-            isGridValueCollection(item.gridValues) &&
-            gridValueCollectionSize(item.gridValues) &&
-            item.gridMeta?.columns &&
-            item.gridMeta?.rows
-        );
 
-        if (!reference) return null;
-
-        const columns = Number(reference.gridMeta.columns);
-        const rows = Number(reference.gridMeta.rows);
-        const cellCount = columns * rows;
-        const gridIndicators = availableIndicators.filter((item) =>
-            isGridValueCollection(item.gridValues) &&
-            (item.gridValues instanceof Map || item.gridValues.length >= cellCount) &&
-            Number(item.gridMeta?.columns) === columns &&
-            Number(item.gridMeta?.rows) === rows
-        );
-        const sameCoordinates = (item) => ['originX', 'originY', 'pixelWidth', 'pixelHeight'].every((key) =>
-            Number.isFinite(Number(item.gridMeta?.transform?.[key])) &&
-            Math.abs(Number(item.gridMeta.transform[key]) - Number(reference.gridMeta.transform?.[key])) < 0.001
-        ) && item.gridMeta?.crs === reference.gridMeta.crs;
-        const misaligned = availableIndicators.filter((item) => !gridIndicators.includes(item) || !sameCoordinates(item));
-        if (misaligned.length) throw new Error(`공통 격자와 정렬되지 않은 지표: ${misaligned.map((item) => item.label).join(', ')}`);
-        const byGroup = (group) => gridIndicators.filter((item) => item.group === group);
-        const hItems = byGroup('기후위험');
-        const eItems = byGroup('노출');
-        const sensitivityItems = byGroup('민감도');
-        const adaptiveItems = byGroup('적응역량');
-
-        if (!hItems.length) return null;
-        const hazardOnly = nationalLab && (!eItems.length || !sensitivityItems.length || !adaptiveItems.length);
-        if (!hazardOnly && (!eItems.length || !sensitivityItems.length || !adaptiveItems.length)) return null;
-
-        const createEmptyValues = () => {
-            const values = new Float32Array(cellCount);
-            values.fill(Number.NaN);
-            return values;
-        };
-        const hValues = createEmptyValues();
-        const eValues = createEmptyValues();
-        const sensitivityValues = createEmptyValues();
-        const adaptiveCapacityValues = createEmptyValues();
-        const vValues = createEmptyValues();
-        const riskValues = createEmptyValues();
-        const canUseSparseIndices = gridIndicators.every((item) =>
-            Array.isArray(item.gridValidIndices) && item.gridValidIndices.length
-        );
-        const analysisIndices = canUseSparseIndices
-            ? [...new Set(gridIndicators.flatMap((item) => item.gridValidIndices))]
-            : Array.from({ length: cellCount }, (_, index) => index);
-        const riskValidIndices = [];
-
-        for (const index of analysisIndices) {
-            const hScore = weightedCellMean(hItems, index);
-            const eScore = weightedCellMean(eItems, index);
-            const sensitivityScore = weightedCellMean(sensitivityItems, index);
-            const adaptiveCapacityForV = weightedCellMean(
-                adaptiveItems,
-                index,
-                (item, cellIndex) => {
-                    const value = gridValue(item, cellIndex);
-                    if (value === null) return null;
-                    return item.direction === 'negative' ? 1 - value : value;
-                }
-            );
-
-            hValues[index] = hScore ?? Number.NaN;
-            eValues[index] = eScore ?? Number.NaN;
-            sensitivityValues[index] = sensitivityScore ?? Number.NaN;
-            adaptiveCapacityValues[index] = adaptiveCapacityForV ?? Number.NaN;
-
-            if (hazardOnly && Number.isFinite(hScore)) {
-                riskValues[index] = hScore;
-                riskValidIndices.push(index);
-            } else if (
-                Number.isFinite(hScore) &&
-                Number.isFinite(eScore) &&
-                Number.isFinite(sensitivityScore) &&
-                Number.isFinite(adaptiveCapacityForV)
-            ) {
-                const vScore = clamp01((vLambda * sensitivityScore) + ((1 - vLambda) * adaptiveCapacityForV));
-                const riskScore = weightedGeometricMean({ H: hScore, E: eScore, V: vScore }, dimensionWeights);
-                vValues[index] = vScore;
-                riskValues[index] = riskScore;
-                riskValidIndices.push(index);
-            }
-        }
-
-        const hStats = summarizeGridValues(hValues);
-        const eStats = summarizeGridValues(eValues);
-        const sensitivityStats = summarizeGridValues(sensitivityValues);
-        const adaptiveStats = summarizeGridValues(adaptiveCapacityValues);
-        const vStats = summarizeGridValues(vValues);
-        const riskStats = summarizeGridValues(riskValues);
-
-        if (!riskStats.validCells) return null;
-
-        return {
-            dimensionScores: {
-                H: hStats.mean,
-                E: eStats.mean,
-                V: vStats.mean
-            },
-            sensitivityScore: sensitivityStats.mean,
-            adaptiveCapacityForV: adaptiveStats.mean,
-            riskScore: riskStats.mean,
-            hazardOnly,
-            gridResult: {
-                hazardOnly,
-                gridUnit,
-                columns,
-                rows,
-                extent: reference.gridMeta.extent,
-                transform: reference.gridMeta.transform,
-                crs: reference.gridMeta.crs,
-                validIndices: riskValidIndices,
-                valueEncoding: hazardOnly
-                    ? 'row-major 100m cells; preliminary Risk equals normalized Hazard score'
-                    : 'row-major 100m cells aligned to the regional analysis grid',
-                values: riskValues,
-                hValues,
-                eValues,
-                sensitivityValues,
-                adaptiveCapacityValues,
-                vValues,
-                stats: {
-                    ...riskStats,
-                    hMean: hStats.mean,
-                    eMean: eStats.mean,
-                    sensitivityMean: sensitivityStats.mean,
-                    adaptiveCapacityMean: adaptiveStats.mean,
-                    vMean: vStats.mean
-                }
-            }
-        };
-    }
 
     function validateAnalysis() {
         const activeRequiredGroups = analysisRequiredGroups();
@@ -1289,29 +1102,7 @@
         return '';
     }
 
-    function computeAnalysis(sourceIndicators) {
-        const gridAnalysis = computeGridAnalysis(sourceIndicators);
 
-        if (gridAnalysis) {
-            return {
-                gridUnit,
-                formula: gridAnalysis.hazardOnly
-                    ? 'Preliminary Risk = normalized Hazard score (H-only until nationwide E/V is connected)'
-                    : 'Weighted geometric mean: (H^wH × E^wE × V^wV)^(1/Σw)',
-                hazardOnly: gridAnalysis.hazardOnly,
-                dimensionScores: gridAnalysis.dimensionScores,
-                sensitivityScore: gridAnalysis.sensitivityScore,
-                adaptiveCapacityForV: gridAnalysis.adaptiveCapacityForV,
-                dimensionWeights: { ...dimensionWeights },
-                riskScore: gridAnalysis.riskScore,
-                gridResult: gridAnalysis.gridResult,
-                parcelCandidates: [],
-                indicators: sourceIndicators.filter(usableIndicator).map(stripIndicatorForResult)
-            };
-        }
-
-        throw new Error('선택한 H/E/V 지표가 겹치는 유효 격자가 없습니다. 지표의 자료 범위와 결측 셀을 확인하세요.');
-    }
 
     function formatScore(value) {
         return Number.isFinite(value) ? value.toFixed(2) : '--';
@@ -1534,7 +1325,8 @@
                 return;
             }
 
-            const result = computeAnalysis(enrichedSnapshot);
+            const result = await requestRiskAnalysis(enrichedSnapshot.filter(usableIndicator), { gridUnit: runGridUnit, dimensionWeights: runDimensionWeights, nationalLab });
+            if (runId !== analysisRunId) return;
             const validCells = result.gridResult?.stats?.validCells;
             const riskModeLabel = result.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk';
             const usesDemoFallback = result.indicators.some((item) => item.demoFallback);
@@ -2582,7 +2374,7 @@
                     {/each}
                 </span>
             </div>
-            <a class="ghost-link" href={nationalLab ? portalToolsUrl : `${base}/priority-management-area?regionCode=${encodeURIComponent(regionCode)}`}>{nationalLab ? '지원도구 페이지로 돌아가기' : '지역·재해 선택으로 돌아가기'}<svg class="ghost-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5 4 8.5l4 4" /><path d="M4 8.5h9a5.5 5.5 0 0 1 0 11H6" /></svg></a>
+            <a class="ghost-link" href={nationalLab ? portalToolsUrl : `${base}/priority-management-area?regionCode=${encodeURIComponent(regionCode)}`}>{nationalLab ? '지원도구 페이지로 돌아가기' : '부문선택으로 돌아가기'}<svg class="ghost-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5 4 8.5l4 4" /><path d="M4 8.5h9a5.5 5.5 0 0 1 0 11H6" /></svg></a>
             <button class="ghost-button" onclick={downloadConfig}>설정 내보내기<svg class="ghost-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V7.5L14.5 3Z" /><path d="M14.5 3v3.5a1 1 0 0 0 1 1H19" /><path d="M12 17.5v-7M9.25 13.25 12 10.5l2.75 2.75" /></svg></button>
             <div class="request-manager">
                 <button type="button" class="request-manager-toggle ghost-button" class:open={requestListOpen} aria-expanded={requestListOpen} onclick={() => requestListOpen = !requestListOpen}>보낸 요청 <span class="request-manager-count">{sentRequestCount}</span><span class="request-manager-caret" aria-hidden="true">{requestListOpen ? '▴' : '▾'}</span></button>

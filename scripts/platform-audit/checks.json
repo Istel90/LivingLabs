@@ -43,6 +43,18 @@
   ],
   "browser": [
     {
+      "id": "server-risk-calculation",
+      "environment": "local flood baseline and heatwave (including H11); external after separate deployment",
+      "writes": false,
+      "criteria": "새 대안의 Risk 실행은 POST /risk-analysis 서버 계산을 사용한다. 이전 계산 대비 H/E/S/AC/V/Risk 셀별 값·결측·요약 일치, 홍수/폭염/WBGT 완료 및 Risk/Hotspot 지도 전환 확인. 실패 시 오류 표시하고 브라우저 계산으로 조용히 대체하지 않는다. 기존 저장 대안 쓰기 금지. 입력은 화면에서 조회한 정규화 격자이며 데이터 조회·지역 맞춤 처리의 완전한 서버 이전은 별도 과제."
+    },
+    {
+      "id": "sector-back-link-label",
+      "environment": "local flood baseline and heatwave",
+      "writes": false,
+      "criteria": "상단 공통 돌아가기 링크는 '부문선택으로 돌아가기'로 표시한다. 기존 지역 코드를 유지해 부문 선택 화면으로 이동하며 디자인은 유지한다."
+    },
+    {
       "id": "indexed-indicator-loading",
       "environment": "local 4173 flood baseline and heatwave; external only after separate backend deployment",
       "writes": false,

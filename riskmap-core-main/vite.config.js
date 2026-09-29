@@ -18,6 +18,7 @@ export default defineConfig({
             '/flood-grid': 'http://127.0.0.1:5176',
             '/analysis-grid': 'http://127.0.0.1:5176',
             '/indicator-grid': 'http://127.0.0.1:5176',
+            '/risk-analysis': 'http://127.0.0.1:5176',
             '/population': 'http://127.0.0.1:5176',
             '/cadastre': 'http://127.0.0.1:5176',
             '/vworld-data': 'http://127.0.0.1:5176'

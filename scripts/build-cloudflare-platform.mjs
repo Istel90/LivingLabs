@@ -28,6 +28,7 @@ writeFileSync(join(workspaceRoot, 'pages-dist', '_routes.json'), `${JSON.stringi
     '/flood-grid',
     '/analysis-grid',
     '/indicator-grid',
+    '/risk-analysis',
     '/indicator-availability',
   ],
   exclude: [],

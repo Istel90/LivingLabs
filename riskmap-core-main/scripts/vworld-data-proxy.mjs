@@ -10,6 +10,7 @@ import proj4 from 'proj4';
 import pg from 'pg';
 import { buildNationalHazardGrid } from './hazard-grid-service.mjs';
 import { resolveIndicatorRequest } from './indicator-index.mjs';
+import { handleRiskRequest } from './risk-service.mjs';
 
 const { Pool } = pg;
 
@@ -1411,6 +1412,10 @@ const server = createServer(async (request, response) => {
 
   const url = new URL(request.url || '/', `http://127.0.0.1:${port}`);
   let routePath = url.pathname.startsWith('/api/') ? url.pathname.slice('/api'.length) : url.pathname;
+  if (routePath === '/risk-analysis') {
+    await handleRiskRequest(request, response, send);
+    return;
+  }
   if (routePath === '/indicator-grid') {
     if (request.method !== 'GET') {
       send(response, 405, JSON.stringify({ error: 'GET required' }));
