@@ -5,7 +5,7 @@ const API_PATHS = [
   /^\/cadastre\/(?:health|parcel|bbox)$/,
   /^\/population\/(?:health|grid)$/,
   /^\/internal-tools\/population\/(?:health|grid)$/,
-  /^\/(?:hazard-grid|flood-grid|analysis-grid|indicator-availability)$/,
+  /^\/(?:hazard-grid|flood-grid|analysis-grid|indicator-grid|indicator-availability)$/,
 ];
 
 function isApiPath(pathname) {

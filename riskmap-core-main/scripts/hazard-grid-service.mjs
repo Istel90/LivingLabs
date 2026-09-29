@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { resolveIndexedRaster } from './raster-index.mjs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import GeoTIFF from 'geotiff';
@@ -162,8 +163,10 @@ function rasterizePolygon(mask, polygon, originX, originY, columns, rows) {
 }
 
 async function openRaster(filePath) {
-  if (!rasterCache.has(filePath)) {
-    rasterCache.set(filePath, (async () => {
+  const file = statSync(filePath);
+  const rasterKey = `${filePath}:${file.size}:${file.mtimeMs}`;
+  if (!rasterCache.has(rasterKey)) {
+    rasterCache.set(rasterKey, (async () => {
       const tiff = await GeoTIFF.fromFile(filePath);
       const image = await tiff.getImage();
       const [originX, originY] = image.getOrigin();
@@ -181,7 +184,7 @@ async function openRaster(filePath) {
       };
     })());
   }
-  return rasterCache.get(filePath);
+  return rasterCache.get(rasterKey);
 }
 
 function createRegionContext(regionCode, raster, gridMeta = null) {
@@ -249,7 +252,7 @@ function sourceFileFor(mode, indicatorCode, scenario, period, regionCode) {
   }
   const filePath = resolve(hazardRoot, relativePath);
   if (!existsSync(filePath)) throw new Error(`전국 원본 GeoTIFF를 찾지 못했습니다: ${relativePath}`);
-  return filePath;
+  return resolveIndexedRaster(hazardRoot, relativePath);
 }
 
 function readMetadata(filePath) {
@@ -265,14 +268,6 @@ export async function buildNationalHazardGrid(searchParams, { gridMeta = null } 
   const scenario = String(searchParams.get('scenario') || 'ssp245').toLowerCase();
   const period = String(searchParams.get('period') || '2050');
   const targetKey = gridMeta ? `${gridMeta.transform?.originX},${gridMeta.transform?.originY},${gridMeta.columns},${gridMeta.rows}` : 'boundary';
-  const cacheKey = `${regionCode}:${mode}:${scenario}:${period}:${indicatorCode}:${targetKey}`;
-  const cached = gridCache.get(cacheKey);
-  if (cached) {
-    gridCache.delete(cacheKey);
-    gridCache.set(cacheKey, cached);
-    return cached;
-  }
-
   if (!/^\d{5}$/.test(regionCode)) throw new Error('올바른 5자리 행정구역 코드가 필요합니다.');
   if (!indicators[indicatorCode]) throw new Error(`지원하지 않는 지표입니다: ${indicatorCode}`);
   if (indicatorCode === 'H11' && mode === 'future') throw new Error('H11 WBGT 미래 자료는 아직 없습니다.');
@@ -280,6 +275,16 @@ export async function buildNationalHazardGrid(searchParams, { gridMeta = null } 
   if (mode === 'future' && !futurePeriods.has(period)) throw new Error(`지원하지 않는 미래 기간입니다: ${period}`);
 
   const filePath = sourceFileFor(mode, indicatorCode, scenario, period, regionCode);
+  const fileStat = statSync(filePath);
+  const metadataStat = statSync(filePath.replace(/\.tif$/i, '.metadata.json'));
+  const cacheKey = `${regionCode}:${mode}:${scenario}:${period}:${indicatorCode}:${targetKey}:${fileStat.size}:${fileStat.mtimeMs}:${metadataStat.size}:${metadataStat.mtimeMs}`;
+  const cached = gridCache.get(cacheKey);
+  if (cached) {
+    gridCache.delete(cacheKey);
+    gridCache.set(cacheKey, cached);
+    return cached;
+  }
+
   const metadata = readMetadata(filePath);
   const raster = await openRaster(filePath);
   if (raster.pixelWidth !== cellSize || raster.pixelHeight !== cellSize) {

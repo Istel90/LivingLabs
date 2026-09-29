@@ -1,0 +1,13 @@
+{
+  "id": "KOR_100M_EPSG5179_V1",
+  "crs": "EPSG:5179",
+  "pixelWidth": 100,
+  "pixelHeight": -100,
+  "originX": 745900,
+  "originY": 2068600,
+  "bands": 1,
+  "dtype": "float32",
+  "nodata": -9999,
+  "allowAlignedRegionalSubsets": true,
+  "reference": "Existing H01 national processed GeoTIFF; header inventory 2026-09-29, 595 files. Spatial standard does not assert valid-data coverage of the entire peninsula."
+}

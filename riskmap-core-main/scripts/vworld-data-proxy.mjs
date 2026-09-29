@@ -9,6 +9,7 @@ import * as h5wasm from 'h5wasm/node';
 import proj4 from 'proj4';
 import pg from 'pg';
 import { buildNationalHazardGrid } from './hazard-grid-service.mjs';
+import { resolveIndicatorRequest } from './indicator-index.mjs';
 
 const { Pool } = pg;
 
@@ -1409,7 +1410,32 @@ const server = createServer(async (request, response) => {
   }
 
   const url = new URL(request.url || '/', `http://127.0.0.1:${port}`);
-  const routePath = url.pathname.startsWith('/api/') ? url.pathname.slice('/api'.length) : url.pathname;
+  let routePath = url.pathname.startsWith('/api/') ? url.pathname.slice('/api'.length) : url.pathname;
+  if (routePath === '/indicator-grid') {
+    if (request.method !== 'GET') {
+      send(response, 405, JSON.stringify({ error: 'GET required' }));
+      return;
+    }
+    try {
+      const target = resolveIndicatorRequest(url.searchParams);
+      if (target.kind === 'static') {
+        const file = staticRoot
+          ? resolve(staticRoot, 'internal-tools', `.${target.path}`)
+          : resolve(workspaceRoot, 'riskmap-core-main/static', `.${target.path}`);
+        if (!existsSync(file)) {
+          send(response, 404, JSON.stringify({ error: 'Registered data file is unavailable' }));
+          return;
+        }
+        send(response, 200, readFileSync(file, 'utf8'), 'application/json; charset=utf-8', 'public, max-age=300');
+        return;
+      }
+      routePath = target.path;
+      url.search = target.query.toString();
+    } catch (error) {
+      send(response, 400, JSON.stringify({ error: error.message }));
+      return;
+    }
+  }
   if (routePath === '/health') {
     send(response, 200, JSON.stringify({
       ok: true,

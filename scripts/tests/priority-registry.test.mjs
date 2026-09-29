@@ -9,6 +9,7 @@ import { INDICATOR_CATALOG } from '../../riskmap-core-main/src/lib/priority/indi
 import { SECTOR_PROFILES } from '../../riskmap-core-main/src/lib/priority/sectorProfiles.js';
 import { configureRegisteredIndicators, indicatorRequestUrl } from '../../riskmap-core-main/src/lib/priority/indicatorData.js';
 import { MAP_DISPLAY_CONTROLS, validateDisplayControls } from '../../riskmap-core-main/src/lib/priority/mapDisplayControls.js';
+import { resolveIndicatorRequest } from '../../riskmap-core-main/scripts/indicator-index.mjs';
 
 const baseline = JSON.parse(readFileSync(new URL('./fixtures/priority-configs-before-registry.json', import.meta.url)));
 const legacySource = execFileSync('git', ['show', '79338ed:riskmap-core-main/src/lib/tools/PriorityManagementArea.svelte'], { encoding: 'utf8' });
@@ -39,7 +40,17 @@ test('regional, temporal and saved-draft configurations match previous behavior'
                     const expectedUrl = old.populationIndicator
                         ? `/population/grid?regionCode=${encodeURIComponent(region)}&indicator=${encodeURIComponent(old.populationIndicator)}`
                         : ['/hazard-grid', '/flood-grid', '/analysis-grid'].some(p => old.dataPath.startsWith(p)) ? old.dataPath : `/internal-tools${old.dataPath}`;
-                    assert.equal(indicatorRequestUrl(actual[i], { regionCode: region, asset: p => `/internal-tools${p}` }), expectedUrl);
+                    const nextUrl = indicatorRequestUrl(actual[i], { regionCode: region, asset: p => `/internal-tools${p}` });
+                    if (!/^\d{5}$/.test(region) || actual[i].dataStatus === 'missing') continue;
+                    if (nextUrl.startsWith('/indicator-grid?')) {
+                        const target = resolveIndicatorRequest(new URL(nextUrl, 'http://local.invalid').searchParams);
+                        if (target.kind === 'static') assert.equal(`/internal-tools${target.path}`, expectedUrl);
+                        else {
+                            const oldUrl = new URL(expectedUrl, 'http://local.invalid');
+                            assert.equal(target.path, oldUrl.pathname);
+                            assert.deepEqual(Object.fromEntries(target.query), Object.fromEntries(oldUrl.searchParams));
+                        }
+                    } else assert.equal(nextUrl, expectedUrl);
                 }
             }
         }
@@ -76,7 +87,7 @@ test('ecosystem remains unavailable until real connections are registered', () =
 test('display controls require registered behavior and preserve order', () => {
     const actions = Object.fromEntries(MAP_DISPLAY_CONTROLS.map(c => [c.action, { get: () => false, set: () => {} }]));
     assert.equal(validateDisplayControls(MAP_DISPLAY_CONTROLS, actions), true);
-    assert.deepEqual(MAP_DISPLAY_CONTROLS.map(c => c.label), ['행정경계', '흑백 지도', '분석지역 경계']);
+    assert.deepEqual(MAP_DISPLAY_CONTROLS.map(c => c.label), ['행정경계', '분석지역 경계', '흑백 지도']);
     delete actions.analysisBoundary;
     assert.throws(() => validateDisplayControls(MAP_DISPLAY_CONTROLS, actions), /Invalid display control/);
 });

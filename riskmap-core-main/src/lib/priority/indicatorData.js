@@ -2,6 +2,15 @@ import { DATA_SOURCES } from './dataSources.js';
 
 export function indicatorRequestUrl(item, { regionCode, asset = path => path }) {
     const source = findDataSource(item);
+    const registeredId = Object.entries(DATA_SOURCES).find(([, candidate]) => candidate === source)?.[0];
+    if (registeredId) {
+        const query = new URLSearchParams({ dataset: registeredId, regionCode });
+        if (source.kind === 'hazard' && item.dataPath) {
+            const existing = new URL(item.dataPath, 'http://local.invalid').searchParams;
+            for (const key of ['mode', 'scenario', 'period']) if (existing.has(key)) query.set(key, existing.get(key));
+        }
+        return `/indicator-grid?${query.toString()}`;
+    }
     if (source?.kind === 'population') {
         return `${source.endpoint}?regionCode=${encodeURIComponent(regionCode)}&indicator=${encodeURIComponent(source.indicator)}`;
     }
