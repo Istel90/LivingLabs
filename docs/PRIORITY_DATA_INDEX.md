@@ -23,9 +23,9 @@ DB/기존 JSON은 기존 결과를 유지하는 호환 연결이다. 이들을 T
 | 필수 메타데이터 | 지표 ID, 단위, 기간, 동일 grid_spec_id |
 | 테스트 자료 | test_only 자료는 등록 거부 |
 
-계약 파일: `shared/data/priority/grid-contract.json`. 기간은 기존 `period`, `period_label`, `year` 필드를 읽어 통일한다. 원본 파일이나 기존 메타데이터를 수정하지 않는다.
+계약 파일: `shared/data/priority/grid-contract.json`. 기간은 기존 `period`, `period_label`, `year` 또는 `period_start`/`period_end`를 읽어 통일한다. 기존 NATIONAL/REGIONAL_100M_EPSG5179 명칭은 실제 헤더가 계약에 맞는 경우 같은 격자로 인식한다. 원본 파일이나 기존 메타데이터를 수정하지 않는다.
 
-**448개 등록, 147개 보류**: 테스트 표시 145개, 격자 ID 불일치 1개, 기간 누락과 격자 ID 불일치가 함께 있는 H11 공간 참조 자료 1개다. H11의 현재 DB 조회를 이 보류 파일로 대체하지 않는다. 등록 수는 자료 추가에 따라 달라질 수 있다.
+**450개 등록, 145개 보류**: 보류는 test_only 자료 145개다. 최초 검사에서는 기존 격자 명칭과 기간 시작/종료 필드를 인식하지 못해 WBGT 공간 참조 2개도 보류했으나 등록 검사 호환을 수정했다. 현재 H11은 DB에서 지역 격자를 조회한 다음 전국 공간 참조 TIF를 읽는다. 앞서 DB만 사용한다고 설명한 것은 잘못이었다. 원본·메타데이터·계산식은 수정하지 않았다. 보완 후 공통 H11 API HTTP 200, 수원 유효 셀 12,098개를 확인했다.
 
 전국 크기의 격자가 있다고 한반도 전체에 유효값이 있다는 뜻은 아니다. 헤더 검사는 실제 값의 품질, 단위의 의미, 전 영역의 결측률, 지표별 연도 적합성을 보장하지 않는다. 해당 검사는 후속 데이터 품질 단계에서 정해야 한다.
 
@@ -42,7 +42,7 @@ DB/기존 JSON은 기존 결과를 유지하는 호환 연결이다. 이들을 T
 ## 검증과 남은 범위
 
 - `npm run test:priority-registry`: 설정·기존 저장본 호환·공통 조회 연결·원치 않는 경로 변경 차단·변경된 자료 거부 10개 검사.
-- `.\.venv-dem\Scripts\python.exe -m unittest scripts/tests/test_raster_contract.py`: 정렬된 부분 격자, 반 셀 오프셋, 좌표계/해상도/회전/NoData 검사 3개.
+- `.\.venv-dem\Scripts\python.exe -m unittest scripts/tests/test_raster_contract.py`: 정렬된 부분 격자, 반 셀 오프셋, 좌표계/해상도/회전/NoData 검사 4개(기존 WBGT 메타데이터 호환 포함).
 - 실제 수원 홍수 FH01, 지형, 고령인구, 폭염 H01, 유동인구 정적 자료의 기존/신규 조회 응답 SHA-256 일치. 증거: `output/data-contract-audit-20260929/gateway-comparison.json`.
 - 재시작 후 제공 버전 `1790645980716` 및 지표 조회 번들이 빌드와 일치했다. 대표 응답 5개도 다시 일치했다. 증거: `output/data-contract-audit-20260929/served-verification.json`.
 - DB를 거치지 않는 TIF 처리기도 직접 확인: 수원 H01 146×142 격자, 유효 셀 12,100개. DB 응답과 TIF 처리기는 서로 다른 기존 경로이므로 두 경로 간 수치 동일성을 주장하지 않는다.

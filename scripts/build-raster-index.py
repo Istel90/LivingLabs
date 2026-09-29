@@ -17,6 +17,17 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = json.loads((ROOT / 'shared/data/priority/grid-contract.json').read_text(encoding='utf-8'))
 
 
+def metadata_contract(metadata):
+    period = metadata.get('period') or metadata.get('period_label') or metadata.get('year')
+    if not period and metadata.get('period_start') and metadata.get('period_end'):
+        period = f"{metadata['period_start']}/{metadata['period_end']}"
+    grid_id = metadata.get('grid_spec_id')
+    # Legacy names describe the same lattice; validate_header still checks the actual raster.
+    if grid_id in ('REGIONAL_100M_EPSG5179', 'NATIONAL_100M_EPSG5179'):
+        grid_id = CONTRACT['id']
+    return period, grid_id
+
+
 def validate_header(header, contract=CONTRACT):
     errors = []
     for key in ('crs', 'bands', 'dtype', 'nodata'):
@@ -42,11 +53,11 @@ def inspect(path, root):
     errors = validate_header(header)
     sidecar = path.with_suffix('.metadata.json')
     metadata = json.loads(sidecar.read_text(encoding='utf-8-sig')) if sidecar.exists() else {}
-    period = metadata.get('period') or metadata.get('period_label') or metadata.get('year')
+    period, grid_id = metadata_contract(metadata)
     for key, value in [('unit', metadata.get('unit')), ('indicator', metadata.get('indicator_id')), ('period', period)]:
         if value is None or str(value).strip() == '':
             errors.append('missing-'+key)
-    if metadata.get('grid_spec_id') != CONTRACT['id']:
+    if grid_id != CONTRACT['id']:
         errors.append('grid-spec-id')
     if metadata.get('test_only'):
         errors.append('test-only')

@@ -46,7 +46,7 @@
       "id": "indexed-indicator-loading",
       "environment": "local 4173 flood baseline and heatwave; external only after separate backend deployment",
       "writes": false,
-      "criteria": "등록된 지표는 /indicator-grid에 자료 ID·지역·기간을 전달한다. 기존 데이터 응답과 수치·결측·격자 일치, 잘못된 ID 거부, 수원 전용 자료의 타 지역 사용 거부 확인. 실제 Risk 실행과 레이어 전환을 홍수/폭염에서 확인하고 브라우저 미실행은 NOT_RUN. 래스터 인덱스의 448 등록/147 보류는 2026-09-29 기준이며 최신 자료 추가 시 변경 가능. 새 TIF는 격자 계약·메타데이터 검사 통과 후에만 등록; 원본/메타데이터 변경 후 재등록 전 사용 거부. 점검 자체에서 등록 재생성·자료 수정·추가 예약을 하지 않는다. DB/기존 JSON을 TIF 검증 통과 자료로 간주하지 않는다."
+      "criteria": "등록된 지표는 /indicator-grid에 자료 ID·지역·기간을 전달한다. 기존 데이터 응답과 수치·결측·격자 일치, 잘못된 ID 거부, 수원 전용 자료의 타 지역 사용 거부 확인. 실제 Risk 실행과 레이어 전환을 홍수/폭염에서 확인하고 브라우저 미실행은 NOT_RUN. 래스터 인덱스의 450 등록/145 보류는 2026-09-29 기준이며 최신 자료 추가 시 변경 가능. 새 TIF는 격자 계약·메타데이터 검사 통과 후에만 등록; 원본/메타데이터 변경 후 재등록 전 사용 거부. 점검 자체에서 등록 재생성·자료 수정·추가 예약을 하지 않는다. H11은 DB 지역 격자와 전국 공간 참조 TIF를 함께 사용하므로 실제 H11 공통 조회 HTTP 200과 유효 셀 확인. DB/기존 JSON을 TIF 검증 통과 자료로 간주하지 않는다."
     },
     {
       "id": "registry-driven-ui-compatibility",
