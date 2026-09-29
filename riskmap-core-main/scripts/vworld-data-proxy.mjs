@@ -11,6 +11,35 @@ import pg from 'pg';
 import { buildNationalHazardGrid } from './hazard-grid-service.mjs';
 import { resolveIndicatorRequest } from './indicator-index.mjs';
 import { handleRiskRequest } from './risk-service.mjs';
+import { decodeGridValues, cropStaticGridToRegion } from './grid-preparation.mjs';
+
+async function loadRegisteredDataset(params) {
+  const target = resolveIndicatorRequest(params);
+  if (target.kind === 'static') {
+    const file = staticRoot ? resolve(staticRoot, 'internal-tools', `.${target.path}`) : resolve(workspaceRoot, 'riskmap-core-main/static', `.${target.path}`);
+    const grid = JSON.parse(readFileSync(file, 'utf8'));
+    if (params.get('regional') !== '1') return grid;
+    const meta = await fetchRegionalGridMeta(params.get('regionCode'));
+    if (!meta) throw new Error('지역 격자 정보를 찾을 수 없습니다.');
+    const decoded=decodeGridValues(grid);
+    const item={dataPath:target.path,gridValues:decoded.values,gridMeta:grid,label:params.get('dataset')};
+    const cropped=cropStaticGridToRegion(item,{gridMeta:meta});
+    if(cropped.gridMeta===grid) return grid;
+    return {...grid,...cropped.gridMeta,values:Array.from(cropped.gridValues),stats:{...grid.stats,validCells:cropped.gridValidIndices.length,rawMean:null,normalizedMean:cropped.loadedValue}};
+  }
+  if (target.path === '/population/grid') return fetchPopulationGrid(target.query);
+  if (target.path === '/flood-grid') return fetchFloodGrid(target.query);
+  if (target.path === '/analysis-grid') return fetchRegionalAnalysisGrid(target.query);
+  if (target.path === '/hazard-grid') {
+    try { return await fetchHazardGrid(target.query); }
+    catch (databaseError) {
+      if(target.query.get('indicator')==='H11') throw databaseError;
+      const gridMeta=await fetchRegionalGridMeta(params.get('regionCode'));
+      return buildNationalHazardGrid(target.query,{gridMeta}).catch(()=>{throw databaseError;});
+    }
+  }
+  throw new Error('지원하지 않는 자료 연결입니다.');
+}
 
 const { Pool } = pg;
 
@@ -1413,7 +1442,7 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://127.0.0.1:${port}`);
   let routePath = url.pathname.startsWith('/api/') ? url.pathname.slice('/api'.length) : url.pathname;
   if (routePath === '/risk-analysis') {
-    await handleRiskRequest(request, response, send);
+    await handleRiskRequest(request, response, send, loadRegisteredDataset);
     return;
   }
   if (routePath === '/indicator-grid') {
@@ -1423,6 +1452,10 @@ const server = createServer(async (request, response) => {
     }
     try {
       const target = resolveIndicatorRequest(url.searchParams);
+      if (target.kind === 'static' && url.searchParams.get('regional') === '1') {
+        send(response, 200, JSON.stringify(await loadRegisteredDataset(url.searchParams)), 'application/json; charset=utf-8', 'no-store');
+        return;
+      }
       if (target.kind === 'static') {
         const file = staticRoot
           ? resolve(staticRoot, 'internal-tools', `.${target.path}`)

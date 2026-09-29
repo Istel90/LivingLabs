@@ -5,6 +5,7 @@ export function indicatorRequestUrl(item, { regionCode, asset = path => path }) 
     const registeredId = Object.entries(DATA_SOURCES).find(([, candidate]) => candidate === source)?.[0];
     if (registeredId) {
         const query = new URLSearchParams({ dataset: registeredId, regionCode });
+        if (source.kind === 'static') query.set('regional', '1');
         if (source.kind === 'hazard' && item.dataPath) {
             const existing = new URL(item.dataPath, 'http://local.invalid').searchParams;
             for (const key of ['mode', 'scenario', 'period']) if (existing.has(key)) query.set(key, existing.get(key));

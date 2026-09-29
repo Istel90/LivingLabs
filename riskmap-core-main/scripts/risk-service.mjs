@@ -1,4 +1,6 @@
 import { Worker } from 'node:worker_threads';
+import { prepareRegisteredRisk } from './registered-risk.mjs';
+import { analysisJsonReplacer } from '../src/lib/data/analysisSerialization.js';
 
 const groups = ['기후위험', '노출', '민감도', '적응역량'];
 const maxCells = 8_000_000;
@@ -33,7 +35,7 @@ export function validateRiskRequest(input) {
     return input;
 }
 
-export async function handleRiskRequest(request, response, send) {
+export async function handleRiskRequest(request, response, send, loadDataset) {
     if (request.method !== 'POST') return send(response, 405, JSON.stringify({ error: 'POST required' }));
     if (busy) return send(response, 429, JSON.stringify({ error: '다른 분석을 계산 중입니다. 잠시 후 다시 실행하세요.' }));
     busy = true;
@@ -49,6 +51,13 @@ export async function handleRiskRequest(request, response, send) {
         let input;
         try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
         catch { invalid('Risk 요청 JSON이 올바르지 않습니다.'); }
+        let loadedIndicators;
+        if (input?.schemaVersion === 2) {
+            if (!loadDataset) invalid('등록 자료 조회가 구성되지 않았습니다.');
+            const prepared = await prepareRegisteredRisk(input, loadDataset);
+            input = prepared.input;
+            loadedIndicators = prepared.loaded;
+        }
         validateRiskRequest(input);
         const payload = await new Promise((resolve, reject) => {
             worker = new Worker(new URL('./risk-worker.mjs', import.meta.url), { workerData: input, resourceLimits: { maxOldGenerationSizeMb: 512 } });
@@ -58,7 +67,7 @@ export async function handleRiskRequest(request, response, send) {
             worker.once('exit', ()=>{ clearTimeout(timer); reject(new Error('Risk 계산 작업이 중단되었습니다.')); });
         });
         if (payload.error) invalid(payload.error);
-        send(response, 200, JSON.stringify(payload), 'application/json; charset=utf-8', 'no-store');
+        send(response, 200, JSON.stringify({...payload, loadedIndicators}, analysisJsonReplacer), 'application/json; charset=utf-8', 'no-store');
     } catch (error) {
         send(response, error.status || 500, JSON.stringify({ error: error.message }));
     } finally {

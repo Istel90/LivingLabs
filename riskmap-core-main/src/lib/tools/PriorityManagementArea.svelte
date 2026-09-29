@@ -4,7 +4,7 @@
     import proj4 from 'proj4';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
     import { createSectorConfigs, INDICATOR_GROUPS } from '$lib/priority/registry.js';
-    import { requestRiskAnalysis } from '$lib/priority/riskClient.js';
+    import { requestRiskAnalysis, requestRegisteredRiskAnalysis } from '$lib/priority/riskClient.js';
     import { configureRegisteredIndicators, indicatorRequestUrl } from '$lib/priority/indicatorData.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
     import AlternativeOverlap from './AlternativeOverlap.svelte';
@@ -865,34 +865,7 @@
             .map((item) => ({ ...item }));
     }
 
-    function cropStaticGridToRegion(item, reference) {
-        if (!item.dataPath?.startsWith('/analysis-data/') || !reference?.gridMeta || !isGridValueCollection(item.gridValues)) return item;
-        const source = item.gridMeta;
-        const target = reference.gridMeta;
-        if (source.crs !== target.crs || ['pixelWidth', 'pixelHeight'].some((key) => Number(source.transform?.[key]) !== Number(target.transform?.[key]))) return item;
-        const colOffset = (target.transform.originX - source.transform.originX) / source.transform.pixelWidth;
-        const rowOffset = (source.transform.originY - target.transform.originY) / source.transform.pixelHeight;
-        if (!Number.isInteger(colOffset) || !Number.isInteger(rowOffset) || colOffset < 0 || rowOffset < 0 ||
-            colOffset + target.columns > source.columns || rowOffset + target.rows > source.rows) return item;
-        if (colOffset === 0 && rowOffset === 0 && source.columns === target.columns && source.rows === target.rows) return item;
-        const count = target.rows * target.columns;
-        const values = new Float32Array(count).fill(Number.NaN);
-        const indices = reference.gridValidIndices || Array.from({ length: count }, (_, index) => index);
-        const validIndices = [];
-        let sum = 0;
-        for (const index of indices) {
-            const sourceIndex = (Math.floor(index / target.columns) + rowOffset) * source.columns + index % target.columns + colOffset;
-            const value = gridValue(item, sourceIndex);
-            if (value === null) continue;
-            values[index] = value;
-            validIndices.push(index);
-            sum += value;
-        }
-        return { ...item, gridValues: values, gridValidIndices: validIndices, gridMeta: { ...target },
-            loadedValue: validIndices.length ? sum / validIndices.length : null,
-            gridSummary: { ...item.gridSummary, columns: target.columns, rows: target.rows, validCells: validIndices.length, rawMean: null, normalizedMean: validIndices.length ? sum / validIndices.length : null },
-            loadError: validIndices.length ? null : `${item.label}: 선택한 지역에 유효한 격자가 없습니다.` };
-    }
+
 
     async function loadIndicatorInputs(sourceIndicators, cachedIndicators = [], { preferDense = false } = {}) {
         const cachedByKey = new Map(
@@ -973,10 +946,6 @@
                 };
             }
         }));
-
-        const reference = [...loaded, ...cachedIndicators].find((item) =>
-            (item.indicatorCode || item.floodIndicator || item.analysisIndicator) && isGridValueCollection(item.gridValues) && item.gridMeta);
-        if (reference) loaded = loaded.map((item) => cropStaticGridToRegion(item, reference));
 
         const loadedGrid = loaded.find((item) => item.gridSummary && !item.loadError);
         mapSource = loadedGrid
@@ -1311,6 +1280,18 @@
         const runDimensionWeights = { ...dimensionWeights };
         const snapshot = indicators.map((item) => ({ ...item }));
         try {
+            let result;
+            const selected = snapshot.filter(usableIndicator);
+            if (selected.every(item => item.registryId && item.dataSourceId)) {
+                result = await requestRegisteredRiskAnalysis(selected, {
+                    sector: hazard, regionCode, mode: hazardDatasetMode,
+                    scenario: hazardScenario, period: hazardFuturePeriod,
+                    gridUnit: runGridUnit, dimensionWeights: runDimensionWeights, nationalLab
+                });
+                if (runId !== analysisRunId) return;
+                loadedPreviewIndicators = result.indicators;
+            } else {
+                // Uploaded inputs and older saved definitions keep their explicit compatibility transport.
             const enrichedSnapshot = await loadIndicatorInputs(snapshot, loadedPreviewIndicators);
             if (runId !== analysisRunId) return;
             const failed = enrichedSnapshot.filter((item) => item.enabled && item.loadError);
@@ -1325,8 +1306,9 @@
                 return;
             }
 
-            const result = await requestRiskAnalysis(enrichedSnapshot.filter(usableIndicator), { gridUnit: runGridUnit, dimensionWeights: runDimensionWeights, nationalLab });
+            result = await requestRiskAnalysis(enrichedSnapshot.filter(usableIndicator), { gridUnit: runGridUnit, dimensionWeights: runDimensionWeights, nationalLab });
             if (runId !== analysisRunId) return;
+            }
             const validCells = result.gridResult?.stats?.validCells;
             const riskModeLabel = result.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk';
             const usesDemoFallback = result.indicators.some((item) => item.demoFallback);

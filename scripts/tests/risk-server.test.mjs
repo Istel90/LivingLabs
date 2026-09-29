@@ -6,7 +6,8 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { calculateRisk } from '../../riskmap-core-main/scripts/risk-engine.mjs';
 import { handleRiskRequest, validateRiskRequest } from '../../riskmap-core-main/scripts/risk-service.mjs';
-import { requestRiskAnalysis } from '../../riskmap-core-main/src/lib/priority/riskClient.js';
+import { requestRiskAnalysis, requestRegisteredRiskAnalysis } from '../../riskmap-core-main/src/lib/priority/riskClient.js';
+import { prepareRegisteredRisk } from '../../riskmap-core-main/scripts/registered-risk.mjs';
 import { createSectorConfigs } from '../../riskmap-core-main/src/lib/priority/registry.js';
 import { configureRegisteredIndicators, indicatorRequestUrl } from '../../riskmap-core-main/src/lib/priority/indicatorData.js';
 
@@ -86,6 +87,13 @@ test('untrusted grid dimensions and duplicate indices rejected before worker all
     assert.throws(()=>validateRiskRequest(duplicate),/셀 번호/);
 });
 
+test('registered requests reject cross-sector/unknown IDs before accessing data',async()=>{
+    const input={schemaVersion:2,...options,sector:'flood',regionCode:'41110',mode:'observed',indicators:[{indicatorId:'hazard.H11.hazard',weight:1}]};
+    let reads=0;
+    await assert.rejects(()=>prepareRegisteredRisk(input,()=>{reads++;}),/부문/);
+    assert.equal(reads,0);
+});
+
 test('live Suwon flood, heatwave and WBGT match every legacy result cell', {skip: !process.env.RISK_LIVE_TEST}, async()=>{
     const original=globalThis.fetch;
     globalThis.fetch=(path,init)=>original(new URL(path,'http://127.0.0.1:4173'),init);
@@ -101,7 +109,7 @@ test('live Suwon flood, heatwave and WBGT match every legacy result cell', {skip
             const context=vm.createContext({Float32Array,Map,gridUnit:'100m'});
             vm.runInContext(['isGridValueCollection','clamp01','finiteGridValue','gridValue','decodeGridValues','cropStaticGridToRegion'].map(legacyFunction).join('\n'),context);
             let enriched=await Promise.all(selected.map(async item=>{
-                const response=await fetch(indicatorRequestUrl(item,{regionCode:'41110'}));
+                const response=await fetch(indicatorRequestUrl(item,{regionCode:'41110'}).replace('&regional=1',''));
                 assert.equal(response.status,200,item.label);
                 const grid=await response.json();const decoded=context.decodeGridValues(grid);
                 return {...item,gridValues:decoded.values,gridValidIndices:decoded.validIndices,gridMeta:{gridUnit:grid.gridUnit,rows:grid.rows,columns:grid.columns,extent:grid.extent,transform:grid.transform,crs:grid.crs}};
@@ -111,6 +119,8 @@ test('live Suwon flood, heatwave and WBGT match every legacy result cell', {skip
             const expected=numeric(legacyCalculate(enriched,options));
             const actual=numeric(await requestRiskAnalysis(enriched,options));
             assert.deepEqual(actual,expected,sector);
+            const integrated=numeric(await requestRegisteredRiskAnalysis(selected,{...options,sector:sector==='wbgt'?'heatwave':sector,regionCode:'41110',mode:'observed',scenario:'ssp245',period:'2050'}));
+            assert.deepEqual(integrated,expected,`${sector}: registered server lookup and alignment`);
             console.log(JSON.stringify({sector,indicators:enriched.length,validCells:actual.gridResult.stats.validCells,riskScore:actual.riskScore,allCellsIdentical:true}));
         }
     } finally { globalThis.fetch=original; }

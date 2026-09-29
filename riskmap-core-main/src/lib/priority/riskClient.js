@@ -1,4 +1,10 @@
 // Only transport and result restoration live in the browser; Risk arithmetic runs on the server.
+import { restoreAnalysisPayload } from '../data/analysisSerialization.js';
+
+export async function requestRegisteredRiskAnalysis(indicators, options) {
+    return sendRiskRequest({schemaVersion:2,...options,indicators:indicators.map(item=>({indicatorId:item.registryId,weight:Number(item.weight)}))},indicators);
+}
+
 export async function requestRiskAnalysis(indicators, options) {
     const inputs = indicators.map(item => {
         const entries = [];
@@ -16,9 +22,13 @@ export async function requestRiskAnalysis(indicators, options) {
             entries
         };
     });
+    return sendRiskRequest({schemaVersion:1,...options,indicators:inputs},indicators);
+}
+
+async function sendRiskRequest(body, indicators) {
     const response = await fetch('/risk-analysis', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schemaVersion: 1, ...options, indicators: inputs }),
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(120000)
     });
     const payload = await response.json();
@@ -31,5 +41,6 @@ export async function requestRiskAnalysis(indicators, options) {
         for (const [index, value] of result.gridResult[key]) values[index] = value;
         result.gridResult[key] = values;
     }
-    return { ...result, indicators };
+    const loaded = payload.loadedIndicators ? restoreAnalysisPayload(payload.loadedIndicators) : indicators;
+    return { ...result, indicators: loaded.map((item,i)=>({...indicators[i],...item})) };
 }

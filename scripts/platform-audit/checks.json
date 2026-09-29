@@ -43,6 +43,12 @@
   ],
   "browser": [
     {
+      "id": "registered-risk-server-preparation",
+      "environment": "local exact flood baseline, heatwave and H11; external after deployment",
+      "writes": false,
+      "criteria": "등록 지표의 새 분석은 schemaVersion=2로 부문·지역·기간·지표 ID·가중치만 전달하며 entries/gridValues를 업로드하지 않는다. 서버가 부문 소속·자료 가용성을 검증하고 조회·지역 부분격자 추출·정렬·계산한다. 이전 셀별 값·결측·요약 일치, 브라우저 Risk/Hotspot 실행 확인. 생태계 지표는 비워둔다. 사용자 업로드와 옛 저장본 복원은 schemaVersion=1 호환 경로이며 현재 원자료로 재조회해 저장 결과를 바꾸지 않는다."
+    },
+    {
       "id": "ecosystem-empty-indicators",
       "environment": "local ecosystem route; shared flood baseline preserved",
       "writes": false,
