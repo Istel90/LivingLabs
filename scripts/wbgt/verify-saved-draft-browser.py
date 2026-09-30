@@ -58,8 +58,16 @@ async def main():
      recalculated=await recalculation.value
      assert recalculated.status==200,await recalculated.text()
      assert recalculated.request.post_data_json['schemaVersion']==1
+     sent_labels={i['label'] for i in recalculated.request.post_data_json['indicators']}
+     custom_labels={i['label'] for i in actual['analysisResult']['indicators'] if i.get('customDatasetId')}
+     assert custom_labels and custom_labels.issubset(sent_labels)
      await expect(page.locator('[data-analysis-message]')).to_contain_text('분석 완료',timeout=60000)
+     async with page.expect_download() as repeated:await page.get_by_role('button',name='설정 내보내기',exact=True).click()
+     repeated_file=RESULTS/f'{PREFIX}-recalculated-{hazard}.json';await (await repeated.value).save_as(repeated_file)
+     repeated_data=json.loads(repeated_file.read_text(encoding='utf8'))
+     assert repeated_data['analysisResult']['gridResult']['values']==actual['analysisResult']['gridResult']['values']
      report['checks'][-1]['savedUserInputReanalysis']=True
+     report['checks'][-1]['recalculatedValuesMatch']=True
    assert not errors,errors
    report['ok']=True
   except Exception as error:

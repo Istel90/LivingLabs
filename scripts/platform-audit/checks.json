@@ -50,7 +50,7 @@
     },
     {
       "id": "large-draft-compression-and-retry",
-      "environment": "local exact flood baseline and heatwave; external after shared reader deployment",
+      "environment": "local exact flood baseline and heatwave; external shared reader",
       "writes": true,
       "criteria": "256KiB 이상 새 저장본은 gzip-base64-v1로 손실 없이 압축한다. 이전 비압축 저장본과 신규 압축 저장본 모두 목록·불러오기·비교에서 같은 대안/Risk/권역 ID, 셀값과 사용자 지표 연결을 복원해야 한다. 재시도는 동일 요청 ID의 기존 저장 여부를 먼저 조회해 중복 업로드·생성하지 않는다. 손상·미지원 형식·해제 크기 초과는 오류로 표시한다. QA 신규 2개만 명시적 승인 하에 실제 DB 저장·읽기·중복 방지·휴지통 검증을 수행하고 기존 저장본 변경 금지. 원격 DB 미검증을 격리 브라우저 성공으로 대체하지 않는다."
     },
@@ -68,7 +68,7 @@
     },
     {
       "id": "registered-risk-server-preparation",
-      "environment": "local exact flood baseline, heatwave and H11; external after deployment",
+      "environment": "local exact flood baseline and external; heatwave and H11",
       "writes": false,
       "criteria": "등록 지표의 새 분석은 schemaVersion=2로 부문·지역·기간·지표 ID·가중치만 전달하며 entries/gridValues를 업로드하지 않는다. 보관된 사용자 지표도 customDatasetId와 datasetVersion으로 조회한다. 서버가 부문 소속·지역·버전·자료 가용성을 검증하고 조회·지역 부분격자 추출·정렬·계산한다. 이전 셀별 값·결측·요약 일치, 브라우저 Risk/Hotspot 실행 확인. 생태계 기본 지표는 비워둔다. 옛 사용자 지표와 저장본 복원은 schemaVersion=1 호환 경로이며 현재 원자료로 재조회해 저장 결과를 바꾸지 않는다."
     },
@@ -80,7 +80,7 @@
     },
     {
       "id": "server-risk-calculation",
-      "environment": "local flood baseline and heatwave (including H11); external after separate deployment",
+      "environment": "local exact flood baseline and external; heatwave including H11",
       "writes": false,
       "criteria": "새 대안의 Risk 실행은 POST /risk-analysis 서버 계산을 사용한다. 이전 계산 대비 H/E/S/AC/V/Risk 셀별 값·결측·요약 일치, 홍수/폭염/WBGT 완료 및 Risk/Hotspot 지도 전환 확인. 실패 시 오류 표시하고 브라우저 계산으로 조용히 대체하지 않는다. 기존 저장 대안 쓰기 금지. 새 등록 지표 분석의 ID 기반 schemaVersion=2 조회·지역 맞춤 처리는 registered-risk-server-preparation 기준을 함께 적용한다. schemaVersion=1 정규화 격자 입력은 옛 사용자 지표·저장본 스냅샷 호환 경로로 따로 확인한다."
     },
@@ -157,13 +157,13 @@
     {
       "id": "saved-parcel-reference-lookup",
       "criteria": "홍수 기준 및 폭염 저장본을 읽기 전용으로 불러오기. 필지 복원이 /cadastre/parcel의 PNU 일괄 조회를 사용하고 bbox 재검색을 하지 않는지 확인. PNU 목록 유지, 누락 필지 수 표시, 지적도 버전 불일치 거부 및 같은 버전 도형 재사용 확인. 기존 저장본 쓰기 금지.",
-      "environment": "local; external after deployment",
+      "environment": "local exact flood baseline and external; heatwave",
       "writes": false
     },
     {
       "id": "alternative-result-identity",
       "criteria": "홍수 기준 및 폭염에서 대안 생성→Risk 분석→권역 도출→내보내기의 alternativeId/riskResultId/districtResultId/districtId 연결 확인. 재분석 시 Risk ID 변경, 권역 재도출 시 권역 ID만 변경, 도형 복원 시 ID 유지, 과거 저장본 반복 복원 시 ID 동일 확인. 대안 겹침 비교 요약에도 원본 대안·Risk·권역 ID가 연결되는지 확인하고, 분석 중 대안 전환·재분석 후 늦게 도착한 권역 응답이 새 결과에 섞이지 않는지 격리 테스트로 검증한다. 테스트 저장소 없이 운영 DB 쓰기 금지.",
-      "environment": "local; external after deployment",
+      "environment": "local exact flood baseline and external; heatwave",
       "writes": false
     },
     {

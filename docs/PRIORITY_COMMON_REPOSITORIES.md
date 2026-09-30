@@ -1,6 +1,6 @@
 # 공통 저장소와 사용자 지표 연결 — 2026-09-29
 
-개발 화면 `http://127.0.0.1:4173/internal-tools/priority-management-area/flood?regionCode=41110`에 적용했다. 기존 홍수 화면의 배치와 공통 조작을 유지하고 폭염·생태계도 같은 구현을 사용한다. 공개 사이트 배포는 이번 작업에 포함하지 않았다.
+개발 화면 `http://127.0.0.1:4173/internal-tools/priority-management-area/flood?regionCode=41110`에 적용했다. 기존 홍수 화면의 배치와 공통 조작을 유지하고 폭염·생태계도 같은 구현을 사용한다. 2026-09-30 사용자 승인으로 공통 UI·저장본 읽기·서버 분석 연계를 공개 사이트에도 배포하고 아래의 외부 검증을 완료했다. 사용자 지표 신규 등록·보관소 연결은 개발 사이트 전용이다.
 
 ## 사용자가 보는 동작
 
@@ -105,6 +105,21 @@ flowchart TD
 
 개발 빌드 `1790729728152`에서 DB 원본 응답을 이용해 홍수·폭염 불러오기와 당시 입력으로 H/E/V 복원, 설정 내보내기를 확인했다. 이 마지막 브라우저 검증은 DB 응답을 격리 브라우저에 공급해 추가 원격 쓰기를 방지했다. 실제 DB 왕복 검증과 별도의 증거를 남겼다.
 
-새 압축 형식은 업데이트한 개발 화면에서 읽는다. **공개 사이트의 이전 화면에서 새 압축 저장본을 불러오려면 같은 공통 읽기 모듈의 배포가 필요하다.** 이번에는 공개 사이트에 배포하지 않았다. 기존 비압축 저장본은 변경하지 않았다.
+새 압축 형식은 공통 읽기 모듈이 포함된 화면에서 읽는다. 2026-09-30 아래 배포로 공개 사이트에도 같은 읽기 모듈을 반영했다. 기존 비압축 저장본은 변경하지 않았다.
 
 구현 참고: [Supabase 시간 제한](https://supabase.com/docs/guides/database/postgres/timeouts), [표준 CompressionStream](https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream).
+
+## 2026-09-30 공개 사이트 배포와 검증
+
+- 공개 주소: [홍수 기준 화면](https://livinglabs-platform.pages.dev/internal-tools/priority-management-area/flood?regionCode=41110).
+- 배포 소스: `2f2aa20782e1f56ee4ff1a140c89bc6988c70f6d`. 기존 운영 브랜치를 fast-forward로 갱신했으며 [GitHub Actions 배포](https://github.com/Istel90/LivingLabs/actions/runs/36699995518)의 검사·전체 빌드·게시가 모두 성공했다.
+- 배포 고유 주소: `https://c5751089.livinglabs-platform.pages.dev`. 공개 빌드 `1790762633400`, 개발 빌드 `1790762328511`. 공개 빌드를 로컬 개발 파일 위에 덮어쓰지 않았다.
+- 공개 홍수 26개·폭염 27개 지표, 생태계 0개 지표와 공통 4개 그룹, 경계 토글 순서, 부문선택 돌아가기 명칭을 확인했다. WBGT(H11)를 유일한 기후위험 지표로 선택해 서버 분석 12,098셀 완료. `output/release-20260930/release-ui-report.json`.
+- 비압축 홍수·압축 폭염의 실제 QA DB 응답을 격리 브라우저에 공급해 목록·불러오기·당시 H/E/V 복원·내보내기를 검증했다. 모든 저장 Risk 셀값과 대안/Risk ID가 일치했다. 이후 공개 `/risk-analysis`로 사용자 지표를 포함해 다시 계산한 값도 정확히 일치했다. `output/release-20260930/public-browser-report.json`.
+- 공개 홍수·폭염에서 각각 실천권역 10개를 도출했다. 새로고침 시 ID 유지, 도형 없는 초안에서 PNU로 직접 복원(bbox 요청 없음), 재도출 시 권역 ID 갱신, 재분석 시 Risk ID 갱신과 이전 권역 초기화를 확인했다. `output/release-20260930/result-identity/report.json`.
+- 세 공개 브라우저 검사에서 페이지 오류 0건. 개발·공개 HTTP 검사 14/14 통과. `output/platform-audit/2026-09-30T10-06-26-733Z/report.json`. 이는 이번 배포의 검증 범위이며 일일 점검 전체 항목을 완료했다는 뜻은 아니다.
+- 외부 브라우저에서는 운영 DB 쓰기를 차단했다. 실제 DB 쓰기 왕복 검증은 위의 기존 승인된 QA 2개 결과를 따른다. 신규 운영 저장본을 만들거나 기존 사용자 저장본을 수정하지 않았다.
+
+공개 빌드는 `VITE_USER_INDICATOR_LIBRARY_ENABLED=false`로 만든다. **+사용자 지표**에는 개발 사이트 이용 안내를 표시하며 공개 `/user-indicators` 호출을 하지 않는다. 저장본에 이미 포함된 사용자 지표 값은 같은 ID·버전·지역을 확인해 재분석에 사용한다. 입력이 없거나 버전·지역이 다르면 오류를 표시한다. 개발용 파일 보관소를 외부에 공개하지 않았으며, 외부 신규 업로드와 사용자별 권한·동기화는 별도 작업이다.
+
+새 배포 검증 스크립트는 `PLATFORM_TEST_ORIGIN=https://livinglabs-platform.pages.dev`로 외부를 지정할 수 있다. 공통 저장/ID/필지/입력 호환 테스트를 배포 워크플로에 추가했다. 일일 점검 기준은 버전 8로 갱신했으며 점검 예약이나 매분 복구 작업은 추가하지 않았다.
