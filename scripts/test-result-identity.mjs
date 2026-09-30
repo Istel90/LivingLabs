@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createResultId, normalizeAlternativeIdentity, identifyRiskResult, identifyDistrictResult, buildResultIndex } from '../riskmap-core-main/src/lib/data/resultIdentity.js';
+test('new calculations and derivations get distinct IDs with stable parent links', () => {
+    const alternative = { id: 'ui-a', alternativeId: createResultId('alternative'), name: 'A' };
+    const first = identifyRiskResult({ stats: { max: 1 } }, alternative, { regionCode: '41110' });
+    const second = identifyRiskResult({}, alternative, {});
+    assert.notEqual(first.riskResultId, second.riskResultId);
+    assert.equal(first.alternativeId, second.alternativeId);
+    const zones = identifyDistrictResult(first, [{ id: 'candidate-1', pnuList: ['4111010100100010000'] }, { id: 'candidate-2' }]);
+    const redone = identifyDistrictResult(first, zones.parcelCandidates);
+    assert.equal(redone.riskResultId, first.riskResultId);
+    assert.notEqual(zones.districtResultId, redone.districtResultId);
+    assert.notEqual(zones.parcelCandidates[0].districtId, redone.parcelCandidates[0].districtId);
+    assert.equal(zones.parcelCandidates[0].sourceRiskResultId, first.riskResultId);
+    assert.equal(zones.parcelCandidates[0].districtResultId, zones.districtResultId);
+    assert.equal(zones.parcelCandidates[0].id, 'candidate-1');
+    const restored = normalizeAlternativeIdentity(JSON.parse(JSON.stringify({ ...alternative, analysisResult: zones })), 'another-save');
+    assert.deepEqual(restored.analysisResult, zones);
+    const index = buildResultIndex([restored]);
+    assert.equal(index.alternatives[0].districtIds.length, 2);
+});
+test('legacy migration is stable per saved row, separate across rows, keeps results and PNU', () => {
+    const old = { id: 'alternative-1', analysisResult: { gridResult: { values: [1, 2] }, parcelCandidates: [{ id: 'candidate-1', pnuList: ['4111010100100010000'] }] } };
+    const a = normalizeAlternativeIdentity(old, 'saved-row-a');
+    assert.deepEqual(a, normalizeAlternativeIdentity(old, 'saved-row-a'));
+    assert.notEqual(a.alternativeId, normalizeAlternativeIdentity(old, 'saved-row-b').alternativeId);
+    assert.deepEqual(a.analysisResult.gridResult, old.analysisResult.gridResult);
+    assert.deepEqual(a.analysisResult.parcelCandidates[0].pnuList, old.analysisResult.parcelCandidates[0].pnuList);
+    assert.deepEqual(a, normalizeAlternativeIdentity(a, 'different-row'));
+    assert.equal(old.alternativeId, undefined);
+});

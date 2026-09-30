@@ -3,6 +3,8 @@ import { join, resolve } from 'node:path';
 
 process.env.VITE_VWORLD_PROXY_URL ||= 'https://ehjygntjhqkddtcnvjdj.supabase.co/functions/v1/vworld-data';
 process.env.VITE_ANALYSIS_API_URL ||= '';
+// The local upload repository is not exposed through the public data tunnel.
+process.env.VITE_USER_INDICATOR_LIBRARY_ENABLED = 'false';
 process.env.VITE_SUPABASE_URL ||= 'https://ehjygntjhqkddtcnvjdj.supabase.co';
 process.env.VITE_SUPABASE_ANON_KEY ||= 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoanlnbnRqaHFrZGR0Y252amRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxOTI1MzUsImV4cCI6MjA5Nzc2ODUzNX0.FiVXQDoxivCu72eheahCaBLVmpfjikT7HLu4tvdrP9k';
 const siteOrigin = (process.env.CLOUDFLARE_SITE_ORIGIN || 'https://livinglabs-platform.pages.dev').replace(/\/$/, '');

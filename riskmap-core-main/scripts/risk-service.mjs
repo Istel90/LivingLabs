@@ -35,7 +35,7 @@ export function validateRiskRequest(input) {
     return input;
 }
 
-export async function handleRiskRequest(request, response, send, loadDataset) {
+export async function handleRiskRequest(request, response, send, loadDataset, loadUserDataset) {
     if (request.method !== 'POST') return send(response, 405, JSON.stringify({ error: 'POST required' }));
     if (busy) return send(response, 429, JSON.stringify({ error: '다른 분석을 계산 중입니다. 잠시 후 다시 실행하세요.' }));
     busy = true;
@@ -54,7 +54,7 @@ export async function handleRiskRequest(request, response, send, loadDataset) {
         let loadedIndicators;
         if (input?.schemaVersion === 2) {
             if (!loadDataset) invalid('등록 자료 조회가 구성되지 않았습니다.');
-            const prepared = await prepareRegisteredRisk(input, loadDataset);
+            const prepared = await prepareRegisteredRisk(input, loadDataset, loadUserDataset);
             input = prepared.input;
             loadedIndicators = prepared.loaded;
         }

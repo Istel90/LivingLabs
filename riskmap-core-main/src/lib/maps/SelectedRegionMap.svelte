@@ -1,5 +1,6 @@
 <script>
     import { onDestroy, onMount, untrack } from 'svelte';
+    import { loadReferencedParcels } from '$lib/data/parcelReferences.js';
     import { MAP_DISPLAY_CONTROLS, validateDisplayControls } from '$lib/priority/mapDisplayControls.js';
     import { displayScale, displayColor, MAP_RAMP } from '$lib/data/mapColorScale.js';
     import html2canvas from 'html2canvas-pro';
@@ -54,6 +55,7 @@
         onParcelDerivationComplete = () => {},
         parcelCandidates = [],
         candidateContextKey = '',
+        sourceRiskResultId = '',
         mapResetKey = 0,
         showAnalysisLegend = false,
         focusedCandidate = null,
@@ -1082,7 +1084,8 @@
                 const text = await response.text();
 
                 if (!response.ok) {
-                    const error = new Error(`PostGIS ${response.status}`);
+                    const error = new Error(response.status === 409
+                        ? '저장된 지적도 버전을 사용할 수 없습니다.' : `PostGIS ${response.status}`);
                     error.status = response.status;
                     throw error;
                 }
@@ -1416,6 +1419,7 @@
                 totalAreaSqm: Number(cluster.totalAreaSqm.toFixed(1)),
                 totalAreaLabel: formatAreaSquareMeters(cluster.totalAreaSqm),
                 pnuList: cluster.members.map((item) => item.id).filter(Boolean),
+                parcelDatasetVersion: cluster.members[0]?.feature?.properties?.cadastreDatasetVersion || null,
                 center: cluster.center,
                 bounds: cluster.bounds,
                 features: cluster.members.map((item) => item.feature),
@@ -1545,44 +1549,37 @@
     async function hydrateStoredParcelCandidates(candidates, scope) {
         const missingGeometry = candidates.filter((candidate) =>
             !(candidate.features || []).length &&
-            (candidate.pnuList || []).length &&
-            candidate.bounds
+            (candidate.pnuList || []).length
         );
         if (!missingGeometry.length) return;
-
-        const requestBoxes = missingGeometry.map(candidateRequestBox).filter(Boolean);
-        if (!requestBoxes.length) return;
 
         const runId = ++parcelCandidateRunId;
         parcelCandidateRunning = true;
         parcelCandidateStatus = `저장된 필지 도형 복원 중 · ${missingGeometry.length}개 후보`;
 
         try {
-            const fetchResult = await fetchPostgisCadastralFeatures(requestBoxes, {
-                timeoutMs: 60000,
-                onProgress: ({ completed, total, failed }) => {
-                    parcelCandidateStatus = `저장된 필지 도형 복원 중 · ${completed}/${total} 구역${failed ? ` · ${failed}개 재조회 실패` : ''}`;
-                }
-            });
-            const fetchedFeatures = fetchResult.features;
+            const restored = await loadReferencedParcels(missingGeometry,
+                (url) => fetchJsonWithRetry(url, { timeoutMs: 15000 }), window.location.origin,
+                ({ completed, total }) => {
+                    parcelCandidateStatus = `저장된 필지 직접 조회 중 · ${completed}/${total}필지`;
+                });
             if (parcelCandidateRunId !== runId || parcelCandidateLayerScope(parcelCandidates) !== scope) return;
 
-            const featureById = new Map(fetchedFeatures.map((feature) => [String(featureId(feature)), feature]));
             const hydratedCandidates = candidates.map((candidate) => {
                 if ((candidate.features || []).length) return candidate;
-                const features = (candidate.pnuList || [])
-                    .map((pnu) => featureById.get(String(pnu)))
-                    .filter(Boolean);
-                return { ...candidate, features };
+                return restored[missingGeometry.indexOf(candidate)] || candidate;
             });
             const restoredCount = hydratedCandidates.reduce((sum, candidate) => sum + (candidate.features?.length || 0), 0);
+            const missingCount = hydratedCandidates.reduce((sum, candidate) => sum +
+                Math.max(0, new Set(candidate.pnuList || []).size - (candidate.features?.length || 0)), 0);
 
             renderedParcelCandidateScope = parcelCandidateLayerScope(hydratedCandidates);
             renderParcelCandidateLayer(hydratedCandidates);
             parcelCandidateStatus = restoredCount
-                ? `저장된 필지 도형 ${restoredCount.toLocaleString()}개 복원 완료`
+                ? `저장된 필지 도형 ${restoredCount.toLocaleString()}개 복원${missingCount ? ` · ${missingCount}개 미조회` : ' 완료'}`
                 : '저장된 필지의 PNU는 확인했지만 도형을 찾지 못했습니다.';
-            onParcelCandidatesChange(hydratedCandidates, parcelCandidateStatus, candidateContextKey);
+            onParcelCandidatesChange(hydratedCandidates, parcelCandidateStatus, candidateContextKey,
+                { kind: 'restore', riskResultId: sourceRiskResultId });
         } catch (error) {
             if (parcelCandidateRunId !== runId) return;
             parcelCandidateStatus = error?.message === 'request-timeout'
@@ -1605,7 +1602,7 @@
             candidate.risk,
             candidate.featureTotal || candidate.featureLimit || candidate.features?.length || 0
         ].join(':')).join('|');
-        return `${candidateContextKey || 'default'}::${candidates.length}::${ids}`;
+        return `${candidateContextKey || 'default'}::${sourceRiskResultId}::${candidates.length}::${ids}`;
     }
 
     function syncParcelCandidateLayerFromProps() {
@@ -1619,7 +1616,7 @@
         renderParcelCandidateLayer(candidates);
 
         const needsHydration = candidates.some((candidate) =>
-            !(candidate.features || []).length && (candidate.pnuList || []).length && candidate.bounds
+            !(candidate.features || []).length && (candidate.pnuList || []).length
         );
         if (needsHydration && parcelCandidateHydrationScope !== nextScope) {
             parcelCandidateHydrationScope = nextScope;
@@ -1799,6 +1796,7 @@
         parcelCandidateRunning = true;
         parcelCandidateStatus = 'Hotspot 격자 준비 중';
         const runCandidateContextKey = candidateContextKey;
+        const runRiskResultId = sourceRiskResultId;
         const runId = ++parcelCandidateRunId;
 
         try {
@@ -1825,17 +1823,17 @@
                 });
             }
             const cadastralFeatures = fetchResult.features;
-            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
+            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey || sourceRiskResultId !== runRiskResultId) return;
             if (!cadastralFeatures.length) throw new Error('parcel-empty');
 
             parcelCandidateStatus = `${cadastralFeatures.length.toLocaleString()}필지 · 100m 셀 교차 분석 중`;
             await yieldToBrowser();
-            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
+            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey || sourceRiskResultId !== runRiskResultId) return;
             const parcelRecords = parcelScoreRecords(cadastralFeatures, hotspots);
             if (!parcelRecords.length) throw new Error('intersection-empty');
 
             await yieldToBrowser();
-            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
+            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey || sourceRiskResultId !== runRiskResultId) return;
             const sourceCandidates = clusterParcelRecords(parcelRecords).map((candidate) => candidateSource === 'vworld'
                 ? {
                     ...candidate,
@@ -1868,10 +1866,11 @@
                 ? `실천권역 내 ${candidates.length}개 실천지구 도출 · ${sourceLabel} ${parcelRecords.length.toLocaleString()}필지 교차 · 3개 유형 시연 분류${partialLabel}`
                 : '교차된 필지가 있으나 실천지구 기준을 충족하지 못했습니다.';
             parcelCandidateStatus = message;
-            onParcelCandidatesChange(slimCandidates, message, runCandidateContextKey);
+            onParcelCandidatesChange(slimCandidates, message, runCandidateContextKey,
+                { kind: 'derive', riskResultId: runRiskResultId });
             if (candidates.length) onParcelDerivationComplete(candidates, runCandidateContextKey);
         } catch (error) {
-            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey) return;
+            if (parcelCandidateRunId !== runId || candidateContextKey !== runCandidateContextKey || sourceRiskResultId !== runRiskResultId) return;
             console.error(error);
             const message = error?.message === 'parcel-empty'
                 ? '연속지적도에서 필지 geometry를 찾지 못했습니다.'
@@ -1889,7 +1888,8 @@
             // analysis. Keep the last valid candidates visible and only report
             // the failed refresh in the status area.
             if (!(parcelCandidates || []).length) {
-                onParcelCandidatesChange([], message, runCandidateContextKey);
+                onParcelCandidatesChange([], message, runCandidateContextKey,
+                    { kind: 'error', riskResultId: runRiskResultId });
             }
         } finally {
             if (parcelCandidateRunId === runId) parcelCandidateRunning = false;

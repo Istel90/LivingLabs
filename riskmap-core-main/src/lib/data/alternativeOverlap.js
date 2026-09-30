@@ -81,6 +81,9 @@ export function compareAlternatives(selected, mode = 'saved', percent = 10) {
         }
         const indicators = item.alternative.appliedIndicators || item.alternative.settings?.indicators || [];
         return { key: item.key, name: item.name, version: item.version, author: item.author, date: item.date,
+            alternativeId: item.alternative.alternativeId || null,
+            riskResultId: item.result.riskResultId || null,
+            districtResultId: item.result.districtResultId || null,
             threshold, selectedCells, validCells: cells.length, parcelCount: pnus.size,
             weights: item.alternative.settings?.dimensionWeights || null,
             indicators: indicators.filter(i => i.enabled !== false).map(i => ({ name: i.name || i.label || i.id, weight: i.weight })) };

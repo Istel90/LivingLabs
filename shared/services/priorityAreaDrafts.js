@@ -1,4 +1,5 @@
 import { getPlatformHandoffConfig } from './platformHandoffs.js';
+import { encodePriorityDraft, decodePriorityDraftRow } from './priorityDraftCodec.js';
 
 const AREA_SET_TABLE = 'priority_area_sets';
 const REGION_TABLE = 'regions';
@@ -69,7 +70,10 @@ export async function listPriorityAreaDrafts({ regionCode, hazardType, limit = 3
     throw new Error(`저장 이력 조회 실패 (${response.status})`);
   }
   const rows = await response.json();
-  return Array.isArray(rows) ? rows : [];
+  const decoded = [];
+  // Sequential decoding bounds memory while listing large saved snapshots.
+  for (const row of Array.isArray(rows) ? rows : []) decoded.push(await decodePriorityDraftRow(row));
+  return decoded;
 }
 
 export async function listRegionalPriorityAreaDrafts(hazardType, regionCode, deleted = false) {
@@ -94,6 +98,18 @@ export async function savePriorityAreaDraft({
   const { enabled } = getPlatformHandoffConfig();
   if (!enabled) throw new Error('Supabase 연결 설정이 없습니다.');
 
+  // A retry may follow a lost success response. Resolve it by ID before uploading the snapshot again.
+  const previous = await fetch(endpoint(AREA_SET_TABLE, {id:`eq.${requestId}`,select:'*'}), {
+    headers:requestHeaders(), cache:'no-store'
+  });
+  if (!previous.ok) throw new Error(`앞선 저장 결과를 확인하지 못했습니다 (${previous.status}). 다시 시도해 주세요.`);
+  const previousRows = await previous.json();
+  if (previousRows[0]) {
+    if (previousRows[0].deleted_at) throw new Error('이 저장본은 다른 곳에서 삭제되었습니다. 불러오기 목록을 새로고침하세요.');
+    return decodePriorityDraftRow(previousRows[0]);
+  }
+
+  const storedPayload = await encodePriorityDraft(draftPayload);
   await ensureRegion(regionCode, regionName);
   const savedAt = new Date().toISOString();
   const row = {
@@ -107,7 +123,7 @@ export async function savePriorityAreaDraft({
       schema: 'priority-area-supabase-draft/v1',
       actorUser: actorUser || null,
       savedAt,
-      draftPayload
+      draftPayload: storedPayload
     },
     status: 'draft',
     created_by_tool: 'priority_area_tool',
@@ -137,7 +153,7 @@ export async function savePriorityAreaDraft({
   const savedRows = await confirmed.json();
   if (!savedRows[0]) throw new Error('저장 결과가 없습니다. 다시 시도해 주세요.');
   if (savedRows[0].deleted_at) throw new Error('이 저장본은 다른 곳에서 삭제되었습니다. 불러오기 목록을 새로고침하세요.');
-  return savedRows[0];
+  return decodePriorityDraftRow(savedRows[0]);
 }
 
 // Compare-and-swap: never silently overwrite another browser's rename/delete.
@@ -155,7 +171,7 @@ export async function managePriorityAreaDraft(row, action, name) {
   if (!response.ok) throw new Error(`저장본 관리에 실패했습니다 (${response.status}).`);
   const rows = await response.json();
   if (!rows.length) throw new Error('다른 곳에서 이 저장본을 변경했습니다. 새로고침 후 다시 확인하세요.');
-  return rows[0];
+  return decodePriorityDraftRow(rows[0]);
 }
 
 export function draftPayloadFromRow(row) {

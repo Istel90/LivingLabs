@@ -1,11 +1,17 @@
 <script>
+    import { isGridValueCollection, gridValueCollectionSize, indicatorDataKey, loadIndicatorInputs as queryIndicatorInputs } from '$lib/priority/indicatorRepository.js';
+    import { openPriorityDraftDb, requestToPromise, readPriorityDraft, writePriorityDraft, clearPriorityDraftStore, PRIORITY_DRAFT_STORE_NAME, PRIORITY_DRAFT_SCHEMA_VERSION } from '$lib/priority/draftRepository.js';
+    import { alternativeStatusLabel, normalizeDraftAlternative, buildSupabaseDraftPayload } from '$lib/priority/alternativeRepository.js';
+    import { createDemoIndicatorValues, normalizeUploadedValues, normalizeProjection, summarizeCustomValues } from '$lib/priority/gridInput.js';
+    import { listUserIndicators, readUserIndicator, saveUserIndicator, connectUserIndicator, userIndicatorLibraryEnabled } from '$lib/priority/userIndicatorRepository.js';
     import { onDestroy, onMount } from 'svelte';
+    import { createResultId, normalizeAlternativeIdentity, identifyRiskResult, identifyDistrictResult, buildResultIndex } from '$lib/data/resultIdentity.js';
     import { base } from '$app/paths';
     import proj4 from 'proj4';
     import { leadDepartmentToolUrl, portalToolsUrl } from '$lib/portalLinks.js';
     import { createSectorConfigs, INDICATOR_GROUPS } from '$lib/priority/registry.js';
     import { requestRiskAnalysis, requestRegisteredRiskAnalysis } from '$lib/priority/riskClient.js';
-    import { configureRegisteredIndicators, indicatorRequestUrl } from '$lib/priority/indicatorData.js';
+    import { configureRegisteredIndicators } from '$lib/priority/indicatorData.js';
     import SelectedRegionMap from '$lib/maps/SelectedRegionMap.svelte';
     import AlternativeOverlap from './AlternativeOverlap.svelte';
     import { groupRegionalDrafts } from '$lib/data/regionalDraftGroups.js';
@@ -50,9 +56,6 @@
     const devResetSignalUrl = vworldProxyUrl
         ? new URL('/dev-reset', vworldProxyUrl).toString()
         : '';
-    const PRIORITY_DRAFT_DB_NAME = 'livinglabs-priority-management';
-    const PRIORITY_DRAFT_STORE_NAME = 'priority-management-sessions';
-    const PRIORITY_DRAFT_SCHEMA_VERSION = 'priority-management-draft/v2';
 
     const hazardConfigs = createSectorConfigs(asset);
 
@@ -61,9 +64,7 @@
         return configureRegisteredIndicators(sourceIndicators, code, { datasetMode, scenario: hazardScenario, period: hazardFuturePeriod });
     }
 
-    function isGridValueCollection(values) {
-        return Array.isArray(values) || ArrayBuffer.isView(values) || values instanceof Map;
-    }
+
 
     async function applyRegionalAvailability(source, code) {
         if (hazard !== 'flood') return source;
@@ -80,37 +81,9 @@
         }
     }
 
-    function gridValueCollectionSize(values) {
-        if (values instanceof Map) return values.size;
-        return Number(values?.length) || 0;
-    }
 
-    function decodeGridValues(grid, { preferDense = false } = {}) {
-        if (Array.isArray(grid?.values)) {
-            return { values: grid.values, validIndices: null };
-        }
-        if (grid?.valueEncoding !== 'sparse-index-value' || !Array.isArray(grid?.sparseValues)) {
-            return { values: null, validIndices: null };
-        }
 
-        const valueCount = Number(grid.valueCount) || (Number(grid.columns) * Number(grid.rows));
-        const useSparseMap = !preferDense && valueCount > 500_000;
-        const values = useSparseMap ? new Map() : new Float32Array(valueCount);
-        if (!useSparseMap) values.fill(Number.NaN);
-        const validIndices = new Array(Math.floor(grid.sparseValues.length / 2));
-        let validIndex = 0;
-        for (let offset = 0; offset < grid.sparseValues.length; offset += 2) {
-            const index = Number(grid.sparseValues[offset]);
-            const value = Number(grid.sparseValues[offset + 1]);
-            if (!Number.isInteger(index) || index < 0 || index >= valueCount || !Number.isFinite(value)) continue;
-            if (useSparseMap) values.set(index, value);
-            else values[index] = value;
-            validIndices[validIndex] = index;
-            validIndex += 1;
-        }
-        validIndices.length = validIndex;
-        return { values, validIndices };
-    }
+
 
     let activeStep = 0;
     let activeLayer = 'Risk';
@@ -323,53 +296,13 @@
         return `${PRIORITY_DRAFT_SCHEMA_VERSION}:${hazard}:${code || 'unknown'}`;
     }
 
-    function requestToPromise(request) {
-        return new Promise((resolve, reject) => {
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error || new Error('IndexedDB request failed'));
-        });
-    }
 
-    function openPriorityDraftDb() {
-        return new Promise((resolve, reject) => {
-            if (typeof indexedDB === 'undefined') {
-                reject(new Error('IndexedDB unavailable'));
-                return;
-            }
 
-            const request = indexedDB.open(PRIORITY_DRAFT_DB_NAME, 1);
-            request.onupgradeneeded = () => {
-                const db = request.result;
-                if (!db.objectStoreNames.contains(PRIORITY_DRAFT_STORE_NAME)) {
-                    db.createObjectStore(PRIORITY_DRAFT_STORE_NAME, { keyPath: 'id' });
-                }
-            };
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
-        });
-    }
 
-    async function readPriorityDraft() {
-        const db = await openPriorityDraftDb();
-        try {
-            const transaction = db.transaction(PRIORITY_DRAFT_STORE_NAME, 'readonly');
-            const store = transaction.objectStore(PRIORITY_DRAFT_STORE_NAME);
-            return await requestToPromise(store.get(priorityDraftKey()));
-        } finally {
-            db.close();
-        }
-    }
 
-    async function writePriorityDraft(payload) {
-        const db = await openPriorityDraftDb();
-        try {
-            const transaction = db.transaction(PRIORITY_DRAFT_STORE_NAME, 'readwrite');
-            const store = transaction.objectStore(PRIORITY_DRAFT_STORE_NAME);
-            await requestToPromise(store.put(JSON.parse(JSON.stringify(payload, analysisJsonReplacer))));
-        } finally {
-            db.close();
-        }
-    }
+
+
+
 
     function buildPriorityDraftPayload() {
         return {
@@ -398,40 +331,16 @@
             activeLayer,
             latestHandoffPackage,
             sentHandoffPackages,
-            alternatives
+            alternatives,
+            resultIndex: buildResultIndex(alternatives)
         };
     }
 
-    function alternativeStatusLabel(alternative) {
-        const currentStatus = alternative?.status || '검토중';
-        if (currentStatus === '선정' || currentStatus === '검토완료') return currentStatus;
 
-        const hasAnalysis = Boolean(alternative?.analysisDone && alternative?.analysisResult);
-        if (!hasAnalysis) return '검토중';
 
-        const hasParcelCandidates = Array.isArray(alternative?.analysisResult?.parcelCandidates)
-            && alternative.analysisResult.parcelCandidates.length > 0;
-        return hasParcelCandidates ? '분석완료' : '리스크분석완료';
-    }
 
-    function normalizeDraftAlternative(alternative, index) {
-        return {
-            ...alternative,
-            id: alternative?.id || `alternative-${index + 1}`,
-            status: alternativeStatusLabel(alternative),
-            settings: alternative?.settings || null,
-            analysisResult: alternative?.analysisResult || null,
-            appliedIndicators: Array.isArray(alternative?.appliedIndicators) ? alternative.appliedIndicators : [],
-            analysisDone: Boolean(alternative?.analysisDone && alternative?.analysisResult),
-            analysisMessage: alternative?.analysisMessage || null,
-            parcelCandidateMessage: alternative?.parcelCandidateMessage || null,
-            selectedCandidate: Number.isInteger(alternative?.selectedCandidate) ? alternative.selectedCandidate : 0,
-            detailCandidateKey: alternative?.detailCandidateKey || null,
-            activeLayer: alternative?.activeLayer || 'Risk'
-        };
-    }
 
-    function restorePriorityDraftPayload(draft) {
+    function restorePriorityDraftPayload(draft, savedRowId = null) {
         if (!draft || draft.schemaVersion !== PRIORITY_DRAFT_SCHEMA_VERSION) return false;
         if (draft.hazard !== hazard || draft.regionCode !== regionCode) return false;
         if (!Array.isArray(draft.alternatives)) return false;
@@ -446,7 +355,9 @@
         mapSource = draft.mapSource || mapSource;
         latestHandoffPackage = draft.latestHandoffPackage || null;
         sentHandoffPackages = Array.isArray(draft.sentHandoffPackages) ? draft.sentHandoffPackages : (latestHandoffPackage ? [latestHandoffPackage] : []);
-        alternatives = draft.alternatives.map(normalizeDraftAlternative);
+        const identityScope = savedRowId || draft.loadedDraftId || `${draft.id}:${draft.savedAt || 'legacy'}`;
+        alternatives = draft.alternatives.map((item, index) =>
+            normalizeAlternativeIdentity(normalizeDraftAlternative(item, index), identityScope));
         activeAlternative = Math.min(Math.max(0, Number(draft.activeAlternative) || 0), alternatives.length - 1);
         activeStep = Math.max(0, Number(draft.activeStep) || 0);
         loadAlternative(activeAlternative);
@@ -475,15 +386,7 @@
         draftSaveTimer = window.setTimeout(savePriorityDraft, 450);
     }
 
-    async function clearPriorityDraftStore() {
-        const db = await openPriorityDraftDb();
-        try {
-            const transaction = db.transaction(PRIORITY_DRAFT_STORE_NAME, 'readwrite');
-            await requestToPromise(transaction.objectStore(PRIORITY_DRAFT_STORE_NAME).clear());
-        } finally {
-            db.close();
-        }
-    }
+
 
     async function refreshSupabaseDrafts() {
         supabaseBusy = true;
@@ -526,7 +429,7 @@
         if (asCopy) pendingDraftSave = null;
         pendingDraftSave ||= {
             regionCode, regionName: region, hazardType: hazard, projectName, actorUser,
-            draftPayload: buildSupabaseDraftPayload(), parentId: asCopy ? null : loadedDraftId,
+            draftPayload: buildSupabaseDraftPayload(buildPriorityDraftPayload()), parentId: asCopy ? null : loadedDraftId,
             requestId: crypto.randomUUID()
         };
         try {
@@ -572,7 +475,7 @@
             window.location.assign(target);
             return;
         }
-        if (!restorePriorityDraftPayload(payload)) {
+        if (!restorePriorityDraftPayload(payload, row.id)) {
             supabaseStatus = '현재 지역·재해유형과 맞지 않는 저장본입니다.';
             return;
         }
@@ -679,7 +582,7 @@
         try {
             draftLoadComplete = true;
             if (resumeDraft) {
-                const restored = restorePriorityDraftPayload(await readPriorityDraft());
+                const restored = restorePriorityDraftPayload(await readPriorityDraft(priorityDraftKey()));
                 if (!restored) draftStorageStatus = '복원할 임시 저장이 없어 새 작업으로 시작합니다.';
             } else {
                 draftStorageStatus = '새 작업 세션 · 이전 초안 자동 복원 안 함';
@@ -694,7 +597,7 @@
         if (params.get('savedDraft')) {
             try {
                 const matches = await listPriorityAreaDrafts({ regionCode, hazardType: hazard, draftId: params.get('savedDraft'), limit: 1 });
-                if (!matches.length || !restorePriorityDraftPayload(draftPayloadFromRow(matches[0]))) throw new Error('해당 지역의 저장본을 불러오지 못했습니다.');
+                if (!matches.length || !restorePriorityDraftPayload(draftPayloadFromRow(matches[0]), matches[0].id)) throw new Error('해당 지역의 저장본을 불러오지 못했습니다.');
                 loadedDraftId = matches[0].id;
                 supabaseStatus = `${matches[0].analysis_version} 불러오기 완료 · ${region}`;
                 schedulePriorityDraftSave();
@@ -743,7 +646,11 @@
     });
 
     function cloneIndicatorsForAlternative(sourceIndicators = indicators) {
-        return sourceIndicators.map((item) => ({ ...item }));
+        return sourceIndicators.map((item) => {
+            if (!item.customDatasetId) return {...item};
+            const {gridValues, gridValidIndices, ...reference} = item;
+            return reference;
+        });
     }
 
     function currentAlternativeState(overrides = {}) {
@@ -784,6 +691,13 @@
         indicators = cloneIndicatorsForAlternative(alternative.settings?.indicators || config.indicators)
             .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
         analysisResult = alternative.analysisResult || null;
+        const settingsById = new Map(indicators.map(item => [item.id, item]));
+        loadedPreviewIndicators = (analysisResult?.indicators || loadedPreviewIndicators)
+            .filter(item => settingsById.has(item.id))
+            .map(item => ({...item, enabled:settingsById.get(item.id).enabled, weight:settingsById.get(item.id).weight}));
+        indicatorPreviewGrid = analysisResult?.gridResult
+            ? {...analysisResult.gridResult, preview:true}
+            : createIndicatorPreviewGrid(loadedPreviewIndicators);
         appliedIndicators = (alternative.appliedIndicators || []).map((item) => ({ ...item }));
         analysisDone = Boolean(alternative.analysisDone && analysisResult);
         analysisMessage = alternative.analysisMessage || '설정값을 확인한 뒤 Risk 분석을 실행하세요.';
@@ -837,16 +751,7 @@
         schedulePriorityDraftSave();
     }
 
-    function indicatorDataKey(item) {
-        return [
-            item.id,
-            item.dataPath || '',
-            item.populationIndicator || '',
-            item.indicatorCode || '',
-            item.floodIndicator || '',
-            item.analysisIndicator || ''
-        ].join('|');
-    }
+
 
     function mergePreviewInputs(...batches) {
         const currentById = new Map(indicators.map((item) => [item.id, item]));
@@ -867,91 +772,13 @@
 
 
 
-    async function loadIndicatorInputs(sourceIndicators, cachedIndicators = [], { preferDense = false } = {}) {
-        const cachedByKey = new Map(
-            cachedIndicators
-                .filter((item) => isGridValueCollection(item.gridValues))
-                .map((item) => [indicatorDataKey(item), item])
-        );
-        let loaded = await Promise.all(sourceIndicators.map(async (item) => {
-            if (!usableIndicator(item) || !item.dataPath) return item;
 
-            const cached = cachedByKey.get(indicatorDataKey(item));
-            if (cached) {
-                return {
-                    ...cached,
-                    ...item,
-                    gridValues: cached.gridValues,
-                    gridValidIndices: cached.gridValidIndices,
-                    gridMeta: cached.gridMeta,
-                    gridSummary: cached.gridSummary,
-                    loadedValue: cached.loadedValue,
-                    loadError: null
-                };
-            }
 
-            try {
-                const dataUrl = indicatorRequestUrl(item, { regionCode, asset });
-                const response = await fetch(dataUrl, { signal: AbortSignal.timeout(120000) });
-                if (!response.ok) throw new Error(`자료 요청 실패 (HTTP ${response.status})`);
-                const grid = await response.json();
-                const decodedGrid = decodeGridValues(grid, { preferDense });
-                const mean = grid?.stats?.normalizedMean ?? grid?.stats?.mean;
-                const loadedValue = mean == null ? Number.NaN : Number(mean);
-                if (!Number.isFinite(loadedValue) || !(Number(grid?.stats?.validCells) > 0)) {
-                    throw new Error('이 지역에 유효한 원자료가 없습니다');
-                }
 
-                return {
-                    ...item,
-                    loadedValue,
-                    loadError: null,
-                    geojson: grid.pointFeatureCollection || item.geojson,
-                    gridValues: decodedGrid.values,
-                    gridValidIndices: decodedGrid.validIndices,
-                    gridMeta: {
-                        gridUnit: grid.gridUnit,
-                        rows: grid.rows,
-                        columns: grid.columns,
-                        extent: grid.extent,
-                        transform: grid.transform,
-                        crs: grid.crs
-                    },
-                    gridSummary: {
-                        gridUnit: grid.gridUnit,
-                        rows: grid.rows,
-                        columns: grid.columns,
-                        validCells: grid.stats?.validCells,
-                        rawMean: grid.stats?.rawMean,
-                        rawUnit: grid.rawUnit || grid.unit || '',
-                        normalizationSourceRange: grid.normalizationSourceRange,
-                        normalizationMethod: grid.normalizationMethod,
-                        normalizedMean: grid.stats?.normalizedMean ?? grid.stats?.mean,
-                        sourceResolution: grid.sourceResolution,
-                        rawMin: grid.stats?.rawMin,
-                        rawMax: grid.stats?.rawMax,
-                        qualityStatus: grid.qualityStatus,
-                        method: grid.method,
-                        assumptions: grid.assumptions,
-                        pointFeatureCount: grid.pointFeatureCount || 0
-                    }
-                };
-            } catch (error) {
-                return {
-                    ...item,
-                    gridValues: null,
-                    gridValidIndices: null,
-                    loadedValue: null,
-                    loadError: `${item.label}: ${error.name === 'TimeoutError' ? '자료 요청 시간이 초과되었습니다' : error.message}`
-                };
-            }
-        }));
-
-        const loadedGrid = loaded.find((item) => item.gridSummary && !item.loadError);
-        mapSource = loadedGrid
-            ? `${config.rasterReadyPrefix} · ${loadedGrid.gridSummary.columns}×${loadedGrid.gridSummary.rows} · 평균 ${loadedGrid.gridSummary.rawMean}${loadedGrid.gridSummary.rawUnit}`
-            : config.mapSource;
-
+    async function loadIndicatorInputs(sourceIndicators, cachedIndicators = [], options = {}) {
+        const loaded = await queryIndicatorInputs(sourceIndicators, cachedIndicators, {...options, regionCode, asset, usableIndicator});
+        const loadedGrid = loaded.find(item => item.gridSummary && !item.loadError);
+        mapSource = loadedGrid ? `${config.rasterReadyPrefix} · ${loadedGrid.gridSummary.columns}×${loadedGrid.gridSummary.rows}` : config.mapSource;
         return loaded;
     }
 
@@ -966,6 +793,11 @@
         );
         const reference = previewItems[0];
         if (!reference) return null;
+        let previewValues = reference.gridValues;
+        if (previewValues instanceof Map) {
+            previewValues = new Float32Array(Number(reference.gridMeta.columns) * Number(reference.gridMeta.rows)).fill(NaN);
+            reference.gridValues.forEach((value, index) => { previewValues[index] = value; });
+        }
         const hasSparseIndices = previewItems.every((item) =>
             Array.isArray(item.gridValidIndices) && item.gridValidIndices.length
         );
@@ -981,12 +813,13 @@
             extent: reference.gridMeta.extent,
             transform: reference.gridMeta.transform,
             crs: reference.gridMeta.crs,
-            values: reference.gridValues,
+            values: previewValues,
             validIndices
         };
     }
 
     function isIndicatorAvailable(item) {
+        if (item.custom && item.regionCode && item.regionCode !== regionCode) return false;
         return ['available', 'partial'].includes(item.dataStatus) && (!item.supportedGridUnits || item.supportedGridUnits.includes(gridUnit));
     }
 
@@ -1149,8 +982,9 @@
     }
 
     async function refreshHazardDataset(message) {
-        indicators = configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
-            .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) }));
+        const customIndicators = indicators.filter(item => item.custom);
+        indicators = [...configureIndicatorsForRegion(config.indicators, regionCode, hazardDatasetMode)
+            .map((item) => ({ ...item, enabled: item.enabled && isIndicatorAvailable(item) })), ...customIndicators];
         indicators = await applyRegionalAvailability(indicators, regionCode);
         loadedPreviewIndicators = await loadIndicatorInputs(initialPreviewTargets(indicators), [], { preferDense: true });
         indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
@@ -1282,7 +1116,7 @@
         try {
             let result;
             const selected = snapshot.filter(usableIndicator);
-            if (selected.every(item => item.registryId && item.dataSourceId)) {
+            if (selected.every(item => item.customDatasetId ? userIndicatorLibraryEnabled : (item.registryId && item.dataSourceId))) {
                 result = await requestRegisteredRiskAnalysis(selected, {
                     sector: hazard, regionCode, mode: hazardDatasetMode,
                     scenario: hazardScenario, period: hazardFuturePeriod,
@@ -1309,6 +1143,11 @@
             result = await requestRiskAnalysis(enrichedSnapshot.filter(usableIndicator), { gridUnit: runGridUnit, dimensionWeights: runDimensionWeights, nationalLab });
             if (runId !== analysisRunId) return;
             }
+            result = identifyRiskResult(result, alternatives[analysisAlternativeIndex], {
+                sector: hazard, regionCode, gridUnit: runGridUnit,
+                dimensionWeights: { ...runDimensionWeights },
+                mode: hazardDatasetMode, scenario: hazardScenario, period: hazardFuturePeriod,
+            });
             const validCells = result.gridResult?.stats?.validCells;
             const riskModeLabel = result.hazardOnly ? 'H 기반 예비 Risk' : 'H/E/V 종합 Risk';
             const usesDemoFallback = result.indicators.some((item) => item.demoFallback);
@@ -1366,7 +1205,7 @@
         }
     }
 
-    function handleParcelCandidates(candidates, message, sourceAlternativeId = activeAlternativeId) {
+    function handleParcelCandidates(candidates, message, sourceAlternativeId = activeAlternativeId, event = {}) {
         const nextCandidates = enrichPracticeDistricts(Array.isArray(candidates) ? candidates : [], hazard);
         const nextMessage = message || (nextCandidates.length
             ? `실천권역 내 ${nextCandidates.length}개 유형별 실천지구 도출`
@@ -1379,8 +1218,11 @@
             ? analysisResult
             : targetAlternative?.analysisResult;
         if (!targetAnalysisResult) return;
+        if (event.riskResultId && event.riskResultId !== targetAnalysisResult.riskResultId) return;
+        if (event.kind === 'error') return;
 
-        const nextAnalysisResult = {
+        const nextAnalysisResult = event.kind === 'derive'
+            ? identifyDistrictResult(targetAnalysisResult, nextCandidates) : {
             ...targetAnalysisResult,
             parcelCandidates: nextCandidates
         };
@@ -1427,47 +1269,11 @@
         selectedRegionMap?.focusCandidate?.(focusedCandidate);
     }
 
-    function compactCandidateForSupabase(candidate) {
-        if (!candidate) return candidate;
-        const { features, ...compactCandidate } = candidate;
-        return compactCandidate;
-    }
 
-    function compactAnalysisResultForSupabase(result) {
-        if (!result) return null;
-        const grid = result.gridResult;
-        return {
-            ...result,
-            gridResult: grid ? {
-                ...grid,
-                hValues: undefined,
-                eValues: undefined,
-                sensitivityValues: undefined,
-                adaptiveCapacityValues: undefined,
-                vValues: undefined
-            } : null,
-            parcelCandidates: (result.parcelCandidates || []).map(compactCandidateForSupabase)
-        };
-    }
 
-    function buildSupabaseDraftPayload() {
-        const fullPayload = buildPriorityDraftPayload();
-        return JSON.parse(JSON.stringify({
-            ...fullPayload,
-            analysisResult: undefined,
-            indicators: undefined,
-            appliedIndicators: undefined,
-            alternatives: fullPayload.alternatives.map((alternative) => ({
-                ...alternative,
-                analysisResult: compactAnalysisResultForSupabase(alternative.analysisResult),
-                appliedIndicators: (alternative.appliedIndicators || []).map(stripIndicatorForResult),
-                settings: alternative.settings ? {
-                    ...alternative.settings,
-                    indicators: (alternative.settings.indicators || []).map(stripIndicatorForResult)
-                } : null
-            }))
-        }, analysisJsonReplacer));
-    }
+
+
+
 
     function createDefaultAlternative(index = 0) {
         const configured = config.alternatives[index] || {
@@ -1478,6 +1284,7 @@
         return {
             ...configured,
             id: `alternative-${Date.now()}-${index}`,
+            alternativeId: createResultId('alternative'),
             settings: null,
             analysisResult: null,
             appliedIndicators: [],
@@ -1557,6 +1364,13 @@
         return {
             id: candidate.id || `${alternative.id}-candidate-${candidate.rank}`,
             alternativeId: alternative.id,
+            resultReferences: {
+                alternativeId: alternative.alternativeId,
+                riskResultId: alternative.analysisResult?.riskResultId || null,
+                districtResultId: candidate.districtResultId || null,
+                districtId: candidate.districtId || null,
+                parcelDatasetVersion: candidate.parcelDatasetVersion || null,
+            },
             alternativeName: alternative.name,
             alternativeStatus: alternative.status,
             alternativeIndex: alternativeIndex + 1,
@@ -1598,6 +1412,11 @@
             const riskValues = candidateBundles.map((candidate) => Number(candidate.scores?.risk ?? candidate.risk)).filter(Number.isFinite);
             return {
                 id: alternative.id,
+                resultReferences: {
+                    alternativeId: alternative.alternativeId,
+                    riskResultId: alternative.analysisResult?.riskResultId || null,
+                    districtResultId: alternative.analysisResult?.districtResultId || null,
+                },
                 name: alternative.name,
                 status: alternative.status,
                 description: alternative.description,
@@ -1980,6 +1799,46 @@
         handoffNote = '';
     }
 
+    let userIndicatorLibrary = [];
+    let userIndicatorLibraryError = '';
+    let userIndicatorLibraryLoading = false;
+
+    async function refreshUserIndicatorLibrary() {
+        if (!userIndicatorLibraryEnabled) return;
+        userIndicatorLibraryLoading = true;
+        userIndicatorLibraryError = '';
+        try { userIndicatorLibrary = await listUserIndicators(regionCode); }
+        catch (error) { userIndicatorLibraryError = error.message; }
+        finally { userIndicatorLibraryLoading = false; }
+    }
+
+    function attachUserIndicator(item) {
+        if (indicators.some(value => value.id === item.id)) throw new Error('현재 대안에 이미 연결된 지표입니다.');
+        indicators = [...indicators, item];
+        loadedPreviewIndicators = [...loadedPreviewIndicators, item];
+        indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
+        activeLayer = item.dimension;
+        markAnalysisDirty(`${item.label} 지표를 현재 대안에 연결했습니다.`);
+    }
+
+    async function attachSavedUserIndicator(id) {
+        if (!indicatorDialog || indicatorDialog.processing) return;
+        indicatorDialog = {...indicatorDialog, processing:true, error:''};
+        try {
+            const record = await readUserIndicator(id);
+            if (record.regionCode !== regionCode) throw new Error('현재 지역과 지표의 지역이 다릅니다.');
+            attachUserIndicator(connectUserIndicator(record, indicatorGroupMeta));
+            indicatorDialog = null;
+        } catch (error) { indicatorDialog = {...indicatorDialog, processing:false, error:error.message}; }
+    }
+
+    function detachUserIndicator(id) {
+        indicators = indicators.filter(item => item.id !== id);
+        loadedPreviewIndicators = loadedPreviewIndicators.filter(item => item.id !== id);
+        indicatorPreviewGrid = createIndicatorPreviewGrid(loadedPreviewIndicators);
+        markAnalysisDirty('현재 대안에서 지표 연결을 해제했습니다. 보관된 지표는 유지됩니다.');
+    }
+
     function openIndicatorDialog() {
         indicatorDialog = {
             label: '시연용 생활인구 밀도',
@@ -1995,9 +1854,11 @@
             processing: false,
             error: ''
         };
+        void refreshUserIndicatorLibrary();
     }
 
     function closeIndicatorDialog() {
+        if (indicatorDialog?.processing) return;
         indicatorDialog = null;
     }
 
@@ -2010,72 +1871,26 @@
         };
     }
 
-    function demoNoise(column, row) {
-        const value = Math.sin((column + 3) * 12.9898 + (row + 7) * 78.233) * 43758.5453;
-        return value - Math.floor(value);
-    }
 
-    function createDemoIndicatorValues(pattern) {
-        if (!indicatorPreviewGrid?.values?.length) return null;
-        const { columns, rows } = indicatorPreviewGrid;
-        return indicatorPreviewGrid.values.map((referenceValue, index) => {
-            if (!Number.isFinite(Number(referenceValue))) return null;
-            const column = index % columns;
-            const row = Math.floor(index / columns);
-            const x = columns > 1 ? column / (columns - 1) : 0.5;
-            const y = rows > 1 ? row / (rows - 1) : 0.5;
-            const noise = demoNoise(column, row);
-            let score;
-            if (pattern === 'southwest') {
-                score = Math.exp(-(((x - 0.3) ** 2) / 0.055 + ((y - 0.72) ** 2) / 0.08));
-            } else if (pattern === 'corridor') {
-                score = Math.exp(-((y - (0.78 - x * 0.52)) ** 2) / 0.018) * (0.55 + 0.45 * Math.sin(x * Math.PI));
-            } else if (pattern === 'distributed') {
-                score = 0.22 + (0.48 * noise) + (0.22 * Math.sin(x * Math.PI * 3) * Math.cos(y * Math.PI * 2));
-            } else {
-                score = Math.exp(-(((x - 0.52) ** 2) / 0.07 + ((y - 0.47) ** 2) / 0.06));
-            }
-            return clamp01((score * 0.84) + (noise * 0.16));
-        });
-    }
 
-    function normalizeUploadedValues(rawValues) {
-        if (!indicatorPreviewGrid?.values?.length) throw new Error('기준 100m 격자가 아직 준비되지 않았습니다.');
-        if (!Array.isArray(rawValues) || rawValues.length !== indicatorPreviewGrid.values.length) {
-            throw new Error(`JSON 값 개수는 현재 격자 ${indicatorPreviewGrid.values.length.toLocaleString()}개와 같아야 합니다.`);
-        }
-        const numericValues = rawValues.map((value) => value === null ? null : Number(value));
-        const finiteValues = numericValues.filter(Number.isFinite);
-        if (!finiteValues.length) throw new Error('JSON에서 사용할 수 있는 숫자를 찾지 못했습니다.');
-        const minimum = finiteValues.reduce((result, value) => Math.min(result, value), Infinity);
-        const maximum = finiteValues.reduce((result, value) => Math.max(result, value), -Infinity);
-        const needsNormalization = minimum < 0 || maximum > 1;
-        const range = maximum - minimum;
-        return numericValues.map((value, index) => {
-            if (!Number.isFinite(value) || !Number.isFinite(Number(indicatorPreviewGrid.values[index]))) return null;
-            return needsNormalization ? clamp01(range ? (value - minimum) / range : 0.5) : clamp01(value);
-        });
-    }
+
+
+
 
     async function readIndicatorGridFile(event) {
         const file = event.currentTarget.files?.[0];
         if (!file) return;
         try {
+            if (file.size > 64 * 1024 * 1024) throw new Error('JSON은 64MB 이하 파일을 사용하세요.');
             const payload = JSON.parse(await file.text());
-            const values = normalizeUploadedValues(Array.isArray(payload) ? payload : payload?.values);
+            const values = normalizeUploadedValues(Array.isArray(payload) ? payload : payload?.values, indicatorPreviewGrid);
             indicatorDialog = { ...indicatorDialog, fileName: file.name, uploadedValues: values, error: '' };
         } catch (error) {
             indicatorDialog = { ...indicatorDialog, fileName: file.name, uploadedValues: null, error: error.message || 'JSON 파일을 읽지 못했습니다.' };
         }
     }
 
-    function normalizeProjection(projection) {
-        if (typeof projection === 'number') return `EPSG:${projection}`;
-        const text = String(projection || '').trim();
-        if (!text) return '';
-        if (/^\d+$/.test(text)) return `EPSG:${text}`;
-        return text.toUpperCase().startsWith('EPSG:') ? text.toUpperCase() : text;
-    }
+
 
     async function readIndicatorGeoTiff(event) {
         const file = event.currentTarget.files?.[0];
@@ -2086,23 +1901,28 @@
         }
         indicatorDialog = { ...indicatorDialog, fileName: file.name, uploadedValues: null, uploadedMeta: null, processing: true, error: '' };
         try {
+            const referenceGrid = indicatorPreviewGrid;
+            if (!referenceGrid?.values?.length) throw new Error('기준 100m 격자가 아직 준비되지 않았습니다. 지역 데이터를 불러온 뒤 다시 시도하세요.');
             const { default: parseGeoraster } = await import('georaster');
             proj4.defs('EPSG:5179', '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs');
             proj4.defs('EPSG:5186', '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs');
             const raster = await parseGeoraster(await file.arrayBuffer());
             const sourceProjection = normalizeProjection(raster.projection);
             if (!sourceProjection) throw new Error('GeoTIFF 좌표계 정보를 찾지 못했습니다. EPSG 코드가 포함된 파일을 사용해 주세요.');
+            if (sourceProjection !== 'EPSG:5179' || Math.abs(raster.pixelWidth) !== 100 || Math.abs(raster.pixelHeight) !== 100 || (raster.numberOfRasters || raster.values?.length) !== 1) throw new Error('EPSG:5179 · 100m · 단일 밴드로 전처리한 GeoTIFF를 사용하세요.');
+            const aligned = value => Math.abs(value - Math.round(value)) < 1e-6;
+            if (!aligned((raster.xmin - 745900) / 100) || !aligned((raster.ymax - 2068600) / 100)) throw new Error('전국 기준 격자에 정렬된 GeoTIFF를 사용하세요.');
             const sourceBand = raster.values?.[0];
             if (!sourceBand?.length || !raster.width || !raster.height) throw new Error('첫 번째 밴드의 래스터 값을 읽지 못했습니다.');
-            const targetProjection = indicatorPreviewGrid.crs || 'EPSG:5179';
+            const targetProjection = referenceGrid.crs || 'EPSG:5179';
             const sameProjection = normalizeProjection(targetProjection) === sourceProjection;
             const noDataValue = raster.noDataValue;
-            const rawValues = indicatorPreviewGrid.values.map((maskValue, index) => {
-                if (!Number.isFinite(Number(maskValue))) return null;
-                const column = index % indicatorPreviewGrid.columns;
-                const row = Math.floor(index / indicatorPreviewGrid.columns);
-                const targetX = indicatorPreviewGrid.transform.originX + ((column + 0.5) * indicatorPreviewGrid.transform.pixelWidth);
-                const targetY = indicatorPreviewGrid.transform.originY - ((row + 0.5) * indicatorPreviewGrid.transform.pixelHeight);
+            const rawValues = Array.from(referenceGrid.values, (maskValue, index) => {
+                if (maskValue == null || !Number.isFinite(Number(maskValue))) return null;
+                const column = index % referenceGrid.columns;
+                const row = Math.floor(index / referenceGrid.columns);
+                const targetX = referenceGrid.transform.originX + ((column + 0.5) * referenceGrid.transform.pixelWidth);
+                const targetY = referenceGrid.transform.originY - ((row + 0.5) * referenceGrid.transform.pixelHeight);
                 const [sourceX, sourceY] = sameProjection
                     ? [targetX, targetY]
                     : proj4(targetProjection, sourceProjection, [targetX, targetY]);
@@ -2115,7 +1935,7 @@
             });
             const validCount = rawValues.filter(Number.isFinite).length;
             if (!validCount) throw new Error(`업로드 파일이 ${region} 기준 격자와 겹치지 않습니다. 좌표계와 위치를 확인해 주세요.`);
-            const values = normalizeUploadedValues(rawValues);
+            const values = normalizeUploadedValues(rawValues, referenceGrid);
             indicatorDialog = {
                 ...indicatorDialog,
                 fileName: file.name,
@@ -2135,18 +1955,14 @@
         }
     }
 
-    function summarizeCustomValues(values) {
-        const finiteValues = values.filter(Number.isFinite);
-        if (!finiteValues.length) return 0.5;
-        return finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length;
-    }
 
-    function addIndicator() {
+
+    async function addIndicator() {
         if (!indicatorDialog || !indicatorPreviewGrid) return;
         const meta = indicatorGroupMeta[indicatorDialog.group];
         const gridValues = ['json', 'geotiff'].includes(indicatorDialog.dataMode)
             ? indicatorDialog.uploadedValues
-            : createDemoIndicatorValues(indicatorDialog.pattern);
+            : createDemoIndicatorValues(indicatorDialog.pattern, indicatorPreviewGrid);
         if (!gridValues) {
             indicatorDialog = { ...indicatorDialog, error: '먼저 사용할 격자 데이터를 준비해 주세요.' };
             return;
@@ -2180,11 +1996,13 @@
             regionCode,
             custom: true
         };
-        indicators = [...indicators, item];
-        loadedPreviewIndicators = [...loadedPreviewIndicators, item];
-        activeLayer = meta.dimension;
-        markAnalysisDirty(`${item.label} 지표가 ${item.group}에 추가되었습니다. 지도에서 확인한 뒤 Risk 분석을 실행하세요.`);
-        closeIndicatorDialog();
+        indicatorDialog = {...indicatorDialog, processing:true, error:''};
+        try {
+            const record = await saveUserIndicator(item);
+            const linked = connectUserIndicator(record, indicatorGroupMeta, item.weight);
+            attachUserIndicator({...linked, gridValues:item.gridValues});
+            indicatorDialog = null;
+        } catch (error) { indicatorDialog = {...indicatorDialog, processing:false, error:error.message}; }
     }
 
     function addAlternative() {
@@ -2201,10 +2019,11 @@
             status: '검토중',
             description: '새 기후적응실천권역 대안',
             id: `alternative-${Date.now()}`,
+            alternativeId: createResultId('alternative'),
             settings: {
                 gridUnit,
                 dimensionWeights: { ...dimensionWeights },
-                indicators: cloneIndicatorsForAlternative(indicators)
+                indicators: cloneIndicatorsForAlternative(indicators.filter(item => !item.custom))
             },
             analysisResult: null,
             appliedIndicators: [],
@@ -2307,6 +2126,7 @@
     }
 
     function downloadConfig() {
+        persistAlternative(activeAlternative);
         const payload = {
             projectName,
             region,
@@ -2320,6 +2140,7 @@
             indicators,
             analysisResult,
             alternatives,
+            resultIndex: buildResultIndex(alternatives),
             decidedAlternative
         };
         const blob = new Blob([JSON.stringify(payload, analysisJsonReplacer, 2)], { type: 'application/json' });
@@ -2557,6 +2378,7 @@
                                         <span class="indicator-name-row"><strong>{item.label}</strong><button type="button" class="info-toggle" class:active={expandedDescriptions[item.id]} aria-expanded={!!expandedDescriptions[item.id]} aria-label={`${item.label} 설명 ${expandedDescriptions[item.id] ? '닫기' : '보기'}`} onclick={() => toggleIndicatorDescription(item.id)}>ⓘ</button></span>
                                         <span class="indicator-description-wrap" class:open={expandedDescriptions[item.id]}><span>{indicatorStatusText(item)} · {item.description}</span></span>
                                     </div>
+                                    {#if item.custom}<button type="button" class="info-toggle" aria-label={`${item.label} 연결 해제`} onclick={() => detachUserIndicator(item.id)}>×</button>{/if}
                                     <div class="dimension-tag" title={item.group === '적응역량' ? '값이 높을수록 위험도가 낮아집니다' : '값이 높을수록 위험도가 높아집니다'}>{item.dimension}{item.group === '적응역량' ? '-' : '+'}</div>
                                     <div class="weight">가중치<div class="weight-stepper"><button type="button" class="weight-stepper-btn" aria-label={`${item.label} 가중치 감소`} disabled={item.weight <= 0} onclick={() => adjustIndicatorWeight(item.id, -0.1)}>−</button><span class="weight-stepper-value">{Number(item.weight).toFixed(1)}</span><button type="button" class="weight-stepper-btn" aria-label={`${item.label} 가중치 증가`} disabled={item.weight >= 3} onclick={() => adjustIndicatorWeight(item.id, 0.1)}>+</button></div></div>
                                 </div>
@@ -2727,6 +2549,7 @@
                                 showAnalysisLegend={true}
                                 parcelCandidates={analysisResult?.parcelCandidates || []}
                                 candidateContextKey={activeAlternativeId}
+                                sourceRiskResultId={analysisResult?.riskResultId || ''}
                                 {mapResetKey}
                                 {focusedCandidate}
                                 onParcelCandidatesChange={handleParcelCandidates}
@@ -2755,7 +2578,30 @@
                 <button type="button" class="indicator-modal-close" aria-label="닫기" onclick={closeIndicatorDialog}>×</button>
             </header>
 
+            {#if !userIndicatorLibraryEnabled}
+                <div class="indicator-data-box">
+                    <p>사용자 지표 등록·연결은 개발 사이트에서 이용할 수 있습니다.</p>
+                    <p>이 사이트에서는 저장된 대안의 결과를 불러오고, 함께 저장된 지표 값으로 다시 분석할 수 있습니다.</p>
+                </div>
+                <footer><button type="button" class="indicator-cancel-button" onclick={closeIndicatorDialog}>닫기</button></footer>
+            {:else}
             <div class="indicator-modal-grid">
+                <div class="indicator-wide-field indicator-library">
+                    <strong>보관된 사용자 지표</strong>
+                    <p>이 개발 서버에 보관된 {region} 지표입니다. 현재 대안에만 연결합니다.</p>
+                    <button type="button" onclick={refreshUserIndicatorLibrary} disabled={userIndicatorLibraryLoading}>목록 새로고침</button>
+                    {#if userIndicatorLibraryError}<p class="indicator-modal-error">{userIndicatorLibraryError}</p>{/if}
+                    {#if userIndicatorLibraryLoading}<p>지표 목록을 불러오는 중입니다.</p>{/if}
+                    <div class="indicator-library-list">
+                    {#each userIndicatorLibrary as stored}
+                        <div class="indicator-library-row">
+                            <span>{stored.label} · {stored.group}</span>
+                            <button type="button" onclick={() => attachSavedUserIndicator(stored.id)} disabled={indicatorDialog.processing || indicators.some(item => item.id === stored.id)}>{indicators.some(item => item.id === stored.id) ? '연결됨' : '현재 대안에 연결'}</button>
+                        </div>
+                    {/each}
+                    </div>
+                    {#if !userIndicatorLibraryLoading && !userIndicatorLibraryError && !userIndicatorLibrary.length}<p>보관된 사용자 지표가 없습니다.</p>{/if}
+                </div>
                 <label class="indicator-wide-field">지표 이름
                     <input bind:value={indicatorDialog.label} placeholder="예: 취약계층 이용시설 밀도" />
                 </label>
@@ -2804,13 +2650,13 @@
                     </div>
                 {:else if indicatorDialog.dataMode === 'geotiff'}
                     <div class="indicator-data-heading">
-                        <div><strong>GeoTIFF 실제 레이어 업로드</strong><span>첫 번째 밴드를 읽어 현재 {region} 100m 격자로 자동 변환합니다.</span></div>
+                        <div><strong>GeoTIFF 실제 레이어 업로드</strong><span>전처리된 격자에서 현재 {region}의 값을 읽습니다.</span></div>
                         <span class:ready={Boolean(indicatorDialog.uploadedValues)} class="indicator-demo-badge">{indicatorDialog.processing ? 'READING' : indicatorDialog.uploadedValues ? 'READY' : 'TIF'}</span>
                     </div>
                     <label class="indicator-file-drop">
                         <input type="file" accept=".tif,.tiff,image/tiff,image/geotiff" onchange={readIndicatorGeoTiff} disabled={indicatorDialog.processing} />
-                        <strong>{indicatorDialog.processing ? 'GeoTIFF를 읽고 격자를 변환하는 중…' : indicatorDialog.fileName || 'TIF / TIFF 파일 선택'}</strong>
-                        <span>EPSG:5179·5186·4326 및 좌표계 정의가 포함된 GeoTIFF · 최대 250MB</span>
+                        <strong>{indicatorDialog.processing ? 'GeoTIFF 기준과 지역 격자를 확인하는 중…' : indicatorDialog.fileName || 'TIF / TIFF 파일 선택'}</strong>
+                        <span>EPSG:5179 · 100m · 단일 밴드 · 전국 기준 격자 정렬 · 최대 250MB</span>
                     </label>
                     {#if indicatorDialog.uploadedMeta}
                         <div class="indicator-file-meta">
@@ -2845,9 +2691,10 @@
             <footer>
                 <button type="button" class="indicator-cancel-button" onclick={closeIndicatorDialog}>취소</button>
                 <button type="button" class="indicator-submit-button" onclick={addIndicator} disabled={!indicatorPreviewGrid || !indicatorDialog.label.trim() || indicatorDialog.processing || (['json', 'geotiff'].includes(indicatorDialog.dataMode) && !indicatorDialog.uploadedValues)}>
-                    지도에 추가
+                    {indicatorDialog.processing ? '저장 중…' : '보관 후 현재 대안에 연결'}
                 </button>
             </footer>
+            {/if}
         </section>
     </div>
 {/if}

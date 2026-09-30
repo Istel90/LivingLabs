@@ -3,7 +3,7 @@ import { configureRegisteredIndicators } from '../src/lib/priority/indicatorData
 import { decodeGridValues, cropStaticGridToRegion } from './grid-preparation.mjs';
 
 const fail = message => { throw Object.assign(new Error(message), { status: 400 }); };
-export async function prepareRegisteredRisk(request, loadDataset) {
+export async function prepareRegisteredRisk(request, loadDataset, loadUserDataset) {
     const configs = createSectorConfigs();
     if (!Object.hasOwn(configs, request.sector) || !/^\d{5}$/.test(request.regionCode || '')) fail('부문 또는 지역 코드가 올바르지 않습니다.');
     if (request.gridUnit !== '100m' || typeof request.nationalLab !== 'boolean') fail('지원하지 않는 분석 설정입니다.');
@@ -13,6 +13,11 @@ export async function prepareRegisteredRisk(request, loadDataset) {
     const configured = configureRegisteredIndicators(configs[request.sector].indicators, request.regionCode, {datasetMode:request.mode, scenario:request.scenario, period:request.period});
     const seen = new Set();
     const selected = request.indicators.map(selection => {
+        if (selection?.customDatasetId) {
+            if (!loadUserDataset || !/^user-[0-9a-f-]{36}$/.test(selection.customDatasetId) || selection.datasetVersion !== 1 || seen.has(selection.customDatasetId) || !Number.isFinite(selection.weight) || selection.weight < 0 || selection.weight > 1000000) fail('사용자 지표 선택 또는 버전을 확인하세요.');
+            seen.add(selection.customDatasetId);
+            return {...selection, custom:true};
+        }
         const definition = configured.find(i=>i.registryId === selection?.indicatorId);
         if (!definition?.dataSourceId || !['available','partial'].includes(definition.dataStatus) || seen.has(selection.indicatorId)) fail('해당 부문에 사용 가능한 지표가 없거나 중복되었습니다.');
         if (!Number.isFinite(selection.weight) || selection.weight < 0 || selection.weight > 1_000_000) fail('지표 가중치가 올바르지 않습니다.');
@@ -22,6 +27,15 @@ export async function prepareRegisteredRisk(request, loadDataset) {
     let loaded = [];
     // Sequential loading bounds simultaneous dataset memory and database pressure.
     for (const item of selected) {
+        if (item.customDatasetId) {
+            const record = await loadUserDataset(item.customDatasetId);
+            if (record.regionCode !== request.regionCode || record.version !== item.datasetVersion) fail('사용자 지표의 지역 또는 버전이 맞지 않습니다.');
+            const mean = record.entries.reduce((sum, pair) => sum + pair[1], 0) / record.entries.length;
+            loaded.push({...record, entries:undefined, ...item, id:record.id, enabled:true, dataStatus:'available',
+                direction:record.group === '적응역량' ? 'negative' : 'positive',
+                gridValues:new Map(record.entries), gridValidIndices:null, loadedValue:mean, loadError:null});
+            continue;
+        }
         const grid = await loadDataset(new URLSearchParams({dataset:item.dataSourceId,regionCode:request.regionCode,mode:request.mode,scenario:request.scenario || 'ssp245',period:request.period || '2050'}));
         const mean=grid.stats?.normalizedMean ?? grid.stats?.mean;
         if (mean == null || !Number.isFinite(Number(mean)) || !(grid.stats?.validCells > 0)) fail(`${item.label}: 이 지역에 유효한 원자료가 없습니다.`);

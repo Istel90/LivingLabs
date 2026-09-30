@@ -64,6 +64,8 @@ jobs:
           node scripts/test-regional-drafts.mjs
           node scripts/test-map-color-scale.mjs
           node scripts/wbgt/test-analysis-serialization.mjs
+          node --test scripts/test-priority-draft-codec.mjs scripts/test-result-identity.mjs scripts/test-parcel-references.mjs scripts/test-user-indicator-store.mjs scripts/test-public-indicator-snapshot.mjs
+          node scripts/test-draft-service.mjs
 
       - name: Build unified platform
         if: steps.cloudflare-config.outputs.ready == 'true'

@@ -8,6 +8,8 @@ import { tmpdir } from 'node:os';
 import * as h5wasm from 'h5wasm/node';
 import proj4 from 'proj4';
 import pg from 'pg';
+import { createUserIndicatorStore, handleUserIndicators, assertLocalUserLibraryRequest } from './user-indicator-store.mjs';
+import { CADASTRE_DATASET_VERSION, parseParcelIds } from '../../shared/map/cadastre.js';
 import { buildNationalHazardGrid } from './hazard-grid-service.mjs';
 import { resolveIndicatorRequest } from './indicator-index.mjs';
 import { handleRiskRequest } from './risk-service.mjs';
@@ -143,14 +145,17 @@ function featureCollection(rows) {
       type: 'Feature',
       id: properties.pnu,
       geometry: typeof geometry === 'string' ? JSON.parse(geometry) : geometry,
-      properties,
+      properties: { ...properties, cadastreDatasetVersion: CADASTRE_DATASET_VERSION },
     })),
   };
 }
 
 async function fetchCadastreParcel(searchParams) {
-  const pnu = (searchParams.get('pnu') || '').trim();
-  if (!/^\d{19}$/.test(pnu)) throw new Error('pnu must be exactly 19 digits');
+  const pnus = parseParcelIds(searchParams.get('pnu'));
+  const requestedVersion = searchParams.get('datasetVersion');
+  if (requestedVersion && requestedVersion !== CADASTRE_DATASET_VERSION) {
+    throw Object.assign(new Error('저장된 지적도 버전을 사용할 수 없습니다.'), { status: 409 });
+  }
 
   const result = await cadastrePool.query({
     text: `
@@ -158,12 +163,16 @@ async function fetchCadastreParcel(searchParams) {
              lot_number_land_category, reference_date, sigungu_code,
              ST_AsGeoJSON(ST_Transform(geom, 4326), 7) AS geometry
       FROM cadastre.parcels_readable
-      WHERE pnu = $1
-      LIMIT 10
+      WHERE pnu = ANY($1::text[])
     `,
-    values: [pnu],
+    values: [pnus],
   });
-  return featureCollection(result.rows);
+  const found = new Set(result.rows.map((row) => row.pnu));
+  return { ...featureCollection(result.rows), metadata: {
+    datasetVersion: CADASTRE_DATASET_VERSION,
+    requestedCount: pnus.length,
+    missingPnus: pnus.filter((pnu) => !found.has(pnu)),
+  } };
 }
 
 async function fetchCadastreBbox(searchParams) {
@@ -1428,6 +1437,7 @@ async function fetchKmaNetwork(type = 'asos', radiusKm = 35) {
   kmaNetworkCache.set(cacheKey, { storedAt: Date.now(), payload });
   return payload;
 }
+const userIndicatorStore = createUserIndicatorStore(resolve(process.env.USER_INDICATOR_STORE || '.runtime-data/user-indicators'));
 const server = createServer(async (request, response) => {
   if (isCloudflareTunnelRequest(request) && !isAuthorizedTunnelRequest(request)) {
     send(response, 401, JSON.stringify({ ok: false, error: 'Unauthorized tunnel request' }));
@@ -1441,8 +1451,15 @@ const server = createServer(async (request, response) => {
 
   const url = new URL(request.url || '/', `http://127.0.0.1:${port}`);
   let routePath = url.pathname.startsWith('/api/') ? url.pathname.slice('/api'.length) : url.pathname;
+  if (routePath === '/user-indicators') {
+    await handleUserIndicators(request, response, send, userIndicatorStore, url);
+    return;
+  }
   if (routePath === '/risk-analysis') {
-    await handleRiskRequest(request, response, send, loadRegisteredDataset);
+    await handleRiskRequest(request, response, send, loadRegisteredDataset, (id) => {
+      assertLocalUserLibraryRequest(request);
+      return userIndicatorStore.read(id);
+    });
     return;
   }
   if (routePath === '/indicator-grid') {
@@ -1501,7 +1518,7 @@ const server = createServer(async (request, response) => {
     try {
       send(response, 200, JSON.stringify(await fetchCadastreParcel(url.searchParams)));
     } catch (error) {
-      send(response, /must be/.test(error?.message || '') ? 400 : 503, JSON.stringify({
+      send(response, error.status || (/must (be|contain)/.test(error?.message || '') ? 400 : 503), JSON.stringify({
         ok: false,
         error: error?.message || 'Parcel lookup failed',
       }));

@@ -2,7 +2,9 @@
 import { restoreAnalysisPayload } from '../data/analysisSerialization.js';
 
 export async function requestRegisteredRiskAnalysis(indicators, options) {
-    return sendRiskRequest({schemaVersion:2,...options,indicators:indicators.map(item=>({indicatorId:item.registryId,weight:Number(item.weight)}))},indicators);
+    return sendRiskRequest({schemaVersion:2,...options,indicators:indicators.map(item=>item.customDatasetId
+        ? {customDatasetId:item.customDatasetId,datasetVersion:item.datasetVersion,weight:Number(item.weight)}
+        : {indicatorId:item.registryId,weight:Number(item.weight)})},indicators);
 }
 
 export async function requestRiskAnalysis(indicators, options) {

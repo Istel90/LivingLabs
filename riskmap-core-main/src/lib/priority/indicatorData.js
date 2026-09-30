@@ -22,6 +22,7 @@ export function indicatorRequestUrl(item, { regionCode, asset = path => path }) 
 }
 
 export function findDataSource(item) {
+    if (item.custom) return null;
     if (item.dataSourceId && DATA_SOURCES[item.dataSourceId]) return DATA_SOURCES[item.dataSourceId];
     // Older saved drafts and custom uploads still use the legacy fields.
     return Object.values(DATA_SOURCES).find(source => Object.entries(source.legacyBinding).every(([key, value]) => item[key] === value));
@@ -30,6 +31,7 @@ export function findDataSource(item) {
 export function configureRegisteredIndicators(sourceIndicators, code, { datasetMode = 'observed', scenario: hazardScenario = 'ssp245', period: hazardFuturePeriod = '2050' } = {}) {
         const observedCodes = new Set(['H01', 'H02', 'H03', 'H04', 'H05', 'H06', 'H07', 'H08', 'H09', 'H10', 'H11']);
         return sourceIndicators.map((item) => {
+            if (item.custom) return {...item, enabled:item.enabled && item.regionCode === code, dataStatus:item.regionCode === code ? 'available' : 'missing'};
             const source = findDataSource(item);
             if (source?.kind === 'hazard') {
                 const observed = datasetMode === 'observed';

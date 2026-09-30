@@ -22,9 +22,14 @@ test('all sector labels, defaults, legacy IDs, order and metadata match checkpoi
     assert.deepEqual(plain(createSectorConfigs()), baseline);
 });
 
-test('main screen markup preserves checkpoint layout with requested sector back-link wording', () => {
+test('main screen outside the approved custom-indicator dialog preserves checkpoint layout', () => {
     const current = readFileSync(new URL('../../riskmap-core-main/src/lib/tools/PriorityManagementArea.svelte', import.meta.url), 'utf8');
-    assert.equal(current.split('</script>')[1].replaceAll('\r\n', '\n'), legacySource.split('</script>')[1].replaceAll('\r\n', '\n').replace('지역·재해 선택으로 돌아가기', '부문선택으로 돌아가기'));
+    const unchangedLayout = source => source.split('</script>')[1].replaceAll('\r\n', '\n')
+        .replace(/\{#if indicatorDialog\}[\s\S]*?(?=\{#if supabaseSaveDialog\})/, '')
+        .replace(/^.*\{#if item.custom\}<button.*연결 해제.*\n/gm, '')
+        .replace(/^.*sourceRiskResultId=\{analysisResult\?\.riskResultId.*\n/gm, '')
+        .replace('지역·재해 선택으로 돌아가기', '부문선택으로 돌아가기');
+    assert.equal(unchangedLayout(current), unchangedLayout(legacySource));
 });
 
 test('regional, temporal and saved-draft configurations match previous behavior', () => {

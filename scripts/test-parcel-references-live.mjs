@@ -1,0 +1,31 @@
+// Read-only integration against the local development server; no saved drafts are written.
+import assert from 'node:assert/strict';
+import { loadReferencedParcels } from '../riskmap-core-main/src/lib/data/parcelReferences.js';
+const origin = 'http://127.0.0.1:4173';
+const sample = await (await fetch(`${origin}/cadastre/bbox?bbox=127.00,37.26,127.01,37.27&limit=105`)).json();
+assert.ok(sample.features.length > 100);
+const ids = [...new Set(sample.features.map((feature) => feature.properties.pnu))];
+const version = sample.features[0].properties.cadastreDatasetVersion;
+assert.ok(version);
+let requests = 0;
+const fetchJson = async (url) => {
+    assert.equal(url.pathname, '/cadastre/parcel');
+    requests++;
+    const response = await fetch(url);
+    assert.equal(response.status, 200);
+    return response.json();
+};
+const start = performance.now();
+const candidates = [{ pnuList: ids, parcelDatasetVersion: version }];
+const [result] = await loadReferencedParcels(candidates, fetchJson, origin);
+assert.deepEqual(new Set(result.features.map((feature) => feature.properties.pnu)), new Set(ids));
+assert.deepEqual(result.features[0].geometry, sample.features.find((feature) => feature.properties.pnu === result.features[0].properties.pnu).geometry);
+assert.equal(requests, Math.ceil(ids.length / 100));
+const durationMs = Math.round(performance.now() - start);
+await loadReferencedParcels(candidates, fetchJson, origin);
+assert.equal(requests, Math.ceil(ids.length / 100));
+const conflict = await fetch(`${origin}/cadastre/parcel?pnu=${ids[0]}&datasetVersion=unavailable`);
+assert.equal(conflict.status, 409);
+const invalid = await fetch(`${origin}/cadastre/parcel?pnu=123`);
+assert.equal(invalid.status, 400);
+console.log(JSON.stringify({ parcels: ids.length, requests, durationMs, cacheReuse: true, geometryEqual: true, versionConflict: 409, invalidPnu: 400 }));
