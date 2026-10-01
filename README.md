@@ -1,6 +1,24 @@
 
 # 지방기후위기적응대책 리빙랩 지원 플랫폼
 
+## 집 PC에서 최신 작업 받기 (2026-10-01)
+
+최신 개발 소스와 배포 구성은 **`codex/registry-driven-ui`** 브랜치에 있습니다.
+공개 배포 기준은 `master`이며, 최신 개발 변경이 자동으로 공개 배포된 것은 아닙니다.
+집에 기존 작업이 있으면 먼저 보존하고 변경을 병합합니다. 새 폴더에서 확인하려면:
+
+```powershell
+git clone --branch codex/registry-driven-ui https://github.com/Istel90/LivingLabs.git LivingLabs-latest
+cd LivingLabs-latest
+npm.cmd run install:all
+```
+
+기존 집 PC의 환경변수와 DB 연결을 설정한 뒤 `npm.cmd run platform:refresh`로 빌드·실행합니다.
+기준 화면은 `http://127.0.0.1:4173/internal-tools/priority-management-area/flood?regionCode=41110`입니다.
+GitHub에는 포털·설문·내부 도구 소스, 서버, 데이터 처리 도구, 개발/배포 빌드 스크립트와 워크플로가 포함됩니다.
+비밀키, DB 원자료, 생성 결과와 `pages-dist`는 별도이며 빌드는 소스로 재생성합니다.
+자료 이전 및 회사/집 변경 비교는 [10월 1일 인계 안내](docs/HOME_HANDOFF_2026-10-01.md)를 참고합니다.
+
 이 저장소에는 서로 연결되는 웹 앱 3개가 들어 있습니다.
 
 | 앱 | 폴더 | 로컬 주소 |

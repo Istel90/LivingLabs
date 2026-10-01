@@ -1,12 +1,18 @@
 # LivingLabs 일일 통합 점검 패키지
 
-버전 1.0.0. 운영 화면과 분리된 검증 패키지이며, 기존 Codex 예약 `risk`가 매번 이 문서와 checks.json의 최신 내용을 읽는다. 새 기능을 배포해도 예약을 다시 만들 필요가 없다.
+버전 1.1.0. 운영 화면과 분리된 검증 패키지이며, 기존 Codex 예약 `risk`가 매번 이 문서와 checks.json의 최신 내용을 읽는다. 새 기능을 배포해도 예약을 다시 만들 필요가 없다.
 
 ## 실행
 
 Windows 작업 루트에서 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/platform-audit/run.ps1`로 로컬/외부 HTTP 사전 점검을 실행한다. 기존 Windows 신뢰 인증서 번들을 Node에 추가하며 TLS 검증은 유지한다. 일반 환경은 `node scripts/platform-audit/run.mjs`도 가능하다. `node --test scripts/platform-audit/run.test.mjs`로 응답 판정 회귀 테스트를 실행한다. 추가 npm 설치가 필요 없는 Node 20 이상 패키지이다.
 
 결과는 `output/platform-audit/<UTC 실행 시각>/report.json`에 누적된다. 성공한 HTTP 검사만으로 전체 PASS를 내리지 않는다. 실행기는 HTTP 사전 점검만 자동 수행하며 브라우저 검증은 예약된 Codex 에이전트가 지원되는 브라우저 도구로 수행한다. 독립 실행형 브라우저 테스트 서비스는 아니다.
+
+`node --test scripts/platform-audit/state-transitions.test.mjs`는 현재 공통 화면의 권역 응답 처리와 비교 모듈을 합성 데이터로 검증한다. 오래된 Risk 응답 거부, 비활성 대안의 응답 격리, 실패 시 기존 권역 보존, 비교 원본 ID 연결을 확인하며 운영 DB나 브라우저 저장소에는 쓰지 않는다. 이 검사를 실제 저장본 UI 검증의 대체 증거로 취급하지 않는다.
+
+Risk 서버는 현재 전체 서비스에서 한 번에 한 분석만 처리한다. 겹친 요청에서 429와 재시도 안내가 발생하면 최초 오류를 보존하고 진행 중인 계산이 끝난 뒤 한 번 재시도한다. 재시도 성공과 동시 사용자 용량 제한을 구분해 보고하며 정상 계산 중인 서버를 재시작하지 않는다. 점검을 위해 운영 서버에 부하를 주입하지 않는다.
+
+실천권역 서버도 별도로 한 번에 한 요청을 처리한다. `npm run test:practice-area-server`는 이전 계산과의 일치·입력 검증·취소·429·결과 연결을 격리 검사한다. 실제 화면은 `scripts/wbgt/verify-result-identity.py`로 POST /practice-areas, 서버 실패 후 기존 결과 보존, 권역 재도출 및 PNU 복원을 확인한다. `PLATFORM_TEST_OUTPUT`으로 새 증거 디렉터리를 지정하고 외부 DB 쓰기는 차단한다. 외부 환경은 해당 UI와 프록시 배포가 확인된 뒤 검사하며 로컬 통과로 대신하지 않는다.
 
 ## 매일 06:00–07:00 Asia/Seoul 운영 절차
 

@@ -17,7 +17,7 @@
 
 ## 방법 A: 다른 컴퓨터에 전체 DB 복원
 
-1. GitHub에서 `codex/flood-postgis-performance` 브랜치를 내려받는다.
+1. GitHub에서 최신 개발 소스인 `codex/registry-driven-ui` 브랜치를 내려받는다. 기존 집 작업은 먼저 보존하고 병합한다. 공개 배포 기준 `master`와 구분하며 [최신 인계 안내](HOME_HANDOFF_2026-10-01.md)를 확인한다.
 2. PostgreSQL 17과 PostGIS를 설치한다.
 3. 전체 덤프와 함께 생성된 `*.manifest.json`을 복사하고 SHA-256을 확인한다.
 4. PowerShell에서 복원한다.

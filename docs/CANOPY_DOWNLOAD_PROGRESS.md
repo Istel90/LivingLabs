@@ -1,5 +1,82 @@
 # Canopy download handoff — 2026-09-12
 
+## October 1 run — resumed after requested break
+
+September 30 was skipped as instructed. Recovered ten completed Seoul-priority
+files today: 1074,1094–1098,1120–1123. Submitted the last four pending Seoul
+tiles. Seoul: 12 VERIFIED / 4 READY / 0 PENDING of 16; no whole-city completion
+claim yet. Remaining Gyeonggi priority group: 138 PENDING. Suwon and Incheon
+remain completed with their separate local city TIFFs intact.
+National stage: 87 VERIFIED, 2 EMPTY_BOUNDARY, 4 READY, 1,209 PENDING of 1,302.
+No RUNNING at final snapshot and no FAILED/UNKNOWN/SUBMITTING/EMPTY_SOURCE.
+
+Full national audit now covers 89 files: 3,165,239,569 target pixels,
+one missingInside (the existing 0058 discrepancy), zero value255Inside,
+710,057 exterior edge pixels. All ten new files have zero missingInside.
+Downloaded national files total 731,305,419 bytes. Drive free 85.58 GiB;
+D free 869.10 GiB. Restricted-mode warning still appears during this morning
+run, before the previously documented October 1 16:00 KST monthly refresh.
+No billing changes, deletions or duplicate submissions.
+
+Administrative MD/CSV/JSON and the offline desktop status HTML were refreshed.
+Ten Seoul files were recovered across a two-day interval including the skipped
+run; that is not evidence of ten/day. At a crude five/day recovery rate the
+remaining four suggest roughly one day, conditional on GEE completion and QA.
+Check the final four at the next scheduled run, then perform Seoul-specific
+boundary QA before reporting whole-city completion and moving on to Gyeonggi.
+Recalculate Gyeonggi/nationwide forecasts after observing post-refresh throughput.
+
+## Local status viewer — September 29
+
+Desktop shortcut `C:/Users/User/Desktop/수관높이 다운로드 현황.lnk` launches
+`.venv-gee/Scripts/pythonw.exe scripts/canopy_status_viewer.py` in this workspace.
+It generates `output/canopy-admin-progress/status.html` and opens it in the
+default browser. It reads local state/audit/admin reports only; no GEE access,
+downloads, submissions or scheduler changes. Recent three days means today and
+the previous two KST dates, using submittedAt/verifiedAt event timestamps rather
+than historical queue snapshots. Reopening the shortcut rebuilds the page.
+The page includes searchable administrative rows, source record timestamp,
+storage, validation caveats and the September 30 skip / October 1 resume notice.
+Rendering and the September 30 date-window logic were checked. Keep the workspace
+and its virtual environment in place for the shortcut to work.
+
+## User-requested one-day skip — September 30
+
+On September 29 the user requested no download work tomorrow and automatic
+resumption the day after. Automation 1m-gee now explicitly skips all queue
+execution, recovery/downloads, new submissions/retries and audits on September
+30, 2026 (Asia/Seoul), including --limit 0. Existing remote GEE jobs are retained.
+Resume the normal Seoul-first workflow at October 1, 2026 09:00 KST and continue
+the existing daily schedule. The automation remains active to resume without
+another user action; September 30 is a skipped work cycle.
+
+## September 29 run
+
+Recovered all ten previous queued exports: national 0069–0076 and the first
+two Seoul-priority tiles 1072,1073. Submitted ten further Seoul tiles, preserving
+the Seoul → remaining Gyeonggi → rest priority. Seoul now has 2 VERIFIED,
+10 READY and 4 PENDING of 16. The additional Gyeonggi-priority group remains
+138 PENDING; portions of Gyeonggi also overlap the Seoul group. Suwon 6/6 and
+Incheon 62 valid plus one empty-boundary tile remain completed and packaged.
+National stage: 77 VERIFIED, 2 EMPTY_BOUNDARY, 10 READY, 1,213 PENDING of 1,302.
+No RUNNING at final snapshot, no FAILED/UNKNOWN/SUBMITTING/EMPTY_SOURCE.
+
+Audited all 79 downloaded national files: 2,239,840,525 target pixels,
+one missingInside (the previously recorded 0058 issue), zero value255Inside,
+627,024 exterior edge pixels. Today's ten downloads all have zero missingInside.
+National files total 569,820,471 bytes. Drive free 85.73 GiB; D free 869.28 GiB.
+Restricted-mode compute warning persists. No deletions or billing/tier changes.
+
+All 255 administrative rows regenerated in the existing MD/CSV/JSON paths.
+Today's ten recovered tiles are observed output, not a guaranteed daily rate.
+Seoul's first two tiles were submitted yesterday and recovered today; a crude
+2/day scenario for its 14 remaining tiles is about seven more days, but this
+single-batch observation is not a reliable deadline. Re-estimate after further
+Seoul completions and the October 1 16:00 KST monthly quota refresh rather
+than treating restricted-mode throughput as permanent. Nationwide and Gyeonggi
+completion dates remain unconfirmed. Preserve the unresolved 0058 pixel until
+its source-versus-boundary cause is established.
+
 ## September 28 priority change — Seoul first
 
 User requested capital-region-first downloads and continuous administrative

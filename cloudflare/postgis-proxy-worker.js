@@ -5,7 +5,7 @@ const API_PATHS = [
   /^\/cadastre\/(?:health|parcel|bbox)$/,
   /^\/population\/(?:health|grid)$/,
   /^\/internal-tools\/population\/(?:health|grid)$/,
-  /^\/(?:hazard-grid|flood-grid|analysis-grid|indicator-grid|risk-analysis|indicator-availability)$/,
+  /^\/(?:hazard-grid|flood-grid|analysis-grid|indicator-grid|risk-analysis|practice-areas|indicator-availability)$/,
 ];
 
 function isApiPath(pathname) {
@@ -19,8 +19,8 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
-    const riskCalculation = incomingUrl.pathname === '/risk-analysis' && request.method === 'POST';
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !riskCalculation) {
+    const calculation = ['/risk-analysis', '/practice-areas'].includes(incomingUrl.pathname) && request.method === 'POST';
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !calculation) {
       return Response.json({ ok: false, error: 'Method not allowed' }, { status: 405 });
     }
 
@@ -33,15 +33,15 @@ export default {
     const headers = new Headers();
     headers.set('Accept', request.headers.get('Accept') || 'application/json');
     headers.set('X-LivingLabs-Tunnel-Token', POSTGIS_TUNNEL_TOKEN);
-    if (riskCalculation) headers.set('Content-Type', 'application/json');
+    if (calculation) headers.set('Content-Type', 'application/json');
 
     try {
       const upstream = await fetch(upstreamUrl, {
         method: request.method,
         headers,
-        body: riskCalculation ? request.body : undefined,
+        body: calculation ? request.body : undefined,
         redirect: 'manual',
-        signal: AbortSignal.timeout(riskCalculation ? 95000 : 55000),
+        signal: AbortSignal.timeout(calculation ? 95000 : 55000),
       });
       const responseHeaders = new Headers(upstream.headers);
       responseHeaders.set('Cache-Control', 'no-store');

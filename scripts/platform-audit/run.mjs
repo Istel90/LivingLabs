@@ -19,10 +19,11 @@ export function validate(kind, status, type, body) {
 }
 export async function run() {
   const config = JSON.parse(await readFile(path.join(here, 'checks.json'), 'utf8'));
+  const packageInfo = JSON.parse(await readFile(path.join(here, 'package.json'), 'utf8'));
   const started = new Date();
   const output = path.join(root, 'output/platform-audit', started.toISOString().replace(/[:.]/g, '-'));
   await mkdir(output, { recursive: true });
-  const report = { startedAt: started.toISOString(), packageVersion: '1.0.0', overall: 'INCOMPLETE', http: [], browser: [] };
+  const report = { startedAt: started.toISOString(), packageVersion: packageInfo.version, checksVersion: config.version, overall: 'INCOMPLETE', http: [], browser: [] };
   try { report.gitHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(); } catch { report.gitHead = null; }
   for (const [environment, origin] of Object.entries(config.origins)) {
     for (const check of config.http) {

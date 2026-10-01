@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "livinglabs-landcover-classes/v1",
+  "method": "Land-cover class based estimate; not a measured pavement surface survey",
+  "classificationSource": "https://www.law.go.kr/LSW/flDownload.do?bylClsCd=200201&flSeq=157944613",
+  "classificationTitle": "불투수면적률 및 물순환율 산정방법 별표의 토지피복 투수/불투수 구분",
+  "classificationRetrieved": "2026-10-01",
+  "impervious": ["111", "112", "121", "131", "132", "141", "151", "152", "154", "155", "161", "162", "163", "231", "251", "522"],
+  "pervious": ["153", "211", "212", "221", "222", "241", "252", "311", "321", "331", "411", "421", "422", "423", "511", "521", "611", "612", "613", "621", "622", "623", "711", "712", "721"],
+  "forestGrassComponent": ["311", "321", "331", "411", "421", "422", "423"],
+  "forestGrassNote": "산림·초지 구성분만 계산. 공원과 합집합을 만들기 전에는 요청한 전체 녹지 면적률로 사용하지 않음. 수면은 제외."
+}

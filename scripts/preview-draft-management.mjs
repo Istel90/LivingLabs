@@ -13,7 +13,7 @@ const json=(res,data,status=200)=>{res.writeHead(status,{'Content-Type':'applica
 http.createServer(async(req,res)=>{
  try{
  const u=new URL(req.url,'http://127.0.0.1:4181');
- if(u.pathname==='/risk-analysis'&&req.method==='POST'){
+ if(['/risk-analysis','/practice-areas'].includes(u.pathname)&&req.method==='POST'){
   const upstream=await fetch(`http://127.0.0.1:4173${u.pathname}`,{method:'POST',headers:{'Content-Type':'application/json'},body:req,duplex:'half'});
   res.writeHead(upstream.status,{'Content-Type':'application/json'});return res.end(Buffer.from(await upstream.arrayBuffer()));
  }

@@ -13,6 +13,7 @@ import { CADASTRE_DATASET_VERSION, parseParcelIds } from '../../shared/map/cadas
 import { buildNationalHazardGrid } from './hazard-grid-service.mjs';
 import { resolveIndicatorRequest } from './indicator-index.mjs';
 import { handleRiskRequest } from './risk-service.mjs';
+import { createPracticeAreaHandler } from './practice-area-service.mjs';
 import { decodeGridValues, cropStaticGridToRegion } from './grid-preparation.mjs';
 
 async function loadRegisteredDataset(params) {
@@ -44,6 +45,23 @@ async function loadRegisteredDataset(params) {
 }
 
 const { Pool } = pg;
+
+const handlePracticeAreas = createPracticeAreaHandler({
+  loadParcels: (box, options) => fetchCadastreBbox(new URLSearchParams({
+    bbox: [box.minLng, box.minLat, box.maxLng, box.maxLat].join(','),
+    limit: String(options.limit), offset: String(options.offset), simplifyMeters: String(options.simplifyMeters),
+  })),
+  loadFallback: async (box, options) => {
+    const result = await fetchVWorldData(new URLSearchParams({
+      data: 'LP_PA_CBND_BUBUN', geomFilter: `BOX(${box.minLng},${box.minLat},${box.maxLng},${box.maxLat})`,
+      size: String(options.limit), page: '1',
+    }));
+    if (result.statusCode < 200 || result.statusCode >= 300) throw new Error(`VWorld ${result.statusCode}`);
+    const payload = JSON.parse(result.body);
+    if (payload?.response?.status === 'ERROR') throw new Error(`VWorld ${payload.response.error?.text || 'API 오류'}`);
+    return { features: payload?.response?.result?.featureCollection?.features || payload?.response?.result?.features || payload?.features || [] };
+  },
+});
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const workspaceRoot = resolve(root, '..');
@@ -207,7 +225,7 @@ async function fetchCadastreBbox(searchParams) {
              ) AS geometry
       FROM cadastre.parcels_readable p
       CROSS JOIN bounds b
-      -- The browser performs the final parcel-to-hotspot geometry intersection.
+      -- The practice-area worker performs the final parcel/hotspot intersection.
       -- Keep this lookup index-only so nationwide candidate retrieval stays fast.
       WHERE p.geom && b.geom
       ORDER BY p.pnu
@@ -1451,6 +1469,10 @@ const server = createServer(async (request, response) => {
 
   const url = new URL(request.url || '/', `http://127.0.0.1:${port}`);
   let routePath = url.pathname.startsWith('/api/') ? url.pathname.slice('/api'.length) : url.pathname;
+  if (routePath === '/practice-areas') {
+    await handlePracticeAreas(request, response, send);
+    return;
+  }
   if (routePath === '/user-indicators') {
     await handleUserIndicators(request, response, send, userIndicatorStore, url);
     return;

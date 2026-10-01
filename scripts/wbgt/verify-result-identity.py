@@ -7,7 +7,7 @@ from playwright.async_api import async_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[2]
 ORIGIN = os.environ.get('PLATFORM_TEST_ORIGIN', 'http://127.0.0.1:4173').rstrip('/')
-OUT = ROOT / ('output/release-20260930/result-identity' if ORIGIN.startswith('https:') else 'output/result-identity-browser')
+OUT = Path(os.environ.get('PLATFORM_TEST_OUTPUT', str(ROOT / ('output/release-20260930/result-identity' if ORIGIN.startswith('https:') else 'output/result-identity-browser'))))
 BASE = ORIGIN + '/internal-tools/priority-management-area'
 
 async def export(page, hazard, label):
@@ -38,7 +38,24 @@ async def analyze(page):
 
 async def derive(page):
     button = page.get_by_role('button', name='실천권역도출하기', exact=True)
-    await button.click()
+    calls = []
+    def record(request): calls.append(request.url)
+    page.on('request', record)
+    try:
+        async with page.expect_response(lambda r:'/practice-areas' in r.url, timeout=120000) as pending:
+            await button.click()
+        response = await pending.value
+        assert response.status == 200, await response.text()
+        request = response.request.post_data_json
+        result = await response.json()
+        assert request['sourceRiskResultId'] == result['sourceRiskResultId']
+        assert request['candidateContextKey'] == result['candidateContextKey']
+        assert result['metadata']['partialBoxes'] == 0, result['metadata']
+        assert not any('/cadastre/bbox?' in url or '/vworld-data?' in url for url in calls), calls
+        for name, value in [('request', request), ('response', result)]:
+            (OUT / f"{request['hazard']}-server-{name}.json").write_text(json.dumps(value, ensure_ascii=False), encoding='utf8')
+    finally:
+        page.remove_listener('request', record)
     await expect(page.get_by_role('tab', name='03 실천권역 구성')).to_have_attribute('aria-selected', 'true', timeout=120000)
     await expect(button).to_be_enabled(timeout=120000)
 
@@ -62,6 +79,17 @@ async def check(browser, hazard):
         first = await export(page, hazard, 'derived')
         before = ids(first)
         assert len(before[3]) > 0
+        # A server failure must keep the last completed result and permit retry.
+        async def unavailable(route):
+            await route.fulfill(status=503, json={'error':'검증용 서버 응답 실패'})
+        await page.route('**/practice-areas', unavailable)
+        await page.get_by_role('tab', name='01 분석 지표 선택').click()
+        await page.get_by_role('button', name='실천권역도출하기', exact=True).click()
+        await expect(page.get_by_text('검증용 서버 응답 실패', exact=False).first).to_be_visible(timeout=10000)
+        failed = await export(page, hazard, 'failure-preserved')
+        assert ids(failed) == before
+        assert failed['alternatives'][0]['analysisResult']['parcelCandidates'] == first['alternatives'][0]['analysisResult']['parcelCandidates']
+        await page.unroute('**/practice-areas', unavailable)
         await page.wait_for_timeout(1000)
         await page.reload(wait_until='networkidle', timeout=90000)
         await expect(page.get_by_role('button', name='실천권역도출하기', exact=True)).to_be_enabled(timeout=90000)
@@ -90,6 +118,8 @@ async def check(browser, hazard):
         assert any('/cadastre/parcel?' in u for u in requests)
         assert not any('/cadastre/bbox?' in u for u in requests)
         assert all(c.get('features') for c in compact['alternatives'][0]['analysisResult']['parcelCandidates'])
+        await page.wait_for_function("[...document.querySelectorAll('img.leaflet-tile')].some(i=>i.complete && i.naturalWidth>0)", timeout=20000)
+        loaded_tiles = await page.locator('img.leaflet-tile').evaluate_all('(images)=>images.filter(i=>i.complete && i.naturalWidth>0).length')
         await page.screenshot(path=str(OUT / f'{hazard}.png'))
         await page.get_by_role('tab', name='01 분석 지표 선택').click()
         await derive(page)
@@ -100,7 +130,7 @@ async def check(browser, hazard):
         assert recalculated[0] == before[0] and recalculated[1] != before[1]
         assert recalculated[2] is None and not recalculated[3]
         assert not errors, errors
-        return {'hazard':hazard,'ok':True,'districts':len(before[3]),'reload':True,'pnuRestore':True,'rederive':True,'recalculate':True}
+        return {'hazard':hazard,'ok':True,'districts':len(before[3]),'serverDerivation':True,'failurePreservesResults':True,'reload':True,'pnuRestore':True,'rederive':True,'recalculate':True,'loadedBackgroundTiles':loaded_tiles}
     except Exception as e:
         await page.screenshot(path=str(OUT / f'{hazard}-failure.png'))
         return {'hazard':hazard,'ok':False,'error':str(e),'pageErrors':errors}
@@ -112,6 +142,14 @@ async def main():
     results=[]
     async with async_playwright() as p:
         browser=await p.chromium.launch(executable_path='C:/Program Files/Google/Chrome/Application/chrome.exe',headless=True)
+        baseline=await browser.new_page(viewport={'width':1543,'height':1244})
+        initial=await baseline.goto(f'{BASE}/flood?regionCode=41110',wait_until='networkidle',timeout=90000)
+        assert initial.status == 200
+        await expect(baseline.get_by_role('link',name='부문선택으로 돌아가기',exact=False)).to_be_visible()
+        await baseline.screenshot(path=str(OUT/'baseline.png'))
+        version=await baseline.evaluate("async()=> (await fetch('/internal-tools/_app/version.json')).json()")
+        (OUT/'baseline.json').write_text(json.dumps({'url':baseline.url,'status':initial.status,'title':await baseline.title(),'build':version},ensure_ascii=False,indent=2),encoding='utf8')
+        await baseline.close()
         for hazard in ['flood','heatwave']:
             result=await check(browser,hazard)
             results.append(result)
